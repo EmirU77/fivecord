@@ -50,6 +50,18 @@ export default function App() {
   const [isCreateChannelOpen, setIsCreateChannelOpen] = useState(false);
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
+  const [isAppInstalled, setIsAppInstalled] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    const ua = window.navigator?.userAgent || '';
+    const isElectron = /electron/i.test(ua) || ua.includes('FivecordDesktop') || ua.includes('Fivecord');
+    const isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator?.standalone === true;
+    const isQueryParam = window.location.search.includes('desktop') || window.location.search.includes('client=desktop');
+    let hasDownloaded = false;
+    try {
+      hasDownloaded = localStorage.getItem('fivecord_downloaded') === 'true' || localStorage.getItem('fivecord_desktop') === 'true';
+    } catch (e) {}
+    return isElectron || isStandalone || isQueryParam || hasDownloaded || !!window.isFivecordDesktop;
+  });
   const [isMusicModalOpen, setIsMusicModalOpen] = useState(false);
   const [musicStates, setMusicStates] = useState(new Map());
   const [musicStations, setMusicStations] = useState([]);
@@ -422,6 +434,7 @@ export default function App() {
           isCameraOn={isCameraOn}
           onToggleCamera={handleToggleCamera}
           onOpenDownload={() => setIsDownloadModalOpen(true)}
+          isAppInstalled={isAppInstalled}
         />
       )}
 
@@ -466,6 +479,7 @@ export default function App() {
           onOpenScreenModal={() => setIsScreenModalOpen(true)}
           onStopScreenShare={handleStopScreenShare}
           onOpenDownload={() => setIsDownloadModalOpen(true)}
+          isAppInstalled={isAppInstalled}
         />
       ) : (
         <div className="flex-1 flex items-center justify-center text-[#949ba4]">
@@ -502,6 +516,12 @@ export default function App() {
       <DownloadModal
         isOpen={isDownloadModalOpen}
         onClose={() => setIsDownloadModalOpen(false)}
+        onDownloaded={() => {
+          try {
+            localStorage.setItem('fivecord_downloaded', 'true');
+          } catch (e) {}
+          setIsAppInstalled(true);
+        }}
       />
 
       <MusicPlayerModal

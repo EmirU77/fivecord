@@ -79,8 +79,12 @@ async function createWindow() {
     }
   });
 
+  // Identify client as official Fivecord Desktop
+  const baseUA = mainWindow.webContents.getUserAgent();
+  mainWindow.webContents.setUserAgent(`${baseUA} FivecordDesktop/1.0.0`);
+
   // Connect directly to 7/24 cloud Fivecord
-  mainWindow.loadURL('https://fivecord.onrender.com');
+  mainWindow.loadURL('https://fivecord.onrender.com?client=desktop');
 
   mainWindow.on('closed', () => {
     mainWindow = null;

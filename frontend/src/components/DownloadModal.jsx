@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Download, Monitor, Sparkles, X, Check, ExternalLink, ShieldCheck, Zap } from 'lucide-react';
 
-export default function DownloadModal({ isOpen, onClose }) {
+export default function DownloadModal({ isOpen, onClose, onDownloaded }) {
   const [copied, setCopied] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [isInstalled, setIsInstalled] = useState(false);
@@ -24,10 +24,12 @@ export default function DownloadModal({ isOpen, onClose }) {
       const choice = await deferredPrompt.userChoice;
       if (choice.outcome === 'accepted') {
         setIsInstalled(true);
+        onDownloaded?.();
       }
       setDeferredPrompt(null);
     } else {
       alert('Tarayıcınızın adres çubuğunun sağındaki "Uygulamayı Yükle" (monitör simgesi) butonuna basarak anında masaüstüne ekleyebilirsiniz!');
+      onDownloaded?.();
     }
   };
 
@@ -126,6 +128,7 @@ export default function DownloadModal({ isOpen, onClose }) {
                   href="https://github.com/EmirU77/fivecord/releases/download/v1.0.0/Fivecord-Masaustu-Uygulamasi.zip"
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={() => onDownloaded?.()}
                   className="px-4 py-1.5 rounded-lg bg-[#23a55a] hover:bg-[#1f934f] text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 hover:scale-105"
                 >
                   <Download className="w-3.5 h-3.5" />

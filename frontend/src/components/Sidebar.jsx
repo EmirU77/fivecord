@@ -25,7 +25,8 @@ export default function Sidebar({
   onStopScreenShare,
   isCameraOn,
   onToggleCamera,
-  onOpenDownload
+  onOpenDownload,
+  isAppInstalled
 }) {
   const [textCollapsed, setTextCollapsed] = useState(false);
   const [voiceCollapsed, setVoiceCollapsed] = useState(false);
@@ -37,9 +38,9 @@ export default function Sidebar({
     <div className="w-60 bg-[#2b2d31] flex flex-col shrink-0 select-none border-r border-[#1f2023] z-10 shadow-sm">
       {/* Sleek Discord Server Header */}
       <div 
-        onClick={onOpenDownload}
-        className="h-12 border-b border-[#1f2023] px-4 flex items-center justify-between shadow-xs hover:bg-[#35373c] transition-colors cursor-pointer group"
-        title="Masaüstü Uygulamasını İndir"
+        onClick={!isAppInstalled ? onOpenDownload : undefined}
+        className={`h-12 border-b border-[#1f2023] px-4 flex items-center justify-between shadow-xs ${!isAppInstalled ? 'hover:bg-[#35373c] cursor-pointer' : ''} transition-colors group`}
+        title={!isAppInstalled ? "Masaüstü Uygulamasını İndir" : "Fivecord VIP"}
       >
         <div className="flex items-center gap-2">
           <span className="font-bold text-sm text-white tracking-wide flex items-center gap-1.5">
@@ -48,10 +49,12 @@ export default function Sidebar({
           </span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="px-2 py-0.5 rounded bg-[#23a55a]/20 text-[#23a55a] group-hover:bg-[#23a55a] group-hover:text-white transition-all text-[11px] font-bold flex items-center gap-1">
-            <Download className="w-3 h-3" />
-            <span className="text-[10px]">İndir</span>
-          </span>
+          {!isAppInstalled && (
+            <span className="px-2 py-0.5 rounded bg-[#23a55a]/20 text-[#23a55a] group-hover:bg-[#23a55a] group-hover:text-white transition-all text-[11px] font-bold flex items-center gap-1">
+              <Download className="w-3 h-3" />
+              <span className="text-[10px]">İndir</span>
+            </span>
+          )}
           <ChevronDown className="w-4 h-4 text-[#949ba4] group-hover:text-white transition-transform group-hover:translate-y-0.5" />
         </div>
       </div>
@@ -239,16 +242,18 @@ export default function Sidebar({
         </div>
       )}
 
-      {/* Quick Download Desktop Banner */}
-      <div className="px-3 py-2 border-t border-[#1f2023] bg-[#232428]/80">
-        <button
-          onClick={onOpenDownload}
-          className="w-full py-2 px-3 rounded-lg bg-gradient-to-r from-[#23a55a] to-[#1f934f] hover:from-[#1f934f] hover:to-[#1a7f44] text-white text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 group hover:scale-[1.02]"
-        >
-          <Download className="w-4 h-4 text-white group-hover:animate-bounce" />
-          <span>Masaüstü Uygulaması İndir</span>
-        </button>
-      </div>
+      {/* Quick Download Desktop Banner (Only shown if not running in desktop app and not downloaded) */}
+      {!isAppInstalled && (
+        <div className="px-3 py-2 border-t border-[#1f2023] bg-[#232428]/80">
+          <button
+            onClick={onOpenDownload}
+            className="w-full py-2 px-3 rounded-lg bg-gradient-to-r from-[#23a55a] to-[#1f934f] hover:from-[#1f934f] hover:to-[#1a7f44] text-white text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 group hover:scale-[1.02]"
+          >
+            <Download className="w-4 h-4 text-white group-hover:animate-bounce" />
+            <span>Masaüstü Uygulaması İndir</span>
+          </button>
+        </div>
+      )}
 
       {/* User Profile Bar at bottom */}
       <UserControlBar
