@@ -1,0 +1,16 @@
+{
+  "name": "fivecord",
+  "version": "1.0.0",
+  "description": "5 Kişilik Özel VIP Discord Masaüstü ve Web Uygulaması",
+  "main": "desktop/main.cjs",
+  "scripts": {
+    "build": "npm --prefix frontend install && npm --prefix frontend run build && npm --prefix backend install",
+    "start": "node backend/src/server.js",
+    "desktop": "electron desktop/main.cjs",
+    "frontend": "cd frontend && npm run dev",
+    "build:frontend": "cd frontend && npm run build"
+  },
+  "devDependencies": {
+    "electron": "^35.0.0"
+  }
+}

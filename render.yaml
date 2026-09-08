@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: fivecord
+    runtime: node
+    plan: free
+    buildCommand: npm --prefix frontend install && npm --prefix frontend run build && npm --prefix backend install
+    startCommand: node backend/src/server.js
+    envVars:
+      - key: NODE_VERSION
+        value: 20

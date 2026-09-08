@@ -1,0 +1,60 @@
+﻿@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-darkest: #1e1f22;
+    --bg-darker: #2b2d31;
+    --bg-main: #313338;
+    --bg-input: #383a40;
+    --bg-hover: #35373c;
+    --blurple: #5865f2;
+    --blurple-hover: #4752c4;
+    --green-status: #23a55a;
+    --red-status: #f23f43;
+    --yellow-status: #f0b232;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+    background-color: #1e1f22;
+    color: #dbdee1;
+    font-family: 'gg sans', 'Noto Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    user-select: none;
+    overflow: hidden;
+  }
+
+  /* Custom Discord-like sleek scrollbars */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #2b2d31;
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #1a1b1e;
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #111214;
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(35, 165, 90, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(35, 165, 90, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(35, 165, 90, 0);
+  }
+}
+
+.speaking-indicator {
+  border-color: #23a55a !important;
+  animation: pulse-ring 1.5s infinite;
+}
