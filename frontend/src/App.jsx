@@ -7,6 +7,8 @@ import VoiceRoom from './components/VoiceRoom';
 import MemberList from './components/MemberList';
 import ScreenShareModal from './components/ScreenShareModal';
 import CreateChannelModal from './components/CreateChannelModal';
+import DeleteChannelModal from './components/DeleteChannelModal';
+import RenameChannelModal from './components/RenameChannelModal';
 import ServerInfoModal from './components/ServerInfoModal';
 import DownloadModal from './components/DownloadModal';
 import MusicPlayerModal from './components/MusicPlayerModal';
@@ -49,6 +51,8 @@ export default function App() {
   const [isScreenModalOpen, setIsScreenModalOpen] = useState(false);
   const [isCreateChannelOpen, setIsCreateChannelOpen] = useState(false);
   const [createChannelType, setCreateChannelType] = useState('text');
+  const [channelToDelete, setChannelToDelete] = useState(null);
+  const [channelToRename, setChannelToRename] = useState(null);
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
   const [isAppInstalled, setIsAppInstalled] = useState(() => {
@@ -477,8 +481,8 @@ export default function App() {
           onOpenDownload={() => setIsDownloadModalOpen(true)}
           isAppInstalled={isAppInstalled}
           onOpenCreateChannel={handleOpenCreateChannel}
-          onDeleteChannel={handleDeleteChannel}
-          onRenameChannel={handleRenameChannel}
+          onRequestDeleteChannel={(ch) => setChannelToDelete(ch)}
+          onRequestRenameChannel={(ch) => setChannelToRename(ch)}
           onOpenInfo={() => setIsInfoModalOpen(true)}
         />
       )}
@@ -558,6 +562,20 @@ export default function App() {
         isOpen={isCreateChannelOpen}
         onClose={() => setIsCreateChannelOpen(false)}
         defaultType={createChannelType}
+      />
+
+      <DeleteChannelModal
+        isOpen={!!channelToDelete}
+        channel={channelToDelete}
+        onClose={() => setChannelToDelete(null)}
+        onConfirm={handleDeleteChannel}
+      />
+
+      <RenameChannelModal
+        isOpen={!!channelToRename}
+        channel={channelToRename}
+        onClose={() => setChannelToRename(null)}
+        onConfirm={handleRenameChannel}
       />
 
       <ServerInfoModal

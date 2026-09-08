@@ -29,9 +29,17 @@ export default function CreateChannelModal({ isOpen, onClose, defaultType = 'tex
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4">
-      <div className="w-full max-w-md rounded-2xl bg-[#313338] shadow-2xl border border-[#3f4147] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#2b2d31]">
+    <div 
+      onClick={onClose}
+      className="fixed inset-0 flex items-center justify-center p-4 select-none"
+      style={{ zIndex: 99999, backgroundColor: 'rgba(0, 0, 0, 0.85)', backdropFilter: 'blur(4px)' }}
+    >
+      <div 
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md rounded-2xl shadow-2xl border border-[#3f4147] overflow-hidden"
+        style={{ backgroundColor: '#313338', boxShadow: '0 24px 70px rgba(0, 0, 0, 0.75)' }}
+      >
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#2b2d31]" style={{ backgroundColor: '#2b2d31' }}>
           <h2 className="text-lg font-bold text-white">Yeni Kanal Oluştur</h2>
           <button 
             onClick={onClose}

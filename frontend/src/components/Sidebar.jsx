@@ -28,8 +28,8 @@ export default function Sidebar({
   onOpenDownload,
   isAppInstalled,
   onOpenCreateChannel,
-  onDeleteChannel,
-  onRenameChannel,
+  onRequestDeleteChannel,
+  onRequestRenameChannel,
   onOpenInfo
 }) {
   const [textCollapsed, setTextCollapsed] = useState(false);
@@ -37,9 +37,6 @@ export default function Sidebar({
 
   // Right-click Context Menu & Modals
   const [contextMenu, setContextMenu] = useState(null); // { x, y, channel }
-  const [deleteConfirmChannel, setDeleteConfirmChannel] = useState(null);
-  const [renameTargetChannel, setRenameTargetChannel] = useState(null);
-  const [newChannelName, setNewChannelName] = useState('');
   const [isServerMenuOpen, setIsServerMenuOpen] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
@@ -56,8 +53,6 @@ export default function Sidebar({
       if (e.key === 'Escape') {
         setContextMenu(null);
         setIsServerMenuOpen(false);
-        setDeleteConfirmChannel(null);
-        setRenameTargetChannel(null);
       }
     };
     window.addEventListener('click', handleOutside);
@@ -89,29 +84,13 @@ export default function Sidebar({
   };
 
   const handleStartRename = (ch) => {
-    setRenameTargetChannel(ch);
-    setNewChannelName(ch.name.replace(/^🔊\s*/, ''));
+    onRequestRenameChannel?.(ch);
     setContextMenu(null);
-  };
-
-  const handleConfirmRename = (e) => {
-    e.preventDefault();
-    if (newChannelName.trim() && renameTargetChannel) {
-      onRenameChannel?.(renameTargetChannel.id, newChannelName.trim());
-    }
-    setRenameTargetChannel(null);
   };
 
   const handleStartDelete = (ch) => {
-    setDeleteConfirmChannel(ch);
+    onRequestDeleteChannel?.(ch);
     setContextMenu(null);
-  };
-
-  const handleConfirmDelete = () => {
-    if (deleteConfirmChannel) {
-      onDeleteChannel?.(deleteConfirmChannel.id);
-      setDeleteConfirmChannel(null);
-    }
   };
 
   return (
@@ -404,89 +383,6 @@ export default function Sidebar({
         </div>
       )}
 
-      {/* CONFIRM CHANNEL DELETE DIALOG */}
-      {deleteConfirmChannel && (
-        <div 
-          onClick={() => setDeleteConfirmChannel(null)}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4"
-        >
-          <div 
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-sm rounded-2xl bg-[#313338] shadow-2xl border border-[#3f4147] p-6 animate-in fade-in zoom-in-95 duration-150"
-          >
-            <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
-              <Trash2 className="w-5 h-5 text-[#f23f43]" />
-              Kanalı Sil
-            </h3>
-            <p className="text-sm text-[#949ba4] mb-6 leading-relaxed">
-              <strong className="text-white">{deleteConfirmChannel.name}</strong> kanalını silmek istediğinden emin misin? Bu işlem geri alınamaz.
-            </p>
-            <div className="flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setDeleteConfirmChannel(null)}
-                className="px-4 py-2 text-sm text-[#dbdee1] hover:underline cursor-pointer"
-              >
-                İptal
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmDelete}
-                className="px-5 py-2.5 rounded-xl bg-[#da373c] hover:bg-[#a1282c] text-white text-sm font-semibold transition-all shadow-md cursor-pointer"
-              >
-                Kanalı Sil
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* RENAME CHANNEL DIALOG */}
-      {renameTargetChannel && (
-        <div 
-          onClick={() => setRenameTargetChannel(null)}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4"
-        >
-          <form 
-            onSubmit={handleConfirmRename}
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-sm rounded-2xl bg-[#313338] shadow-2xl border border-[#3f4147] p-6 animate-in fade-in zoom-in-95 duration-150"
-          >
-            <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
-              <Edit3 className="w-5 h-5 text-[#5865f2]" />
-              Kanalı Yeniden Adlandır
-            </h3>
-            <div className="mb-6">
-              <label className="text-xs font-bold uppercase tracking-wider text-[#b5bac1] block mb-2">
-                Yeni Kanal Adı
-              </label>
-              <input
-                type="text"
-                value={newChannelName}
-                onChange={(e) => setNewChannelName(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-[#1e1f22] border border-[#383a40] text-white text-sm focus:outline-hidden focus:border-[#5865f2]"
-                autoFocus
-              />
-            </div>
-            <div className="flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setRenameTargetChannel(null)}
-                className="px-4 py-2 text-sm text-[#dbdee1] hover:underline cursor-pointer"
-              >
-                İptal
-              </button>
-              <button
-                type="submit"
-                disabled={!newChannelName.trim()}
-                className="px-5 py-2.5 rounded-xl bg-[#5865f2] hover:bg-[#4752c4] disabled:opacity-40 text-white text-sm font-semibold transition-all shadow-md cursor-pointer"
-              >
-                Kaydet
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
 
       {/* DISCORD VOICE CONNECTION STATUS PANEL */}
       {currentVoiceChannel && (
