@@ -242,6 +242,18 @@ export default function ChatArea({
         {/* Action Controls on Right */}
         <div className="flex items-center gap-2 text-[#b5bac1]">
           
+          {/* Windows Download button (Only on Web) */}
+          {!isAppInstalled && (
+            <button
+              onClick={onOpenDownload}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#23a55a] hover:bg-[#1f934f] text-white text-xs font-bold transition-all shadow-xs hover:scale-105 cursor-pointer"
+              title="Windows Masaüstü Uygulamasını İndir (.zip)"
+            >
+              <Download className="w-4 h-4 animate-bounce" />
+              <span className="hidden sm:inline">Windows İndir</span>
+            </button>
+          )}
+
           {/* Universal Music Bot Button */}
           <button
             onClick={onOpenMusicModal}

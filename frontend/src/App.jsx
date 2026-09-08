@@ -599,6 +599,8 @@ export default function App() {
           watchTogetherState={activeWatchTogether}
           onOpenWatchTogether={() => setIsWatchTogetherOpen(true)}
           onStopWatchTogether={handleStopWatchTogether}
+          isAppInstalled={isAppInstalled}
+          onOpenDownload={() => setIsDownloadModalOpen(true)}
         />
       ) : currentChannel ? (
         <ChatArea

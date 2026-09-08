@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { 
   Monitor, MonitorOff, Video, VideoOff, Mic, MicOff, Headphones, 
-  PhoneOff, Maximize, Sparkles, Volume2, Radio, Check, Disc3, Music, Pause, Play, Tv
+  PhoneOff, Maximize, Sparkles, Volume2, Radio, Check, Disc3, Music, Pause, Play, Tv, Download
 } from 'lucide-react';
 import { soundEffects } from '../services/soundEffects';
 import { webrtc } from '../services/webrtc';
@@ -30,7 +30,9 @@ export default function VoiceRoom({
   onStopMusic,
   watchTogetherState,
   onOpenWatchTogether,
-  onStopWatchTogether
+  onStopWatchTogether,
+  isAppInstalled,
+  onOpenDownload
 }) {
   const [activeScreenUser, setActiveScreenUser] = useState(null);
   const [isNoiseSuppressed, setIsNoiseSuppressed] = useState(webrtc.isNoiseSuppressionOn);
@@ -106,6 +108,17 @@ export default function VoiceRoom({
           </span>
         </div>
 
+        {/* Windows Download button (Only on Web) */}
+        {!isAppInstalled && (
+          <button
+            onClick={onOpenDownload}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#23a55a] hover:bg-[#1f934f] text-white text-xs font-bold transition-all shadow-xs hover:scale-105 cursor-pointer"
+            title="Windows Masaüstü Uygulamasını İndir (.zip)"
+          >
+            <Download className="w-3.5 h-3.5 animate-bounce" />
+            <span>Windows İndir</span>
+          </button>
+        )}
       </div>
 
       {/* 24/7 MUSIC BOT ACTIVE BAR */}

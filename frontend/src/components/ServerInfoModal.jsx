@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShieldCheck, Copy, Check, X, Sparkles, Monitor, Users, ExternalLink } from 'lucide-react';
+import { ShieldCheck, Copy, Check, X, Sparkles, Monitor, Users, ExternalLink, Download } from 'lucide-react';
 
 export default function ServerInfoModal({ isOpen, onClose }) {
   const [copied, setCopied] = useState(false);
@@ -54,6 +54,28 @@ export default function ServerInfoModal({ isOpen, onClose }) {
             <p className="text-[11px] text-[#949ba4]">
               Bu linki diğer 4 arkadaşınıza göndererek anında odaya katılmalarını sağlayabilirsiniz.
             </p>
+          </div>
+
+          {/* Windows Desktop Download Card */}
+          <div className="p-3.5 rounded-xl bg-gradient-to-r from-[#23a55a]/15 to-[#1f934f]/15 border border-[#23a55a]/30 flex items-center justify-between gap-3">
+            <div>
+              <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                <span>💻 Windows Masaüstü Uygulaması</span>
+                <span className="text-[10px] bg-[#23a55a] text-white px-1.5 py-0.2 rounded font-bold">150 MB</span>
+              </div>
+              <p className="text-[11px] text-[#949ba4] mt-0.5">
+                Discord gibi bağımsız masaüstü programı olarak kullanın.
+              </p>
+            </div>
+            <a
+              href="https://github.com/EmirU77/fivecord/releases/download/v1.0.0/Fivecord-Masaustu-Uygulamasi.zip"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3 py-1.5 rounded-lg bg-[#23a55a] hover:bg-[#1f934f] text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 shrink-0 hover:scale-105"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>İndir (.zip)</span>
+            </a>
           </div>
 
           <div className="space-y-2">
