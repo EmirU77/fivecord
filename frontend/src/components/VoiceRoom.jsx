@@ -109,18 +109,20 @@ export default function VoiceRoom({
       {/* 24/7 MUSIC BOT ACTIVE BAR */}
       {musicState?.currentTrack && (
         <div className="bg-[#2b2d31] border-b border-[#383a40] px-6 py-2 flex items-center justify-between text-xs shadow-inner">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 text-[#5865f2] font-black">
+          <div className="flex items-center gap-3 overflow-hidden">
+            <div className="flex items-center gap-1.5 text-[#5865f2] font-black shrink-0">
               <Disc3 className={`w-4 h-4 ${musicState.isPlaying ? 'animate-spin' : ''}`} />
-              <span>Fivecord DJ [BOT]:</span>
+              <span>Fivecord DJ:</span>
             </div>
-            <span className="text-white font-bold">{musicState.currentTrack.name}</span>
-            <span className="text-[10px] text-[#949ba4] px-1.5 py-0.2 rounded bg-[#1e1f22]">
-              {musicState.currentTrack.genre || 'Canlı Müzik'}
+            <span className="text-white font-bold truncate max-w-xs sm:max-w-md">
+              {musicState.currentTrack.title || musicState.currentTrack.name}
+            </span>
+            <span className="text-[10px] text-[#949ba4] px-1.5 py-0.2 rounded bg-[#1e1f22] shrink-0">
+              {musicState.currentTrack.duration || musicState.currentTrack.artist || musicState.currentTrack.genre || 'Müzik'}
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={onToggleMusicPlay}
               className="px-3 py-1 rounded-lg bg-[#383a40] hover:bg-[#4e5058] text-white text-xs font-bold transition-all flex items-center gap-1.5"
@@ -132,7 +134,7 @@ export default function VoiceRoom({
               onClick={onOpenMusicModal}
               className="px-3 py-1 rounded-lg bg-[#5865f2] hover:bg-[#4752c4] text-white text-xs font-bold transition-all"
             >
-              İstasyonlar / Ayar
+              🔍 Şarkı Ara / Ayar
             </button>
             <button
               onClick={onStopMusic}
@@ -234,21 +236,47 @@ export default function VoiceRoom({
                   >
                     {/* BOT TILE / VINYL VISUALIZER */}
                     {member.isBot ? (
-                      <div className="flex flex-col items-center justify-center space-y-3">
+                      <div className="flex flex-col items-center justify-center space-y-2.5 w-full px-2">
                         <div className="relative">
-                          <div className={`w-28 h-28 rounded-full bg-gradient-to-tr from-[#5865f2] to-[#eb459e] flex items-center justify-center text-white shadow-2xl ${
-                            member.voiceState?.isSpeaking ? 'animate-spin' : ''
-                          }`}>
-                            <Disc3 className="w-16 h-16" />
-                          </div>
-                          <div className="absolute bottom-1 right-1 w-6 h-6 rounded-full bg-[#5865f2] border-3 border-[#2b2d31] flex items-center justify-center text-white text-[10px] font-bold shadow">
+                          {musicState?.currentTrack?.thumbnail ? (
+                            <div className={`w-24 h-24 rounded-full p-1 bg-[#1e1f22] border-2 border-[#5865f2] shadow-2xl overflow-hidden flex items-center justify-center ${
+                              member.voiceState?.isSpeaking ? 'animate-spin' : ''
+                            }`}>
+                              <img 
+                                src={musicState.currentTrack.thumbnail} 
+                                alt={musicState.currentTrack.title || 'Müzik'} 
+                                className="w-full h-full object-cover rounded-full" 
+                              />
+                            </div>
+                          ) : (
+                            <div className={`w-24 h-24 rounded-full bg-gradient-to-tr from-[#5865f2] to-[#eb459e] flex items-center justify-center text-white shadow-2xl ${
+                              member.voiceState?.isSpeaking ? 'animate-spin' : ''
+                            }`}>
+                              <Disc3 className="w-14 h-14" />
+                            </div>
+                          )}
+                          <div className="absolute bottom-0 right-0 w-6 h-6 rounded-full bg-[#23a55a] border-2 border-[#2b2d31] flex items-center justify-center text-white text-[10px] font-bold shadow">
                             ✓
                           </div>
                         </div>
-                        <div className="text-center">
-                          <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-[#5865f2]/20 text-[#5865f2] font-black tracking-wider uppercase">
-                            {member.voiceState?.isSpeaking ? '🎵 MÜZİK ÇALIYOR' : 'HAZIR'}
-                          </span>
+
+                        <div className="text-center w-full overflow-hidden">
+                          <h4 className="text-xs font-black text-white truncate px-2">
+                            {musicState?.currentTrack ? (musicState.currentTrack.title || musicState.currentTrack.name) : 'Fivecord DJ'}
+                          </h4>
+                          <p className="text-[11px] text-[#949ba4] truncate mt-0.5">
+                            {musicState?.currentTrack ? (musicState.currentTrack.artist || musicState.currentTrack.genre || 'YouTube Müzik') : 'Müzik Botu'}
+                          </p>
+                          <div className="mt-1 flex items-center justify-center gap-1.5">
+                            <span className="text-[9px] px-2 py-0.5 rounded-full bg-[#5865f2]/20 text-[#5865f2] font-black tracking-wider uppercase">
+                              {member.voiceState?.isSpeaking ? '🎵 ÇALIYOR' : 'HAZIR'}
+                            </span>
+                            {musicState?.currentTrack?.duration && (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#1e1f22] text-[#dbdee1] font-mono">
+                                {musicState.currentTrack.duration}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ) : hasCamera ? (

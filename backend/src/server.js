@@ -170,8 +170,113 @@ function sendBotChatMessage(channelId, text) {
   io.emit('new-message', botMessage);
 }
 
+// Search YouTube for any song name or URL
+async function searchYouTube(query) {
+  try {
+    const cleanQuery = query.trim();
+    const ytUrlMatch = cleanQuery.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+    const searchQuery = ytUrlMatch ? `https://www.youtube.com/watch?v=${ytUrlMatch[1]}` : cleanQuery;
+
+    const url = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(searchQuery);
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
+      }
+    });
+    const html = await res.text();
+    
+    // Extract ytInitialData
+    const jsonMatch = html.match(/var ytInitialData = ({.*?});<\/script>/s) || html.match(/window\["ytInitialData"\] = ({.*?});<\/script>/s);
+    if (jsonMatch) {
+      try {
+        const data = JSON.parse(jsonMatch[1]);
+        const contents = data?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents?.[0]?.itemSectionRenderer?.contents;
+        if (contents && Array.isArray(contents)) {
+          const videos = [];
+          for (const item of contents) {
+            const v = item.videoRenderer;
+            if (v && v.videoId && v.title?.runs?.[0]?.text) {
+              videos.push({
+                id: v.videoId,
+                title: v.title.runs[0].text,
+                name: v.title.runs[0].text,
+                artist: v.ownerText?.runs?.[0]?.text || v.shortBylineText?.runs?.[0]?.text || 'YouTube Sanatçısı',
+                duration: v.lengthText?.simpleText || '3:30',
+                thumbnail: v.thumbnail?.thumbnails?.[0]?.url || `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`,
+                url: `https://www.youtube.com/watch?v=${v.videoId}`,
+                source: 'youtube'
+              });
+              if (videos.length >= 10) break;
+            }
+          }
+          if (videos.length > 0) return videos;
+        }
+      } catch(e) {}
+    }
+
+    // Fallback regex if ytInitialData parse fails
+    const videoRendererRegex = /"videoRenderer":\{"videoId":"([^"]+)".*?"title":\{"runs":\[\{"text":"([^"]+)"/g;
+    const results = [];
+    let m;
+    while ((m = videoRendererRegex.exec(html)) !== null && results.length < 10) {
+      results.push({
+        id: m[1],
+        title: m[2],
+        name: m[2],
+        artist: 'YouTube',
+        duration: '3:30',
+        thumbnail: `https://i.ytimg.com/vi/${m[1]}/hqdefault.jpg`,
+        url: `https://www.youtube.com/watch?v=${m[1]}`,
+        source: 'youtube'
+      });
+    }
+    return results;
+  } catch (err) {
+    console.error('[YouTube Search Error]', err);
+    return [];
+  }
+}
+
+function setVoiceChannelMusic(targetVoiceChannelId, track, senderUsername = 'Kullanıcı') {
+  const state = {
+    isPlaying: true,
+    currentTrack: {
+      ...track,
+      requestedBy: senderUsername
+    },
+    volume: 80,
+    startedAt: Date.now()
+  };
+  channelMusic.set(targetVoiceChannelId, state);
+
+  DJ_BOT_USER.voiceState.channelId = targetVoiceChannelId;
+  DJ_BOT_USER.voiceState.isSpeaking = true;
+  DJ_BOT_USER.customStatus = `🎵 ${track.title || track.name}`;
+  DJ_BOT_USER.activity = track.title || track.name;
+
+  if (voiceChannels.has(targetVoiceChannelId)) {
+    voiceChannels.get(targetVoiceChannelId).add(DJ_BOT_USER.id);
+  }
+
+  io.emit('music-state-updated', { channelId: targetVoiceChannelId, state });
+  io.emit('members-updated', getAllMembers());
+  return state;
+}
+
 app.get('/api/music/stations', (req, res) => {
   res.json(MUSIC_STATIONS);
+});
+
+app.get('/api/music/search', async (req, res) => {
+  const query = req.query.q;
+  if (!query || !query.trim()) return res.json({ results: [] });
+  try {
+    const results = await searchYouTube(query);
+    res.json({ results });
+  } catch (e) {
+    res.status(500).json({ error: e.message, results: [] });
+  }
 });
 
 const channels = [
@@ -275,46 +380,56 @@ io.on('connection', (socket) => {
 
     io.emit('new-message', message);
 
-    // Bot command check (!play, !stop, !pause, !resume, !radio, !help)
+    // Discord-style Music Bot command check (!play, !stop, !pause, !resume, !np, !volume, !radio, !help)
     const trimmed = (content || '').trim();
     if (trimmed.startsWith('!')) {
       const parts = trimmed.split(' ');
       const cmd = parts[0].toLowerCase();
       const arg = parts.slice(1).join(' ').trim();
-      const targetVoiceChannelId = sender.voiceState?.channelId || 'voice-genel';
+      const targetVoiceChannelId = sender.voiceState?.channelId || Array.from(voiceChannels.keys())[0] || 'voice-genel';
 
       if (cmd === '!play') {
-        let station = MUSIC_STATIONS.find(s => s.id === arg.toLowerCase() || s.name.toLowerCase().includes(arg.toLowerCase()));
-        let track;
+        if (!arg) {
+          sendBotChatMessage(channelId, `❓ **Kullanım:** \`!play <şarkı adı veya YouTube linki>\`\nÖrnek: \`!play Ceza Suspus\`, \`!play Duman Haberin Yok Ölüyorum\`, \`!play The Weeknd\` veya \`!play lofi\``);
+          return;
+        }
+
+        // 1. Check if user specified a preset station ID (lofi, gaming, rock, pop, etc.)
+        const station = MUSIC_STATIONS.find(s => s.id === arg.toLowerCase() || s.name.toLowerCase().includes(arg.toLowerCase()));
         if (station) {
-          track = { id: station.id, name: station.name, url: station.url, genre: station.genre, icon: station.icon };
-        } else if (arg.startsWith('http')) {
-          track = { id: 'custom-' + Date.now(), name: 'Özel Radyo / Ses Yayını', url: arg, genre: 'Özel URL', icon: '🎵' };
-        } else {
-          station = MUSIC_STATIONS[0];
-          track = { id: station.id, name: station.name, url: station.url, genre: station.genre, icon: station.icon };
+          const track = { id: station.id, name: station.name, title: station.name, url: station.url, genre: station.genre, icon: station.icon, source: 'station' };
+          setVoiceChannelMusic(targetVoiceChannelId, track, sender.username);
+          sendBotChatMessage(channelId, `📻 **Radyo Başlatıldı:** **${station.name}** [${station.genre}]\n👤 **İsteyen:** @${sender.username} • Ses kanalına bağlandı!`);
+          return;
         }
 
-        const state = {
-          isPlaying: true,
-          currentTrack: track,
-          volume: 80,
-          startedAt: Date.now()
-        };
-        channelMusic.set(targetVoiceChannelId, state);
-
-        DJ_BOT_USER.voiceState.channelId = targetVoiceChannelId;
-        DJ_BOT_USER.voiceState.isSpeaking = true;
-        DJ_BOT_USER.customStatus = `🎵 ${track.name}`;
-
-        if (voiceChannels.has(targetVoiceChannelId)) {
-          voiceChannels.get(targetVoiceChannelId).add(DJ_BOT_USER.id);
+        // 2. Check if user specified a direct MP3 / radio stream URL
+        if (arg.startsWith('http') && (arg.endsWith('.mp3') || arg.endsWith('.aac') || arg.includes('radio') || arg.includes('stream'))) {
+          const track = { id: 'custom-' + Date.now(), name: 'Özel Ses Akışı', title: 'Özel Ses Akışı', url: arg, genre: 'Canlı Akış', icon: '🎵', source: 'stream' };
+          setVoiceChannelMusic(targetVoiceChannelId, track, sender.username);
+          sendBotChatMessage(channelId, `🎶 **Özel Akış Başlatıldı:** [URL](${arg})\n👤 **İsteyen:** @${sender.username}`);
+          return;
         }
 
-        io.emit('music-state-updated', { channelId: targetVoiceChannelId, state });
-        io.emit('members-updated', getAllMembers());
+        // 3. Search YouTube by Song Name or YouTube URL!
+        sendBotChatMessage(channelId, `🔍 **"${arg}"** YouTube'da aranıyor...`);
+        
+        searchYouTube(arg).then((results) => {
+          if (results && results.length > 0) {
+            const topTrack = results[0];
+            setVoiceChannelMusic(targetVoiceChannelId, topTrack, sender.username);
+            sendBotChatMessage(
+              channelId, 
+              `🎵 **Şarkı Oynatılıyor:** **${topTrack.title}**\n⏱️ **Süre:** \`${topTrack.duration}\` | 👤 **İsteyen:** **@${sender.username}**\n▶️ **Ses Odası:** Ses kanalında senkronize çalıyor!`
+            );
+          } else {
+            sendBotChatMessage(channelId, `❌ **"${arg}"** için YouTube'da şarkı bulunamadı. Lütfen şarkı veya sanatçı adını kontrol edin.`);
+          }
+        }).catch((err) => {
+          console.error('[Bot Play Error]', err);
+          sendBotChatMessage(channelId, `⚠️ Şarkı aranırken bir hata oluştu: ${err.message}`);
+        });
 
-        sendBotChatMessage(channelId, `🎶 **Fivecord DJ** odaya katıldı ve çalıyor: **${track.name}** [${track.genre}]`);
       } else if (cmd === '!stop') {
         const state = { isPlaying: false, currentTrack: null, volume: 80, startedAt: 0 };
         channelMusic.set(targetVoiceChannelId, state);
@@ -322,6 +437,7 @@ io.on('connection', (socket) => {
         DJ_BOT_USER.voiceState.channelId = null;
         DJ_BOT_USER.voiceState.isSpeaking = false;
         DJ_BOT_USER.customStatus = '🎵 7/24 Müzik Botu';
+        DJ_BOT_USER.activity = 'Fivecord DJ';
 
         if (voiceChannels.has(targetVoiceChannelId)) {
           voiceChannels.get(targetVoiceChannelId).delete(DJ_BOT_USER.id);
@@ -330,7 +446,7 @@ io.on('connection', (socket) => {
         io.emit('music-state-updated', { channelId: targetVoiceChannelId, state });
         io.emit('members-updated', getAllMembers());
 
-        sendBotChatMessage(channelId, `⏹️ **Fivecord DJ**: Müzik durduruldu ve odadan ayrıldı.`);
+        sendBotChatMessage(channelId, `⏹️ **Fivecord DJ**: Müzik durduruldu ve ses odasından ayrıldı.`);
       } else if (cmd === '!pause') {
         const state = channelMusic.get(targetVoiceChannelId);
         if (state) {
@@ -338,7 +454,7 @@ io.on('connection', (socket) => {
           DJ_BOT_USER.voiceState.isSpeaking = false;
           io.emit('music-state-updated', { channelId: targetVoiceChannelId, state });
           io.emit('members-updated', getAllMembers());
-          sendBotChatMessage(channelId, `⏸️ **Fivecord DJ**: Müzik duraklatıldı.`);
+          sendBotChatMessage(channelId, `⏸️ **Fivecord DJ**: Müzik duraklatıldı. Devam ettirmek için \`!resume\` yazabilirsiniz.`);
         }
       } else if (cmd === '!resume') {
         const state = channelMusic.get(targetVoiceChannelId);
@@ -347,11 +463,47 @@ io.on('connection', (socket) => {
           DJ_BOT_USER.voiceState.isSpeaking = true;
           io.emit('music-state-updated', { channelId: targetVoiceChannelId, state });
           io.emit('members-updated', getAllMembers());
-          sendBotChatMessage(channelId, `▶️ **Fivecord DJ**: Müzik devam ediyor.`);
+          sendBotChatMessage(channelId, `▶️ **Fivecord DJ**: Müzik devam ediyor: **${state.currentTrack.title || state.currentTrack.name}**`);
         }
-      } else if (cmd === '!radio' || cmd === '!help') {
+      } else if (cmd === '!np' || cmd === '!nowplaying') {
+        const state = channelMusic.get(targetVoiceChannelId);
+        if (state && state.isPlaying && state.currentTrack) {
+          sendBotChatMessage(
+            channelId,
+            `🎶 **Şu An Çalan:** **${state.currentTrack.title || state.currentTrack.name}**\n⏱️ **Süre:** \`${state.currentTrack.duration || 'Canlı'}\` | 👤 **İsteyen:** @${state.currentTrack.requestedBy || 'Bilinmiyor'}`
+          );
+        } else {
+          sendBotChatMessage(channelId, `🔇 Şu anda hiçbir şarkı çalmıyor. Şarkı açmak için \`!play <şarkı adı>\` yazabilirsiniz.`);
+        }
+      } else if (cmd === '!volume') {
+        const vol = parseInt(arg);
+        if (!isNaN(vol) && vol >= 0 && vol <= 100) {
+          const state = channelMusic.get(targetVoiceChannelId);
+          if (state) {
+            state.volume = vol;
+            io.emit('music-state-updated', { channelId: targetVoiceChannelId, state });
+            sendBotChatMessage(channelId, `🔊 **Ses Seviyesi:** %${vol} olarak ayarlandı.`);
+          }
+        } else {
+          sendBotChatMessage(channelId, `❓ Kullanım: \`!volume 0-100\` (Örn: \`!volume 80\`)`);
+        }
+      } else if (cmd === '!radio') {
         const list = MUSIC_STATIONS.map(s => `• \`!play ${s.id}\` — ${s.name}`).join('\n');
-        sendBotChatMessage(channelId, `📻 **Fivecord DJ 7/24 Müzik İstasyonları:**\n${list}\n\n*Komutlar: \`!play <istasyon/url>\`, \`!pause\`, \`!resume\`, \`!stop\`*`);
+        sendBotChatMessage(channelId, `📻 **7/24 Kesintisiz Radyo İstasyonları:**\n${list}\n\n*İstediğin şarkıyı açmak için: \`!play <şarkı adı>\` (Örn: \`!play Duman\`)*`);
+      } else if (cmd === '!help') {
+        sendBotChatMessage(
+          channelId,
+          `🎵 **Fivecord DJ Müzik Botu Komutları:**\n` +
+          `• \`!play <şarkı adı>\` — YouTube'da arayıp şarkıyı başlatır (Örn: \`!play Ceza Suspus\`)\n` +
+          `• \`!play <YouTube linki>\` — Linkteki müziği başlatır\n` +
+          `• \`!play lofi\` / \`gaming\` / \`rock\` — 7/24 kesintisiz radyo başlatır\n` +
+          `• \`!pause\` — Müziği duraklatır\n` +
+          `• \`!resume\` — Müziği kaldığı yerden devam ettirir\n` +
+          `• \`!stop\` — Müziği tamamen durdurur\n` +
+          `• \`!np\` — Şu an çalan şarkıyı gösterir\n` +
+          `• \`!volume <0-100>\` — Ses seviyesini ayarlar\n` +
+          `• \`!radio\` — Radyo istasyonlarını listeler`
+        );
       }
     }
   });
@@ -487,43 +639,35 @@ io.on('connection', (socket) => {
     socket.emit('music-state-updated', { channelId, state });
   });
 
-  socket.on('music-play', ({ channelId, stationId, customUrl, customName }) => {
-    let track;
-    if (stationId) {
+  socket.on('music-play', async ({ channelId, track, stationId, customUrl, customName, query }) => {
+    let chosenTrack = track;
+
+    if (!chosenTrack && query) {
+      const results = await searchYouTube(query);
+      if (results.length > 0) chosenTrack = results[0];
+    }
+
+    if (!chosenTrack && stationId) {
       const station = MUSIC_STATIONS.find(s => s.id === stationId);
       if (station) {
-        track = { id: station.id, name: station.name, url: station.url, genre: station.genre, icon: station.icon };
+        chosenTrack = { id: station.id, name: station.name, title: station.name, url: station.url, genre: station.genre, icon: station.icon, source: 'station' };
       }
-    } else if (customUrl) {
-      track = {
+    } else if (!chosenTrack && customUrl) {
+      chosenTrack = {
         id: 'custom-' + Date.now(),
         name: customName || 'Özel Radyo / Ses Yayını',
+        title: customName || 'Özel Radyo / Ses Yayını',
         url: customUrl,
         genre: 'Özel Akış',
-        icon: '🎵'
+        icon: '🎵',
+        source: 'stream'
       };
     }
 
-    if (!track) return;
+    if (!chosenTrack) return;
 
-    const state = {
-      isPlaying: true,
-      currentTrack: track,
-      volume: 80,
-      startedAt: Date.now()
-    };
-    channelMusic.set(channelId, state);
-
-    DJ_BOT_USER.voiceState.channelId = channelId;
-    DJ_BOT_USER.voiceState.isSpeaking = true;
-    DJ_BOT_USER.customStatus = `🎵 ${track.name}`;
-
-    if (voiceChannels.has(channelId)) {
-      voiceChannels.get(channelId).add(DJ_BOT_USER.id);
-    }
-
-    io.emit('music-state-updated', { channelId, state });
-    io.emit('members-updated', getAllMembers());
+    const sender = users.get(socket.id);
+    setVoiceChannelMusic(channelId, chosenTrack, sender?.username || 'Kullanıcı');
   });
 
   socket.on('music-pause', ({ channelId }) => {

@@ -59,6 +59,41 @@ export default function App() {
   const [remoteScreenStreams, setRemoteScreenStreams] = useState(new Map());
 
   const audioContainerRef = useRef(null);
+  const bgMusicAudioRef = useRef(null);
+  const bgYtIframeRef = useRef(null);
+  const activeMusicState = currentVoiceChannel ? musicStates.get(currentVoiceChannel.id) : null;
+
+  // Background stream playback (Radio / MP3) across all channels
+  useEffect(() => {
+    if (!bgMusicAudioRef.current) return;
+    if (activeMusicState?.isPlaying && activeMusicState?.currentTrack?.url && activeMusicState.currentTrack.source !== 'youtube') {
+      if (bgMusicAudioRef.current.src !== activeMusicState.currentTrack.url) {
+        bgMusicAudioRef.current.src = activeMusicState.currentTrack.url;
+      }
+      bgMusicAudioRef.current.volume = Math.min(Math.max((activeMusicState.volume ?? 80) / 100, 0), 1);
+      bgMusicAudioRef.current.play().catch(e => console.warn('Music play error:', e));
+    } else {
+      bgMusicAudioRef.current.pause();
+    }
+  }, [activeMusicState]);
+
+  // Background YouTube playback across all channels
+  useEffect(() => {
+    if (!bgYtIframeRef.current) return;
+    if (activeMusicState?.isPlaying && activeMusicState?.currentTrack?.source === 'youtube') {
+      const videoId = activeMusicState.currentTrack.id;
+      const targetSrc = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&enablejsapi=1&playsinline=1`;
+      if (!bgYtIframeRef.current.src.includes(videoId)) {
+        bgYtIframeRef.current.src = targetSrc;
+      } else {
+        bgYtIframeRef.current.contentWindow?.postMessage('{"event":"command","func":"playVideo","args":""}', '*');
+      }
+      const vol = activeMusicState.volume ?? 80;
+      bgYtIframeRef.current.contentWindow?.postMessage(`{"event":"command","func":"setVolume","args":[${vol}]}`, '*');
+    } else if (bgYtIframeRef.current) {
+      bgYtIframeRef.current.contentWindow?.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
+    }
+  }, [activeMusicState]);
 
   const handleUpdateProfile = (updated) => {
     const newUser = { ...currentUser, ...updated };
@@ -277,6 +312,11 @@ export default function App() {
     socket.emit('music-play', { channelId: chId, stationId });
   };
 
+  const handlePlayTrack = (track) => {
+    const chId = currentVoiceChannel?.id || 'voice-genel';
+    socket.emit('music-play', { channelId: chId, track });
+  };
+
   const handlePlayCustom = (customUrl, customName) => {
     const chId = currentVoiceChannel?.id || 'voice-genel';
     socket.emit('music-play', { channelId: chId, customUrl, customName });
@@ -307,6 +347,17 @@ export default function App() {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#1e1f22]">
       <div ref={audioContainerRef} className="hidden" />
+      <audio ref={bgMusicAudioRef} className="hidden" />
+      {activeMusicState?.currentTrack?.source === 'youtube' && (
+        <div className="fixed -top-96 -left-96 pointer-events-none opacity-0 w-1 h-1 overflow-hidden">
+          <iframe
+            ref={bgYtIframeRef}
+            title="Fivecord YouTube Stream"
+            allow="autoplay; encrypted-media"
+            className="w-full h-full"
+          />
+        </div>
+      )}
 
       {/* DISCORD SERVER RAIL (72px) */}
       <ServerRail 
@@ -460,6 +511,7 @@ export default function App() {
         musicState={currentVoiceChannel ? musicStates.get(currentVoiceChannel.id) : null}
         stations={musicStations}
         onPlayStation={handlePlayStation}
+        onPlayTrack={handlePlayTrack}
         onPlayCustom={handlePlayCustom}
         onPause={handlePauseMusic}
         onResume={handleResumeMusic}
