@@ -12,6 +12,8 @@ import RenameChannelModal from './components/RenameChannelModal';
 import ServerInfoModal from './components/ServerInfoModal';
 import DownloadModal from './components/DownloadModal';
 import MusicPlayerModal from './components/MusicPlayerModal';
+import DecisionWheelModal from './components/DecisionWheelModal';
+import WatchTogetherModal from './components/WatchTogetherModal';
 import { socket } from './services/socket';
 import { webrtc } from './services/webrtc';
 import { soundEffects } from './services/soundEffects';
@@ -70,6 +72,9 @@ export default function App() {
   const [isMusicModalOpen, setIsMusicModalOpen] = useState(false);
   const [musicStates, setMusicStates] = useState(new Map());
   const [musicStations, setMusicStations] = useState([]);
+  const [isWheelOpen, setIsWheelOpen] = useState(false);
+  const [isWatchTogetherOpen, setIsWatchTogetherOpen] = useState(false);
+  const [watchTogetherRooms, setWatchTogetherRooms] = useState(new Map());
 
   // Remote WebRTC streams
   const [remoteStreams, setRemoteStreams] = useState(new Map());
@@ -79,6 +84,7 @@ export default function App() {
   const bgMusicAudioRef = useRef(null);
   const bgYtIframeRef = useRef(null);
   const activeMusicState = currentVoiceChannel ? musicStates.get(currentVoiceChannel.id) : null;
+  const activeWatchTogether = currentVoiceChannel ? watchTogetherRooms.get(currentVoiceChannel.id) : null;
 
   // Background stream playback (Radio / MP3) across all channels
   useEffect(() => {
@@ -125,9 +131,12 @@ export default function App() {
       socket.emit('user-join', currentUser);
     });
 
-    socket.on('initial-data', ({ channels, stations }) => {
+    socket.on('initial-data', ({ channels, stations, watchTogether }) => {
       setChannels(channels);
       if (stations) setMusicStations(stations);
+      if (watchTogether) {
+        setWatchTogetherRooms(new Map(Object.entries(watchTogether)));
+      }
       const defaultText = channels.find(c => c.type === 'text');
       if (defaultText && activeView === 'server') {
         setCurrentChannel(defaultText);
@@ -207,6 +216,25 @@ export default function App() {
       });
     });
 
+    socket.on('watch-together-updated', ({ channelId, state }) => {
+      setWatchTogetherRooms(prev => {
+        const next = new Map(prev);
+        if (state) next.set(channelId, state);
+        else next.delete(channelId);
+        return next;
+      });
+    });
+
+    socket.on('entrance-sound-played', ({ channelId, soundPreset, username }) => {
+      if (soundPreset && soundPreset !== 'none') {
+        soundEffects.playEntrancePreset(soundPreset);
+      }
+    });
+
+    socket.on('tts-speak', ({ channelId, text, username }) => {
+      soundEffects.speakTTS(text);
+    });
+
     webrtc.onRemoteStreamAdded = (socketId, stream, isScreen) => {
       if (isScreen) {
         setRemoteScreenStreams(prev => new Map(prev).set(socketId, stream));
@@ -260,6 +288,9 @@ export default function App() {
       socket.off('voice-room-peers');
       socket.off('peer-voice-state-updated');
       socket.off('music-state-updated');
+      socket.off('watch-together-updated');
+      socket.off('entrance-sound-played');
+      socket.off('tts-speak');
     };
   }, [currentUser, currentChannel, activeView]);
 
@@ -362,6 +393,33 @@ export default function App() {
 
   const handleSendMessage = ({ channelId, content, file }) => {
     socket.emit('send-message', { channelId, content, file });
+  };
+
+  // Watch Together (Birlikte İzle) Handlers
+  const handleStartWatchTogether = (videoId, videoTitle) => {
+    const targetChannelId = currentVoiceChannel?.id || 'voice-sinema';
+    socket.emit('watch-together-start', {
+      channelId: targetChannelId,
+      videoId,
+      videoTitle
+    });
+  };
+
+  const handleStopWatchTogether = () => {
+    const targetChannelId = currentVoiceChannel?.id || 'voice-sinema';
+    socket.emit('watch-together-close', targetChannelId);
+  };
+
+  // Karar Çarkı Share Handler
+  const handleShareWheelResult = (winner) => {
+    const targetTextChannelId = currentChannel?.type === 'text' 
+      ? currentChannel.id 
+      : (channels.find(c => c.type === 'text')?.id || 'text-genel');
+    socket.emit('send-message', {
+      channelId: targetTextChannelId,
+      content: `🎯 **Karar Çarkı Döndü!** Ekip için çıkan karar: **${winner}** 🎲🔥`,
+      file: null
+    });
   };
 
   // Music bot controls
@@ -515,6 +573,9 @@ export default function App() {
             else handleResumeMusic();
           }}
           onStopMusic={handleStopMusic}
+          watchTogetherState={activeWatchTogether}
+          onOpenWatchTogether={() => setIsWatchTogetherOpen(true)}
+          onStopWatchTogether={handleStopWatchTogether}
         />
       ) : currentChannel ? (
         <ChatArea
@@ -535,6 +596,7 @@ export default function App() {
           voiceChannels={channels.filter(c => c.type === 'voice')}
           members={members}
           isAppInstalled={isAppInstalled}
+          onOpenWheel={() => setIsWheelOpen(true)}
         />
       ) : (
         <div className="flex-1 flex items-center justify-center text-[#949ba4]">
@@ -607,6 +669,20 @@ export default function App() {
         onResume={handleResumeMusic}
         onStop={handleStopMusic}
         onSetVolume={handleSetMusicVolume}
+      />
+
+      {/* KARAR ÇARKI (DECISION WHEEL) MODAL */}
+      <DecisionWheelModal
+        isOpen={isWheelOpen}
+        onClose={() => setIsWheelOpen(false)}
+        onShareResult={handleShareWheelResult}
+      />
+
+      {/* WATCH TOGETHER (BİRLİKTE İZLE) MODAL */}
+      <WatchTogetherModal
+        isOpen={isWatchTogetherOpen}
+        onClose={() => setIsWatchTogetherOpen(false)}
+        onStart={handleStartWatchTogether}
       />
     </div>
   );

@@ -55,7 +55,8 @@ export default function ChatArea({
   onJoinVoice,
   voiceChannels = [],
   members = [],
-  isAppInstalled
+  isAppInstalled,
+  onOpenWheel
 }) {
   const [inputText, setInputText] = useState('');
   const [typingUsers, setTypingUsers] = useState([]);
@@ -105,9 +106,17 @@ export default function ChatArea({
 
   const handleSend = (e) => {
     e?.preventDefault();
-    if (!inputText.trim()) return;
+    const trimmed = inputText.trim();
+    if (!trimmed) return;
 
-    onSendMessage(inputText.trim());
+    // Check for wheel shortcut
+    if (trimmed === '/cark' || trimmed === '/wheel' || trimmed === '!cark' || trimmed === '!wheel') {
+      onOpenWheel && onOpenWheel();
+      setInputText('');
+      return;
+    }
+
+    onSendMessage(trimmed);
     setInputText('');
     setShowEmojiPicker(false);
     setShowGifPicker(false);
@@ -555,6 +564,12 @@ export default function ChatArea({
 
                   <span className="text-[10px] text-[#949ba4] font-medium font-mono">{time}</span>
 
+                  {msg.isTTS && (
+                    <span className="text-[10px] text-[#23a55a] font-bold bg-[#23a55a]/15 px-1.5 py-0.2 rounded border border-[#23a55a]/30 flex items-center gap-1 shadow-xs">
+                      <Volume2 className="w-2.5 h-2.5 animate-pulse" /> TTS
+                    </span>
+                  )}
+
                   {msg.isPinned && (
                     <span className="text-[10px] text-[#f0b232] font-semibold bg-[#f0b232]/10 px-2 py-0.2 rounded flex items-center gap-1">
                       <Pin className="w-2.5 h-2.5" /> Sabitlendi
@@ -842,6 +857,23 @@ export default function ChatArea({
                     <div className="text-[10px] text-[#949ba4] font-normal">Rastgele şans oyunu</div>
                   </div>
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    onOpenWheel && onOpenWheel();
+                    setShowPlusMenu(false);
+                  }}
+                  className="w-full p-2.5 rounded-xl hover:bg-[#35373c] text-left flex items-center gap-3 text-white text-xs font-bold transition-colors cursor-pointer"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-[#eb459e]/20 text-[#eb459e] flex items-center justify-center">
+                    <Dices className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div>Karar Çarkı ("Ne Oynuyoruz?")</div>
+                    <div className="text-[10px] text-[#949ba4] font-normal">Ekip için oyun & yemek çarkı</div>
+                  </div>
+                </button>
               </div>
             )}
           </div>
@@ -859,9 +891,19 @@ export default function ChatArea({
             type="text"
             value={inputText}
             onChange={handleInputChange}
-            placeholder={`#${channel.name} kanalına mesaj gönder... (!play ile müzik açabilirsin)`}
+            placeholder={`#${channel.name} kanalına mesaj gönder... (/tts veya /cark yazabilirsin)`}
             className="flex-1 bg-transparent text-white text-sm focus:outline-hidden placeholder-[#80848e] font-normal"
           />
+
+          {/* Quick Decision Wheel Button */}
+          <button
+            type="button"
+            onClick={onOpenWheel}
+            className="p-1.5 text-[#b5bac1] hover:text-[#eb459e] hover:bg-[#35373c] rounded-lg transition-all cursor-pointer"
+            title="🎯 Karar Çarkı ('Ne Oynuyoruz?')"
+          >
+            <Dices className="w-5 h-5" />
+          </button>
 
           {/* GIF Picker Button */}
           <div className="relative">

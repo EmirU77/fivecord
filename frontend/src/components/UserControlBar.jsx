@@ -2,9 +2,17 @@ import React, { useState, useRef } from 'react';
 import { 
   Mic, MicOff, Headphones, Settings, X, Check, Smile, 
   Upload, Link2, Sparkles, Palette, Image as ImageIcon, Loader2,
-  Crown, Zap, Shield, Flame, User, Info, Hash, Circle
+  Crown, Zap, Shield, Flame, User, Info, Hash, Circle, Volume2, Play
 } from 'lucide-react';
 import { soundEffects } from '../services/soundEffects';
+
+const ENTRANCE_SOUNDS = [
+  { id: 'mvp', name: 'CS:GO MVP Marşı', icon: '🔫', desc: 'Dombra / Major Şampiyonluk Akorları' },
+  { id: 'cyberpunk', name: 'Cyberpunk Synth Bass', icon: '⚡', desc: 'Fütüristik Neon Ağır Bas Drop' },
+  { id: 'level_up', name: '8-Bit Retro Level Up', icon: '👾', desc: 'Nostaljik Arcade & Zelda Zafer Melodisi' },
+  { id: 'fanfare', name: 'VIP Kraliyet Fanfarı', icon: '🎺', desc: 'VIP Lobi Giriş Çanı ve Töreni' },
+  { id: 'none', name: 'Sessiz Giriş', icon: '🔇', desc: 'Odaya sessizce, ses efekti çalmadan gir' },
+];
 
 // --- PRESET DATA ---
 const COLOR_PRESETS = [
@@ -230,7 +238,7 @@ export default function UserControlBar({
   setIsDeafened 
 }) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState('avatar'); // avatar, banner, status, badges
+  const [activeTab, setActiveTab] = useState('avatar'); // avatar, banner, status, badges, entrance
 
   // Form states for modal
   const [tempName, setTempName] = useState(currentUser?.username || '');
@@ -244,6 +252,7 @@ export default function UserControlBar({
   const [tempColor, setTempColor] = useState(currentUser?.color || '#5865f2');
   const [tempNameEffect, setTempNameEffect] = useState(currentUser?.nameEffect || 'normal');
   const [tempBadges, setTempBadges] = useState(currentUser?.badges || ['owner', 'nitro']);
+  const [tempEntranceSound, setTempEntranceSound] = useState(currentUser?.entranceSound || 'mvp');
 
   const [customAvatarUrlInput, setCustomAvatarUrlInput] = useState('');
   const [customBannerUrlInput, setCustomBannerUrlInput] = useState('');
@@ -279,6 +288,7 @@ export default function UserControlBar({
     setTempColor(currentUser?.color || '#5865f2');
     setTempNameEffect(currentUser?.nameEffect || 'normal');
     setTempBadges(currentUser?.badges || ['owner', 'nitro']);
+    setTempEntranceSound(currentUser?.entranceSound || 'mvp');
     setCustomAvatarUrlInput('');
     setCustomBannerUrlInput('');
     setActiveTab('avatar');
@@ -297,7 +307,8 @@ export default function UserControlBar({
       banner: tempBanner,
       color: tempColor,
       nameEffect: tempNameEffect,
-      badges: tempBadges
+      badges: tempBadges,
+      entranceSound: tempEntranceSound
     });
     setIsSettingsOpen(false);
   };
@@ -527,6 +538,19 @@ export default function UserControlBar({
               >
                 <span>✨</span>
                 <span>Rozetler & İsim Stili</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('entrance')}
+                className={`px-4 py-2.5 font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
+                  activeTab === 'entrance'
+                    ? 'border-[#5865f2] text-white bg-[#35373c]/50 rounded-t-lg'
+                    : 'border-transparent text-[#949ba4] hover:text-white hover:bg-[#35373c]/30 rounded-t-lg'
+                }`}
+              >
+                <span>🎙️</span>
+                <span>Giriş Sesi</span>
               </button>
             </div>
 
@@ -987,6 +1011,77 @@ export default function UserControlBar({
                   </div>
                 )}
 
+                {/* TAB 5: ENTRANCE SOUNDS */}
+                {activeTab === 'entrance' && (
+                  <div className="space-y-4 animate-in fade-in duration-150">
+                    <div className="p-4 rounded-xl bg-[#2b2d31] border border-[#383a40] space-y-2">
+                      <div className="text-xs font-bold uppercase tracking-wider text-[#b5bac1] flex items-center gap-1.5">
+                        <Volume2 className="w-3.5 h-3.5 text-[#5865f2]" />
+                        <span>VIP Odaya Giriş Sesi Seç</span>
+                      </div>
+                      <p className="text-xs text-[#949ba4]">
+                        Sesli kanallara her katıldığında seçtiğin bu özel VIP melodisi gruptaki tüm arkadaşlarına anında çalar.
+                      </p>
+                    </div>
+
+                    <div className="space-y-2.5">
+                      {ENTRANCE_SOUNDS.map((item) => {
+                        const isSelected = tempEntranceSound === item.id;
+                        return (
+                          <div 
+                            key={item.id}
+                            className={`p-3.5 rounded-xl border flex items-center justify-between transition-all ${
+                              isSelected 
+                                ? 'bg-[#5865f2]/15 border-[#5865f2] shadow-sm' 
+                                : 'bg-[#2b2d31] border-[#383a40] hover:border-[#4e5058]'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <span className="text-2xl p-2 rounded-lg bg-[#1e1f22] border border-[#383a40] shrink-0">{item.icon}</span>
+                              <div className="truncate">
+                                <div className="text-sm font-bold text-white flex items-center gap-2">
+                                  <span>{item.name}</span>
+                                  {isSelected && (
+                                    <span className="text-[10px] bg-[#5865f2] text-white px-2 py-0.5 rounded-full font-black">
+                                      AKTİF
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-xs text-[#949ba4] truncate">{item.desc}</div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              {item.id !== 'none' && (
+                                <button
+                                  type="button"
+                                  onClick={() => soundEffects.playEntrancePreset(item.id)}
+                                  className="px-3 py-1.5 rounded-lg bg-[#35373c] hover:bg-[#4752c4] text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                                  title="Sesi Önizle"
+                                >
+                                  <Play className="w-3.5 h-3.5 fill-current" />
+                                  <span>Dinle</span>
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setTempEntranceSound(item.id)}
+                                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-[#23a55a] text-white font-black'
+                                    : 'bg-[#1e1f22] text-[#dbdee1] hover:bg-[#5865f2] hover:text-white'
+                                }`}
+                              >
+                                {isSelected ? '✓ Seçili' : 'Seç'}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
               </div>
 
               {/* RIGHT COLUMN: REALISTIC STICKY DISCORD PROFILE PREVIEW (5 cols) */}
@@ -1102,6 +1197,17 @@ export default function UserControlBar({
                             <span className="w-2 h-2 rounded-full bg-[#5865f2]" />
                             <span>Özel VIP Grup Üyesi (1/5)</span>
                           </div>
+                        </div>
+
+                        {/* Entrance Sound Indicator */}
+                        <div className="h-px bg-[#2e3035] my-1" />
+                        <div className="flex items-center justify-between text-xs text-[#b5bac1]">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-[#949ba4] flex items-center gap-1">
+                            <Volume2 className="w-3 h-3 text-[#5865f2]" /> Giriş Sesi:
+                          </span>
+                          <span className="font-bold text-white bg-[#1e1f22] px-2 py-0.5 rounded border border-[#383a40]">
+                            {ENTRANCE_SOUNDS.find(s => s.id === tempEntranceSound)?.icon} {ENTRANCE_SOUNDS.find(s => s.id === tempEntranceSound)?.name}
+                          </span>
                         </div>
                       </div>
 

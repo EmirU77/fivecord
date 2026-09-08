@@ -27,11 +27,21 @@ export default function VoiceRoom({
   musicState,
   onOpenMusicModal,
   onToggleMusicPlay,
-  onStopMusic
+  onStopMusic,
+  watchTogetherState,
+  onOpenWatchTogether,
+  onStopWatchTogether
 }) {
   const [activeScreenUser, setActiveScreenUser] = useState(null);
+  const [isNoiseSuppressed, setIsNoiseSuppressed] = useState(webrtc.isNoiseSuppressionOn);
   const mainVideoRef = useRef(null);
   const musicAudioRef = useRef(null);
+
+  const toggleNoiseSuppression = () => {
+    const next = !isNoiseSuppressed;
+    webrtc.setNoiseSuppression(next);
+    setIsNoiseSuppressed(next);
+  };
 
   // Synchronized background music stream player
   useEffect(() => {
@@ -96,14 +106,29 @@ export default function VoiceRoom({
           </span>
         </div>
 
-        {/* Quick Open Music Bot in Header */}
-        <button
-          onClick={onOpenMusicModal}
-          className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#5865f2]/20 hover:bg-[#5865f2] text-[#5865f2] hover:text-white text-xs font-bold transition-all border border-[#5865f2]/30"
-        >
-          <Disc3 className={`w-3.5 h-3.5 ${musicState?.isPlaying ? 'animate-spin' : ''}`} />
-          <span>Müzik Botu</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Watch Together Button in Header */}
+          <button
+            onClick={onOpenWatchTogether}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all border ${
+              watchTogetherState?.videoId
+                ? 'bg-[#ea3323] text-white border-[#ea3323] animate-pulse shadow-xs'
+                : 'bg-[#ea3323]/15 hover:bg-[#ea3323] text-[#ea3323] hover:text-white border-[#ea3323]/30'
+            }`}
+          >
+            <span>🍿</span>
+            <span>{watchTogetherState?.videoId ? 'Birlikte İzleniyor' : 'Birlikte İzle'}</span>
+          </button>
+
+          {/* Quick Open Music Bot in Header */}
+          <button
+            onClick={onOpenMusicModal}
+            className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#5865f2]/20 hover:bg-[#5865f2] text-[#5865f2] hover:text-white text-xs font-bold transition-all border border-[#5865f2]/30"
+          >
+            <Disc3 className={`w-3.5 h-3.5 ${musicState?.isPlaying ? 'animate-spin' : ''}`} />
+            <span>Müzik Botu</span>
+          </button>
+        </div>
       </div>
 
       {/* 24/7 MUSIC BOT ACTIVE BAR */}
@@ -149,8 +174,72 @@ export default function VoiceRoom({
 
       {/* Main Grid Stage */}
       <div className="flex-1 p-6 overflow-y-auto flex flex-col justify-center">
-        {/* BIG THEATER STAGE (If Screen Sharing is Active) */}
-        {activeScreenUser ? (
+        {/* WATCH TOGETHER CINEMA STAGE */}
+        {watchTogetherState?.videoId && !activeScreenUser ? (
+          <div className="space-y-4 max-w-6xl mx-auto w-full">
+            <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden border border-[#3f4147] shadow-2xl flex flex-col">
+              {/* Cinema Header */}
+              <div className="bg-[#111214]/90 backdrop-blur-md px-4 py-2.5 flex items-center justify-between border-b border-white/10 shrink-0">
+                <div className="flex items-center gap-2.5 overflow-hidden">
+                  <span className="flex items-center gap-1 text-xs font-black bg-[#ea3323] text-white px-2.5 py-0.5 rounded-full shadow-xs animate-pulse shrink-0">
+                    🍿 BİRLİKTE İZLE
+                  </span>
+                  <span className="text-sm font-bold text-white truncate">
+                    {watchTogetherState.videoTitle || 'YouTube Videosu'}
+                  </span>
+                  <span className="text-xs text-[#949ba4] hidden sm:inline shrink-0">
+                    (Başlatan: {watchTogetherState.startedBy || 'Arkadaşın'})
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={onOpenWatchTogether}
+                    className="px-3 py-1 rounded-lg bg-[#5865f2] hover:bg-[#4752c4] text-white text-xs font-bold transition-all cursor-pointer"
+                  >
+                    🎬 Video Değiştir
+                  </button>
+                  <button
+                    onClick={onStopWatchTogether}
+                    className="px-3 py-1 rounded-lg bg-[#f23f43]/20 hover:bg-[#f23f43] text-[#f23f43] hover:text-white text-xs font-bold transition-all cursor-pointer"
+                  >
+                    Kapat
+                  </button>
+                </div>
+              </div>
+
+              {/* YouTube Iframe */}
+              <iframe
+                src={`https://www.youtube-nocookie.com/embed/${watchTogetherState.videoId}?autoplay=1&enablejsapi=1&playsinline=1`}
+                title={watchTogetherState.videoTitle || 'Watch Together'}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                className="w-full flex-1 border-0"
+              />
+            </div>
+
+            {/* Stage members strip */}
+            <div className="flex items-center justify-center gap-3 overflow-x-auto py-2">
+              {channelMembers.map((member) => {
+                const isSpeaking = member.voiceState?.isSpeaking;
+                return (
+                  <div
+                    key={member.socketId}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#2b2d31] border transition-all ${
+                      isSpeaking ? 'border-[#23a55a] shadow-md shadow-[#23a55a]/20 scale-105' : 'border-[#383a40]'
+                    }`}
+                  >
+                    <img
+                      src={member.avatar}
+                      alt={member.username}
+                      className="w-6 h-6 rounded-full object-cover"
+                    />
+                    <span className="text-xs font-bold text-white">{member.username}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : activeScreenUser ? (
           <div className="space-y-4 max-w-6xl mx-auto w-full">
             <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden border border-[#3f4147] shadow-2xl flex items-center justify-center group">
               <video
@@ -433,10 +522,38 @@ export default function VoiceRoom({
           )}
         </button>
 
+        {/* KRISP AI NOISE SUPPRESSION BUTTON */}
+        <button
+          onClick={toggleNoiseSuppression}
+          className={`px-4 py-3.5 rounded-full flex items-center gap-2 font-bold text-xs transition-all shadow-md cursor-pointer ${
+            isNoiseSuppressed 
+              ? 'bg-[#23a55a] text-white shadow-[#23a55a]/30 scale-105' 
+              : 'bg-[#2b2d31] hover:bg-[#35373c] text-[#949ba4] hover:text-white'
+          }`}
+          title={isNoiseSuppressed ? 'Krisp Gürültü Filtresi Açık (Arka plan sesleri filtreleniyor)' : 'Krisp Gürültü Filtresini Aç'}
+        >
+          <Sparkles className={`w-4 h-4 ${isNoiseSuppressed ? 'text-white animate-spin' : ''}`} />
+          <span className="hidden sm:inline">{isNoiseSuppressed ? 'Krisp Açık' : 'Gürültü Filtresi'}</span>
+        </button>
+
+        {/* WATCH TOGETHER BUTTON */}
+        <button
+          onClick={onOpenWatchTogether}
+          className={`px-4 py-3.5 rounded-full flex items-center gap-2 font-bold text-xs transition-all shadow-md cursor-pointer ${
+            watchTogetherState?.videoId 
+              ? 'bg-[#ea3323] text-white animate-pulse shadow-[#ea3323]/30' 
+              : 'bg-[#2b2d31] hover:bg-[#35373c] text-white'
+          }`}
+          title="Birlikte YouTube İzle"
+        >
+          <span>🍿</span>
+          <span className="hidden sm:inline">{watchTogetherState?.videoId ? 'Sinema Açık' : 'Birlikte İzle'}</span>
+        </button>
+
         {/* MUSIC BOT BUTTON */}
         <button
           onClick={onOpenMusicModal}
-          className={`px-5 py-3.5 rounded-full flex items-center gap-2 font-bold text-xs transition-all shadow-lg ${
+          className={`px-5 py-3.5 rounded-full flex items-center gap-2 font-bold text-xs transition-all shadow-lg cursor-pointer ${
             musicState?.isPlaying 
               ? 'bg-[#5865f2] text-white animate-pulse shadow-[#5865f2]/40' 
               : 'bg-[#2b2d31] hover:bg-[#35373c] text-white'
@@ -444,7 +561,7 @@ export default function VoiceRoom({
           title="Müzik Botu (Fivecord DJ)"
         >
           <Radio className="w-4 h-4 text-pink-400" />
-          <span>{musicState?.isPlaying ? '🎵 Müzik Çalıyor' : '🎵 Müzik Botu'}</span>
+          <span>{musicState?.isPlaying ? '🎵 Çalıyor' : '🎵 DJ Bot'}</span>
         </button>
 
         {/* Disconnect Call */}

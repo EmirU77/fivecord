@@ -70,6 +70,7 @@ class WebRTCManager {
     this.onRemoteStreamAdded = null;
     this.onRemoteStreamRemoved = null;
     this.onSpeakingChanged = null;
+    this.isNoiseSuppressionOn = true;
 
     this.setupSocketListeners();
   }
@@ -131,7 +132,8 @@ class WebRTCManager {
           sum += dataArray[i];
         }
         const average = sum / bufferLength;
-        const nowSpeaking = average > 14;
+        const threshold = this.isNoiseSuppressionOn ? 22 : 14;
+        const nowSpeaking = average > threshold;
 
         if (nowSpeaking) {
           speakingCounter = 4;
@@ -163,6 +165,21 @@ class WebRTCManager {
       this.audioContext = null;
     }
     this.isSpeaking = false;
+  }
+
+  setNoiseSuppression(enabled) {
+    this.isNoiseSuppressionOn = !!enabled;
+    if (this.localStream) {
+      const audioTrack = this.localStream.getAudioTracks()[0];
+      if (audioTrack && audioTrack.applyConstraints) {
+        audioTrack.applyConstraints({
+          noiseSuppression: this.isNoiseSuppressionOn,
+          echoCancellation: true,
+          autoGainControl: true
+        }).catch(() => {});
+      }
+    }
+    return this.isNoiseSuppressionOn;
   }
 
   createPeerConnection(targetSocketId, isInitiator) {

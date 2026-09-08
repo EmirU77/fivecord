@@ -73,6 +73,7 @@ const users = new Map();
 const voiceChannels = new Map();
 const textMessages = new Map();
 const channelMusic = new Map();
+const watchTogetherRooms = new Map();
 
 // High Quality Free 24/7 Music Stations
 const MUSIC_STATIONS = [
@@ -387,7 +388,8 @@ io.on('connection', (socket) => {
 
   socket.emit('initial-data', {
     channels,
-    stations: MUSIC_STATIONS
+    stations: MUSIC_STATIONS,
+    watchTogether: Object.fromEntries(watchTogetherRooms)
   });
 
   socket.on('user-join', (userData) => {
@@ -400,6 +402,7 @@ io.on('connection', (socket) => {
       status: userData.status || 'online',
       customStatus: userData.customStatus || 'Fivecord kullanıyor',
       activity: userData.activity || '',
+      entranceSound: userData.entranceSound || 'mvp',
       voiceState: {
         channelId: null,
         isMuted: false,
@@ -478,6 +481,45 @@ io.on('connection', (socket) => {
     }
   });
 
+  // --- WATCH TOGETHER (Birlikte İzle / Sinema Sahnesi) ---
+  socket.on('watch-together-start', ({ channelId, videoId, videoTitle }) => {
+    const sender = users.get(socket.id);
+    const state = {
+      channelId,
+      videoId,
+      videoTitle: videoTitle || 'YouTube Videosu',
+      isPlaying: true,
+      currentTime: 0,
+      startedBy: sender ? sender.username : 'Bir arkadaş',
+      updatedAt: Date.now()
+    };
+    watchTogetherRooms.set(channelId, state);
+    io.emit('watch-together-updated', { channelId, state });
+    console.log(`[WatchTogether Started] ${videoId} in ${channelId}`);
+  });
+
+  socket.on('watch-together-action', ({ channelId, action, currentTime }) => {
+    const current = watchTogetherRooms.get(channelId);
+    if (!current) return;
+    if (action === 'play') current.isPlaying = true;
+    if (action === 'pause') current.isPlaying = false;
+    if (typeof currentTime === 'number') current.currentTime = currentTime;
+    current.updatedAt = Date.now();
+    io.emit('watch-together-updated', { channelId, state: current });
+  });
+
+  socket.on('watch-together-close', (channelId) => {
+    watchTogetherRooms.delete(channelId);
+    io.emit('watch-together-updated', { channelId, state: null });
+  });
+
+  // --- ENTRANCE SOUNDS (Odaya Giriş Sesleri) ---
+  socket.on('user-join-voice-channel', ({ channelId, soundUrl, username }) => {
+    if (soundUrl) {
+      io.emit('entrance-sound-played', { channelId, soundUrl, username, senderSocketId: socket.id });
+    }
+  });
+
   socket.on('update-profile', (updated) => {
     const user = users.get(socket.id);
     if (!user) return;
@@ -520,6 +562,19 @@ io.on('connection', (socket) => {
     textMessages.set(channelId, msgs);
 
     io.emit('new-message', message);
+
+    // TTS (Text-to-speech) support
+    if (content && content.trim().startsWith('/tts ')) {
+      const ttsContent = content.trim().slice(5).trim();
+      if (ttsContent) {
+        message.isTTS = true;
+        io.emit('tts-speak', {
+          channelId,
+          text: ttsContent,
+          username: sender.username
+        });
+      }
+    }
 
     // Discord-style Music Bot command check (!play, !stop, !pause, !resume, !np, !volume, !radio, !help)
     const trimmed = (content || '').trim();
@@ -730,6 +785,17 @@ io.on('connection', (socket) => {
     });
 
     io.emit('members-updated', getAllMembers());
+
+    // Broadcast VIP entrance sound
+    const soundPreset = user.entranceSound || 'mvp';
+    if (soundPreset !== 'none') {
+      io.emit('entrance-sound-played', {
+        channelId,
+        soundPreset,
+        username: user.username,
+        senderSocketId: socket.id
+      });
+    }
   });
 
   socket.on('leave-voice-channel', () => {
