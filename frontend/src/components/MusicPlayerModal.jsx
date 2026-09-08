@@ -5,14 +5,6 @@ import {
   Globe, Radio
 } from 'lucide-react';
 
-const PLATFORMS = [
-  { id: 'all', name: 'Tümü', icon: '🌐', color: 'bg-white/10 text-white' },
-  { id: 'spotify', name: 'Spotify', icon: '🟢', color: 'bg-[#1db954]/20 text-[#1db954] border-[#1db954]/40' },
-  { id: 'youtube', name: 'YouTube', icon: '🔴', color: 'bg-[#ff0000]/20 text-[#ff4d4d] border-[#ff0000]/40' },
-  { id: 'soundcloud', name: 'SoundCloud', icon: '🟠', color: 'bg-[#ff5500]/20 text-[#ff7733] border-[#ff5500]/40' },
-  { id: 'apple', name: 'Apple Music', icon: '🍎', color: 'bg-[#fc3c44]/20 text-[#fc3c44] border-[#fc3c44]/40' }
-];
-
 export default function MusicPlayerModal({
   isOpen,
   onClose,
@@ -25,7 +17,6 @@ export default function MusicPlayerModal({
   onSetVolume
 }) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [activePlatform, setActivePlatform] = useState('all');
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
@@ -43,7 +34,7 @@ export default function MusicPlayerModal({
     setIsSearching(true);
     setSearchError('');
     try {
-      const res = await fetch(`/api/music/search?q=${encodeURIComponent(searchQuery.trim())}&platform=${activePlatform}`);
+      const res = await fetch(`/api/music/search?q=${encodeURIComponent(searchQuery.trim())}&platform=all`);
       const data = await res.json();
       if (data.results && data.results.length > 0) {
         setSearchResults(data.results);
@@ -107,28 +98,17 @@ export default function MusicPlayerModal({
         <div className="p-5 space-y-4 overflow-y-auto flex-1">
           {/* SEARCH SECTION */}
           <div className="p-4 rounded-xl bg-[#2b2d31] border border-[#383a40] space-y-3">
-            {/* Platform Filter Tabs */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
-              <span className="text-[11px] text-[#949ba4] font-semibold mr-1 shrink-0">Platform:</span>
-              {PLATFORMS.map(p => (
-                <button
-                  key={p.id}
-                  onClick={() => {
-                    setActivePlatform(p.id);
-                    if (searchQuery.trim()) {
-                      setTimeout(handleSearchSubmit, 50);
-                    }
-                  }}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer border ${
-                    activePlatform === p.id 
-                      ? `${p.color} border-current shadow-xs` 
-                      : 'bg-[#1e1f22] border-transparent text-[#949ba4] hover:text-white hover:bg-[#35373c]'
-                  }`}
-                >
-                  <span className="mr-1">{p.icon}</span>
-                  {p.name}
-                </button>
-              ))}
+            {/* Single "Tüm Platformlar" Option */}
+            <div className="flex items-center justify-between text-xs pb-0.5">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-[#949ba4] font-semibold shrink-0">Platform:</span>
+                <span className="px-3 py-1 rounded-lg bg-gradient-to-r from-[#5865f2]/20 via-[#1db954]/20 to-[#fc3c44]/20 border border-[#5865f2]/40 text-white text-xs font-bold flex items-center gap-2 shadow-xs">
+                  <Globe className="w-3.5 h-3.5 text-[#5865f2]" />
+                  <span>Tüm Platformlar</span>
+                  <span className="text-[10px] text-[#949ba4] font-normal hidden sm:inline">(Spotify, YouTube, Apple Music, SoundCloud)</span>
+                </span>
+              </div>
+              <span className="text-[11px] text-[#80848e]">Otomatik ortak arama</span>
             </div>
 
             {/* Search Input Bar */}
