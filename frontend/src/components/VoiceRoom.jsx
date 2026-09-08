@@ -450,128 +450,145 @@ export default function VoiceRoom({
       </div>
 
       {/* DISCORD CALL CONTROL BAR (BOTTOM) */}
-      <div className="h-20 bg-[#111214] border-t border-[#1f2023] px-8 flex items-center justify-center gap-3 shadow-2xl">
-        {/* Mute Mic Button */}
-        <button
-          onClick={() => {
-            const next = !isMuted;
-            setIsMuted(next);
-            if (next) soundEffects.playMute();
-            else soundEffects.playUnmute();
-          }}
-          className={`p-3.5 rounded-full transition-all shadow-md ${
-            isMuted 
-              ? 'bg-[#f23f43] text-white hover:bg-[#d83a3e]' 
-              : 'bg-[#2b2d31] text-white hover:bg-[#35373c]'
-          }`}
-          title={isMuted ? 'Mikrofonu Aç' : 'Mikrofonu Sustur'}
-        >
-          {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-        </button>
+      <div className="h-20 bg-[#111214] border-t border-[#1f2023] px-4 flex items-center justify-center shadow-2xl shrink-0 select-none">
+        <div className="flex items-center gap-2 max-w-full overflow-x-auto py-2 px-1">
 
-        {/* Deafen Button */}
-        <button
-          onClick={() => {
-            const next = !isDeafened;
-            setIsDeafened(next);
-            if (next) soundEffects.playMute();
-            else soundEffects.playUnmute();
-          }}
-          className={`p-3.5 rounded-full transition-all shadow-md ${
-            isDeafened 
-              ? 'bg-[#f23f43] text-white hover:bg-[#d83a3e]' 
-              : 'bg-[#2b2d31] text-white hover:bg-[#35373c]'
-          }`}
-          title={isDeafened ? 'Sağırlaştırmayı Kaldır' : 'Kulaklığı Kapat'}
-        >
-          <Headphones className="w-5 h-5" />
-        </button>
+          {/* GROUP 1: AUDIO & VIDEO INPUTS */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Mute Mic Button */}
+            <button
+              onClick={() => {
+                const next = !isMuted;
+                setIsMuted(next);
+                if (next) soundEffects.playMute();
+                else soundEffects.playUnmute();
+              }}
+              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-md cursor-pointer shrink-0 ${
+                isMuted 
+                  ? 'bg-[#f23f43] text-white hover:bg-[#d83a3e]' 
+                  : 'bg-[#2b2d31] text-white hover:bg-[#35373c]'
+              }`}
+              title={isMuted ? 'Mikrofonu Aç' : 'Mikrofonu Sustur'}
+            >
+              {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+            </button>
 
-        {/* Camera Toggle Button */}
-        <button
-          onClick={onToggleCamera}
-          className={`p-3.5 rounded-full transition-all shadow-md ${
-            isCameraOn 
-              ? 'bg-[#23a55a] text-white hover:bg-[#1f9250]' 
-              : 'bg-[#2b2d31] text-white hover:bg-[#35373c]'
-          }`}
-          title={isCameraOn ? 'Kamerayı Kapat' : 'Kamerayı Aç'}
-        >
-          {isCameraOn ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
-        </button>
+            {/* Deafen Button */}
+            <button
+              onClick={() => {
+                const next = !isDeafened;
+                setIsDeafened(next);
+                if (next) soundEffects.playMute();
+                else soundEffects.playUnmute();
+              }}
+              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-md cursor-pointer shrink-0 ${
+                isDeafened 
+                  ? 'bg-[#f23f43] text-white hover:bg-[#d83a3e]' 
+                  : 'bg-[#2b2d31] text-white hover:bg-[#35373c]'
+              }`}
+              title={isDeafened ? 'Sağırlaştırmayı Kaldır' : 'Kulaklığı Kapat'}
+            >
+              <Headphones className="w-5 h-5" />
+            </button>
 
-        {/* PRIMARY SCREEN SHARE BUTTON */}
-        <button
-          onClick={isScreenSharing ? onStopScreenShare : onOpenScreenModal}
-          className={`px-6 py-3.5 rounded-full flex items-center gap-2.5 font-bold text-xs transition-all shadow-lg ${
-            isScreenSharing 
-              ? 'bg-[#f23f43] text-white hover:bg-[#d83a3e] animate-pulse' 
-              : 'bg-[#5865f2] text-white hover:bg-[#4752c4] hover:scale-105 shadow-[#5865f2]/30'
-          }`}
-        >
-          {isScreenSharing ? (
-            <>
-              <MonitorOff className="w-4 h-4" />
-              <span>Yayını Durdur</span>
-            </>
-          ) : (
-            <>
-              <Monitor className="w-4 h-4" />
-              <span>🖥️ 60 FPS Ekran Paylaş</span>
-            </>
-          )}
-        </button>
+            {/* Camera Toggle Button */}
+            <button
+              onClick={onToggleCamera}
+              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all shadow-md cursor-pointer shrink-0 ${
+                isCameraOn 
+                  ? 'bg-[#23a55a] text-white hover:bg-[#1f9250]' 
+                  : 'bg-[#2b2d31] text-white hover:bg-[#35373c]'
+              }`}
+              title={isCameraOn ? 'Kamerayı Kapat' : 'Kamerayı Aç'}
+            >
+              {isCameraOn ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
+            </button>
+          </div>
 
-        {/* KRISP AI NOISE SUPPRESSION BUTTON */}
-        <button
-          onClick={toggleNoiseSuppression}
-          className={`px-4 py-3.5 rounded-full flex items-center gap-2 font-bold text-xs transition-all shadow-md cursor-pointer ${
-            isNoiseSuppressed 
-              ? 'bg-[#23a55a] text-white shadow-[#23a55a]/30 scale-105' 
-              : 'bg-[#2b2d31] hover:bg-[#35373c] text-[#949ba4] hover:text-white'
-          }`}
-          title={isNoiseSuppressed ? 'Krisp Gürültü Filtresi Açık (Arka plan sesleri filtreleniyor)' : 'Krisp Gürültü Filtresini Aç'}
-        >
-          <Sparkles className={`w-4 h-4 ${isNoiseSuppressed ? 'text-white animate-spin' : ''}`} />
-          <span className="hidden sm:inline">{isNoiseSuppressed ? 'Krisp Açık' : 'Gürültü Filtresi'}</span>
-        </button>
+          {/* DIVIDER */}
+          <div className="h-6 w-px bg-[#2b2d31] mx-1 shrink-0" />
 
-        {/* WATCH TOGETHER BUTTON */}
-        <button
-          onClick={onOpenWatchTogether}
-          className={`px-4 py-3.5 rounded-full flex items-center gap-2 font-bold text-xs transition-all shadow-md cursor-pointer ${
-            watchTogetherState?.videoId 
-              ? 'bg-[#ea3323] text-white animate-pulse shadow-[#ea3323]/30' 
-              : 'bg-[#2b2d31] hover:bg-[#35373c] text-white'
-          }`}
-          title="Birlikte YouTube İzle"
-        >
-          <span>🍿</span>
-          <span className="hidden sm:inline">{watchTogetherState?.videoId ? 'Sinema Açık' : 'Birlikte İzle'}</span>
-        </button>
+          {/* GROUP 2: STAGE ACTIONS (Screen Share, Watch Together, Krisp, DJ Bot) */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* PRIMARY SCREEN SHARE BUTTON */}
+            <button
+              onClick={isScreenSharing ? onStopScreenShare : onOpenScreenModal}
+              className={`h-12 px-5 rounded-full flex items-center gap-2 font-bold text-xs transition-all shadow-md cursor-pointer shrink-0 whitespace-nowrap ${
+                isScreenSharing 
+                  ? 'bg-[#f23f43] text-white hover:bg-[#d83a3e] animate-pulse' 
+                  : 'bg-[#5865f2] text-white hover:bg-[#4752c4] shadow-[#5865f2]/30'
+              }`}
+              title="60 FPS Ultra HD Ekran Paylaş"
+            >
+              {isScreenSharing ? (
+                <>
+                  <MonitorOff className="w-4 h-4 shrink-0" />
+                  <span className="whitespace-nowrap">Yayını Durdur</span>
+                </>
+              ) : (
+                <>
+                  <Monitor className="w-4 h-4 shrink-0" />
+                  <span className="whitespace-nowrap">Ekran Paylaş</span>
+                </>
+              )}
+            </button>
 
-        {/* MUSIC BOT BUTTON */}
-        <button
-          onClick={onOpenMusicModal}
-          className={`px-5 py-3.5 rounded-full flex items-center gap-2 font-bold text-xs transition-all shadow-lg cursor-pointer ${
-            musicState?.isPlaying 
-              ? 'bg-[#5865f2] text-white animate-pulse shadow-[#5865f2]/40' 
-              : 'bg-[#2b2d31] hover:bg-[#35373c] text-white'
-          }`}
-          title="Müzik Botu (Fivecord DJ)"
-        >
-          <Radio className="w-4 h-4 text-pink-400" />
-          <span>{musicState?.isPlaying ? '🎵 Çalıyor' : '🎵 DJ Bot'}</span>
-        </button>
+            {/* KRISP AI NOISE SUPPRESSION BUTTON */}
+            <button
+              onClick={toggleNoiseSuppression}
+              className={`h-12 px-4 rounded-full flex items-center gap-2 font-bold text-xs transition-all shadow-md cursor-pointer shrink-0 whitespace-nowrap ${
+                isNoiseSuppressed 
+                  ? 'bg-[#23a55a] text-white shadow-[#23a55a]/30' 
+                  : 'bg-[#2b2d31] hover:bg-[#35373c] text-[#949ba4] hover:text-white'
+              }`}
+              title={isNoiseSuppressed ? 'Krisp Gürültü Filtresi: AÇIK' : 'Krisp Gürültü Filtresi: KAPALI'}
+            >
+              <Sparkles className={`w-4 h-4 shrink-0 ${isNoiseSuppressed ? 'text-white animate-spin' : ''}`} />
+              <span className="whitespace-nowrap">{isNoiseSuppressed ? 'Krisp Açık' : 'Krisp'}</span>
+            </button>
 
-        {/* Disconnect Call */}
-        <button
-          onClick={onLeaveVoice}
-          className="p-3.5 rounded-full bg-[#f23f43] hover:bg-[#d83a3e] text-white transition-all shadow-lg ml-2"
-          title="Odadan Ayrıl"
-        >
-          <PhoneOff className="w-5 h-5" />
-        </button>
+            {/* WATCH TOGETHER BUTTON */}
+            <button
+              onClick={onOpenWatchTogether}
+              className={`h-12 px-4 rounded-full flex items-center gap-2 font-bold text-xs transition-all shadow-md cursor-pointer shrink-0 whitespace-nowrap ${
+                watchTogetherState?.videoId 
+                  ? 'bg-[#ea3323] text-white animate-pulse shadow-[#ea3323]/30' 
+                  : 'bg-[#2b2d31] hover:bg-[#35373c] text-white'
+              }`}
+              title="Birlikte YouTube İzle (Senkronize Sinema)"
+            >
+              <span className="text-base shrink-0">🍿</span>
+              <span className="whitespace-nowrap">{watchTogetherState?.videoId ? 'Sinema Açık' : 'Birlikte İzle'}</span>
+            </button>
+
+            {/* MUSIC BOT BUTTON */}
+            <button
+              onClick={onOpenMusicModal}
+              className={`h-12 px-4 rounded-full flex items-center gap-2 font-bold text-xs transition-all shadow-md cursor-pointer shrink-0 whitespace-nowrap ${
+                musicState?.isPlaying 
+                  ? 'bg-[#5865f2] text-white animate-pulse shadow-[#5865f2]/40' 
+                  : 'bg-[#2b2d31] hover:bg-[#35373c] text-white'
+              }`}
+              title="Müzik Botu (Fivecord DJ)"
+            >
+              <Radio className="w-4 h-4 text-pink-400 shrink-0" />
+              <span className="whitespace-nowrap">{musicState?.isPlaying ? '🎵 Çalıyor' : '🎵 DJ Bot'}</span>
+            </button>
+          </div>
+
+          {/* DIVIDER */}
+          <div className="h-6 w-px bg-[#2b2d31] mx-1 shrink-0" />
+
+          {/* GROUP 3: DISCONNECT */}
+          <button
+            onClick={onLeaveVoice}
+            className="w-12 h-12 rounded-full flex items-center justify-center bg-[#f23f43] hover:bg-[#d83a3e] text-white transition-all shadow-lg cursor-pointer shrink-0"
+            title="Odadan Ayrıl"
+          >
+            <PhoneOff className="w-5 h-5" />
+          </button>
+
+        </div>
       </div>
 
       {/* SYNCHRONIZED HTML5 AUDIO ELEMENT FOR MUSIC BOT */}
