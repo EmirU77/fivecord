@@ -159,6 +159,18 @@ export default function App() {
       }
     });
 
+    socket.on('message-deleted', ({ channelId, messageId }) => {
+      if (currentChannel?.id === channelId) {
+        setMessages(prev => prev.filter(m => m.id !== messageId));
+      }
+    });
+
+    socket.on('message-pinned', ({ channelId, messageId, isPinned }) => {
+      if (currentChannel?.id === channelId) {
+        setMessages(prev => prev.map(m => m.id === messageId ? { ...m, isPinned } : m));
+      }
+    });
+
     socket.on('voice-room-peers', ({ channelId, peers }) => {
       webrtc.connectToRoom(peers);
     });
@@ -473,12 +485,18 @@ export default function App() {
           currentUser={currentUser}
           messages={messages}
           onSendMessage={handleSendMessage}
+          onDeleteMessage={(messageId) => socket.emit('delete-message', { channelId: currentChannel.id, messageId })}
+          onPinMessage={(messageId) => socket.emit('pin-message', { channelId: currentChannel.id, messageId })}
           currentVoiceChannel={currentVoiceChannel}
           onSwitchToVoiceStage={(vc) => setCurrentChannel(vc)}
           isScreenSharing={isScreenSharing}
           onOpenScreenModal={() => setIsScreenModalOpen(true)}
           onStopScreenShare={handleStopScreenShare}
           onOpenDownload={() => setIsDownloadModalOpen(true)}
+          onOpenMusicModal={() => setIsMusicModalOpen(true)}
+          onJoinVoice={handleJoinVoice}
+          voiceChannels={channels.filter(c => c.type === 'voice')}
+          members={members}
           isAppInstalled={isAppInstalled}
         />
       ) : (

@@ -454,7 +454,11 @@ io.on('connection', (socket) => {
         id: sender.id,
         username: sender.username,
         avatar: sender.avatar,
-        color: sender.color
+        color: sender.color,
+        avatarDecoration: sender.avatarDecoration || 'none',
+        nameEffect: sender.nameEffect || 'normal',
+        badges: sender.badges || [],
+        status: sender.status || 'online'
       },
       content: content || '',
       file: file || null,
@@ -603,6 +607,22 @@ io.on('connection', (socket) => {
       msg.reactions[emoji].push(sender.username);
     }
     io.emit('message-reaction-updated', { channelId, messageId, reactions: msg.reactions });
+  });
+
+  socket.on('delete-message', ({ channelId, messageId }) => {
+    const msgs = textMessages.get(channelId) || [];
+    const filtered = msgs.filter(m => m.id !== messageId);
+    textMessages.set(channelId, filtered);
+    io.emit('message-deleted', { channelId, messageId });
+  });
+
+  socket.on('pin-message', ({ channelId, messageId }) => {
+    const msgs = textMessages.get(channelId) || [];
+    const msg = msgs.find(m => m.id === messageId);
+    if (msg) {
+      msg.isPinned = !msg.isPinned;
+      io.emit('message-pinned', { channelId, messageId, isPinned: msg.isPinned });
+    }
   });
 
   socket.on('typing', ({ channelId, isTyping }) => {
