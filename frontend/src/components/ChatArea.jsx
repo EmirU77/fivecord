@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { socket } from '../services/socket';
 import { soundEffects } from '../services/soundEffects';
+import { AvatarDecorationRenderer, getNameEffectStyle } from './UserControlBar';
 
 const QUICK_EMOJIS = ['👍', '❤️', '🔥', '😂', '💀', '🎉'];
 
@@ -200,22 +201,26 @@ export default function ChatArea({
                 key={msg.id} 
                 className="group relative flex gap-3.5 p-1.5 -mx-2 rounded-xl hover:bg-[#2e3035] transition-colors"
               >
-                {/* Avatar */}
-                <img 
-                  src={msg.sender.avatar} 
-                  alt={msg.sender.username}
-                  className="w-10 h-10 rounded-full bg-[#1e1f22] object-cover shrink-0 mt-0.5 shadow-sm border border-transparent group-hover:border-[#3f4147] transition-all" 
-                />
+                {/* Avatar with Decoration */}
+                <div className="relative shrink-0 w-10 h-10 mt-0.5">
+                  <img 
+                    src={msg.sender.avatar} 
+                    alt={msg.sender.username}
+                    className="w-10 h-10 rounded-full bg-[#1e1f22] object-cover shadow-sm border border-transparent group-hover:border-[#3f4147] transition-all" 
+                  />
+                  <AvatarDecorationRenderer decoration={msg.sender.avatarDecoration} size="sm" />
+                </div>
 
                 {/* Content */}
                 <div className="flex-1 overflow-hidden">
                   <div className="flex items-baseline gap-2">
                     <span 
                       className="font-bold text-sm hover:underline cursor-pointer tracking-tight"
-                      style={{ color: msg.sender.color || '#5865f2' }}
+                      style={getNameEffectStyle(msg.sender.nameEffect, msg.sender.color || '#5865f2')}
                     >
                       {msg.sender.username}
                     </span>
+                    {msg.sender.badges?.includes('owner') && <span className="text-xs select-none">👑</span>}
                     <span className="text-[10px] text-[#949ba4] font-medium">{time}</span>
                   </div>
 

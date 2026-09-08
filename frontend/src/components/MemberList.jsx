@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Crown, Gamepad2, Volume2, MicOff, Monitor, Sparkles, MessageCircle } from 'lucide-react';
+import { Crown, Gamepad2, Volume2, MicOff, Monitor, Sparkles, MessageCircle, Zap } from 'lucide-react';
+import { AvatarDecorationRenderer, StatusDotRenderer, getNameEffectStyle } from './UserControlBar';
 
 const DEFAULT_VIP_ROLES = [
   { role: '👑 KURUCU', color: '#f0b232', bg: 'rgba(240,178,50,0.15)', border: 'rgba(240,178,50,0.3)' },
@@ -48,8 +49,8 @@ export default function MemberList({ members, currentUser, onOpenDM }) {
                 onClick={() => setSelectedMember(selectedMember === member.socketId ? null : member.socketId)}
                 className="flex items-center gap-3 p-2 rounded-xl hover:bg-[#35373c] cursor-pointer transition-all duration-150 group border border-transparent hover:border-[#383a40]"
               >
-                {/* Avatar */}
-                <div className="relative shrink-0">
+                {/* Avatar with Decoration & Status */}
+                <div className="relative shrink-0 w-9 h-9">
                   <img
                     src={member.avatar}
                     alt={member.username}
@@ -57,7 +58,8 @@ export default function MemberList({ members, currentUser, onOpenDM }) {
                       isSpeaking ? 'speaking-indicator border-[#23a55a] scale-105' : 'border-[#383a40]'
                     }`}
                   />
-                  <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-[#23a55a] border-2 border-[#2b2d31]" />
+                  <AvatarDecorationRenderer decoration={member.avatarDecoration} size="sm" />
+                  <StatusDotRenderer status={member.status || 'online'} className="w-3.5 h-3.5" />
                 </div>
 
                 {/* Info */}
@@ -65,10 +67,11 @@ export default function MemberList({ members, currentUser, onOpenDM }) {
                   <div className="flex items-center gap-1.5">
                     <span 
                       className="text-xs font-bold truncate group-hover:underline"
-                      style={{ color: member.color || roleInfo.color }}
+                      style={getNameEffectStyle(member.nameEffect, member.color || roleInfo.color)}
                     >
                       {member.username}
                     </span>
+                    {member.badges?.includes('owner') && <span className="text-[10px]">👑</span>}
                     {isCurrent && <span className="text-[9px] text-[#949ba4] font-normal">(Sen)</span>}
                   </div>
 
@@ -85,8 +88,9 @@ export default function MemberList({ members, currentUser, onOpenDM }) {
                     </span>
                   </div>
 
-                  <div className="text-[10px] text-[#949ba4] truncate mt-0.5">
-                    {member.customStatus || 'Çevrimiçi'}
+                  <div className="text-[10px] text-[#949ba4] truncate mt-0.5 flex items-center gap-1">
+                    {member.statusEmoji && <span>{member.statusEmoji}</span>}
+                    <span>{member.customStatus || 'Çevrimiçi'}</span>
                   </div>
                 </div>
 
@@ -108,10 +112,25 @@ export default function MemberList({ members, currentUser, onOpenDM }) {
               {/* Expandable options when clicked */}
               {selectedMember === member.socketId && !isCurrent && (
                 <div className="bg-[#1e1f22] p-2.5 rounded-xl mx-1 text-xs space-y-2.5 animate-in fade-in border border-[#383a40] shadow-md">
+                  {/* Mini Banner / Bio if present */}
+                  {member.banner && (
+                    <div 
+                      className="h-12 w-full rounded-lg overflow-hidden bg-cover bg-center border border-white/10"
+                      style={{ backgroundImage: `url(${member.banner})` }}
+                    />
+                  )}
+
+                  {member.bio && (
+                    <div className="bg-[#111214]/60 p-2 rounded-lg border border-[#2b2d31]">
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-[#949ba4] block mb-0.5">HAKKIMDA</span>
+                      <p className="text-[11px] text-[#dbdee1] break-words whitespace-pre-wrap leading-relaxed">{member.bio}</p>
+                    </div>
+                  )}
+
                   {/* SEND DM BUTTON */}
                   <button
                     onClick={() => onOpenDM(member)}
-                    className="w-full flex items-center justify-center gap-2 py-1.5 rounded-lg bg-[#5865f2] hover:bg-[#4752c4] text-white text-xs font-semibold transition-all shadow-xs"
+                    className="w-full flex items-center justify-center gap-2 py-1.5 rounded-lg bg-[#5865f2] hover:bg-[#4752c4] text-white text-xs font-semibold transition-all shadow-xs cursor-pointer"
                   >
                     <MessageCircle className="w-3.5 h-3.5" />
                     <span>Özel Mesaj Gönder</span>
