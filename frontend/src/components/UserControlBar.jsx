@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Mic, MicOff, Headphones, Settings, X, Check, Smile, 
   Upload, Link2, Sparkles, Palette, Image as ImageIcon, Loader2,
@@ -512,8 +513,8 @@ export default function UserControlBar({
       </div>
 
       {/* ULTRA-RICH DISCORD NITRO STYLE CUSTOMIZATION MODAL */}
-      {isSettingsOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-3 md:p-6 animate-in fade-in duration-150">
+      {isSettingsOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/80 backdrop-blur-xs p-3 md:p-6 animate-in fade-in duration-150">
           <div className="w-full max-w-4xl rounded-2xl bg-[#313338] shadow-2xl border border-[#3f4147] overflow-hidden flex flex-col max-h-[92vh]">
             
             {/* Header */}
@@ -1462,7 +1463,8 @@ export default function UserControlBar({
             </div>
 
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
