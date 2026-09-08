@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Hash, Volume2, Monitor, MonitorOff, Video, VideoOff, 
   PhoneOff, ChevronDown, Plus, BadgeCheck, Wifi, SignalHigh, 
-  Radio, Download
+  Radio, Download, Trash2, Edit3, Copy, Check, Info, Settings, MoreVertical
 } from 'lucide-react';
 import UserControlBar from './UserControlBar';
 
@@ -26,52 +26,183 @@ export default function Sidebar({
   isCameraOn,
   onToggleCamera,
   onOpenDownload,
-  isAppInstalled
+  isAppInstalled,
+  onOpenCreateChannel,
+  onDeleteChannel,
+  onRenameChannel,
+  onOpenInfo
 }) {
   const [textCollapsed, setTextCollapsed] = useState(false);
   const [voiceCollapsed, setVoiceCollapsed] = useState(false);
 
+  // Right-click Context Menu & Modals
+  const [contextMenu, setContextMenu] = useState(null); // { x, y, channel }
+  const [deleteConfirmChannel, setDeleteConfirmChannel] = useState(null);
+  const [renameTargetChannel, setRenameTargetChannel] = useState(null);
+  const [newChannelName, setNewChannelName] = useState('');
+  const [isServerMenuOpen, setIsServerMenuOpen] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+
   const textChannels = channels.filter(c => c.type === 'text');
   const voiceChannels = channels.filter(c => c.type === 'voice');
 
+  // Close context menu & dropdown on outside click or escape
+  useEffect(() => {
+    const handleOutside = () => {
+      setContextMenu(null);
+      setIsServerMenuOpen(false);
+    };
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setContextMenu(null);
+        setIsServerMenuOpen(false);
+        setDeleteConfirmChannel(null);
+        setRenameTargetChannel(null);
+      }
+    };
+    window.addEventListener('click', handleOutside);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('click', handleOutside);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  const handleChannelContextMenu = (e, ch) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const menuWidth = 220;
+    const menuHeight = 220;
+    const x = Math.min(e.clientX, window.innerWidth - menuWidth - 10);
+    const y = Math.min(e.clientY, window.innerHeight - menuHeight - 10);
+    setContextMenu({ x, y, channel: ch });
+  };
+
+  const handleCopyLink = (ch) => {
+    try {
+      const url = `${window.location.origin}/#${ch.name}`;
+      navigator.clipboard.writeText(url);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 1500);
+    } catch (e) {}
+    setContextMenu(null);
+  };
+
+  const handleStartRename = (ch) => {
+    setRenameTargetChannel(ch);
+    setNewChannelName(ch.name.replace(/^🔊\s*/, ''));
+    setContextMenu(null);
+  };
+
+  const handleConfirmRename = (e) => {
+    e.preventDefault();
+    if (newChannelName.trim() && renameTargetChannel) {
+      onRenameChannel?.(renameTargetChannel.id, newChannelName.trim());
+    }
+    setRenameTargetChannel(null);
+  };
+
+  const handleStartDelete = (ch) => {
+    setDeleteConfirmChannel(ch);
+    setContextMenu(null);
+  };
+
+  const handleConfirmDelete = () => {
+    if (deleteConfirmChannel) {
+      onDeleteChannel?.(deleteConfirmChannel.id);
+      setDeleteConfirmChannel(null);
+    }
+  };
+
   return (
-    <div className="w-60 bg-[#2b2d31] flex flex-col shrink-0 select-none border-r border-[#1f2023] z-10 shadow-sm">
-      {/* Sleek Discord Server Header */}
-      <div 
-        onClick={!isAppInstalled ? onOpenDownload : undefined}
-        className={`h-12 border-b border-[#1f2023] px-4 flex items-center justify-between shadow-xs ${!isAppInstalled ? 'hover:bg-[#35373c] cursor-pointer' : ''} transition-colors group`}
-        title={!isAppInstalled ? "Masaüstü Uygulamasını İndir" : "Fivecord VIP"}
-      >
-        <div className="flex items-center gap-2">
-          <span className="font-bold text-sm text-white tracking-wide flex items-center gap-1.5">
-            Fivecord VIP
-            <BadgeCheck className="w-4 h-4 text-[#5865f2] inline fill-[#5865f2]/20" />
-          </span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          {!isAppInstalled && (
-            <span className="px-2 py-0.5 rounded bg-[#23a55a]/20 text-[#23a55a] group-hover:bg-[#23a55a] group-hover:text-white transition-all text-[11px] font-bold flex items-center gap-1">
-              <Download className="w-3 h-3" />
-              <span className="text-[10px]">İndir</span>
+    <div className="w-60 bg-[#2b2d31] flex flex-col shrink-0 select-none border-r border-[#1f2023] z-10 shadow-sm relative">
+      {/* Sleek Discord Server Header with Dropdown */}
+      <div className="relative">
+        <div 
+          onClick={() => setIsServerMenuOpen(prev => !prev)}
+          className="h-12 border-b border-[#1f2023] px-4 flex items-center justify-between shadow-xs hover:bg-[#35373c]/60 cursor-pointer transition-colors group"
+          title="Fivecord VIP Sunucu Menüsü"
+        >
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-sm text-white tracking-wide flex items-center gap-1.5">
+              Fivecord VIP
+              <BadgeCheck className="w-4 h-4 text-[#5865f2] inline fill-[#5865f2]/20" />
             </span>
-          )}
-          <ChevronDown className="w-4 h-4 text-[#949ba4] group-hover:text-white transition-transform group-hover:translate-y-0.5" />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <ChevronDown className={`w-4 h-4 text-[#949ba4] group-hover:text-white transition-transform ${isServerMenuOpen ? 'rotate-180 text-white' : 'group-hover:translate-y-0.5'}`} />
+          </div>
         </div>
+
+        {/* Server Dropdown Menu */}
+        {isServerMenuOpen && (
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="absolute top-13 left-2 right-2 z-40 rounded-xl bg-[#111214] border border-[#232428] shadow-2xl p-1.5 text-xs text-[#dbdee1] animate-in fade-in slide-in-from-top-1 duration-150"
+          >
+            <button
+              onClick={() => {
+                setIsServerMenuOpen(false);
+                onOpenCreateChannel?.('text');
+              }}
+              className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg hover:bg-[#5865f2] hover:text-white transition-colors cursor-pointer group"
+            >
+              <span className="font-semibold">Kanal Oluştur</span>
+              <Plus className="w-4 h-4 text-[#949ba4] group-hover:text-white" />
+            </button>
+
+            <button
+              onClick={() => {
+                setIsServerMenuOpen(false);
+                onOpenInfo?.();
+              }}
+              className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg hover:bg-[#5865f2] hover:text-white transition-colors cursor-pointer group"
+            >
+              <span>Sunucu Bilgileri</span>
+              <Info className="w-4 h-4 text-[#949ba4] group-hover:text-white" />
+            </button>
+
+            {!isAppInstalled && (
+              <>
+                <div className="h-[1px] bg-[#232428] my-1" />
+                <button
+                  onClick={() => {
+                    setIsServerMenuOpen(false);
+                    onOpenDownload?.();
+                  }}
+                  className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg hover:bg-[#23a55a] hover:text-white transition-colors cursor-pointer text-[#23a55a] font-semibold"
+                >
+                  <span>Masaüstü Uygulamasını İndir</span>
+                  <Download className="w-4 h-4" />
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Channel List Area */}
       <div className="flex-1 overflow-y-auto px-2 py-3 space-y-4">
         {/* METİN KANALLARI CATEGORY */}
         <div>
-          <div 
-            onClick={() => setTextCollapsed(!textCollapsed)}
-            className="flex items-center justify-between px-1.5 mb-1 cursor-pointer group"
-          >
-            <div className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-[#949ba4] group-hover:text-[#dbdee1] transition-colors">
+          <div className="flex items-center justify-between px-1.5 mb-1 group">
+            <div 
+              onClick={() => setTextCollapsed(!textCollapsed)}
+              className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-[#949ba4] group-hover:text-[#dbdee1] transition-colors cursor-pointer"
+            >
               <ChevronDown className={`w-3 h-3 transition-transform ${textCollapsed ? '-rotate-90' : ''}`} />
               <span>Metin Kanalları</span>
             </div>
-            <Plus className="w-3.5 h-3.5 text-[#949ba4] opacity-0 group-hover:opacity-100 hover:text-white transition-opacity" />
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenCreateChannel?.('text');
+              }}
+              className="p-1 rounded-md text-[#949ba4] hover:text-white hover:bg-[#35373c] transition-all cursor-pointer"
+              title="Metin Kanalı Oluştur"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
           </div>
 
           {!textCollapsed && (
@@ -79,18 +210,30 @@ export default function Sidebar({
               {textChannels.map(ch => {
                 const isActive = currentChannel?.id === ch.id;
                 return (
-                  <button
+                  <div
                     key={ch.id}
                     onClick={() => onSelectChannel(ch)}
-                    className={`flex items-center gap-2 w-full px-2.5 py-1.5 rounded-lg text-sm transition-all group ${
+                    onContextMenu={(e) => handleChannelContextMenu(e, ch)}
+                    className={`flex items-center justify-between w-full px-2.5 py-1.5 rounded-lg text-sm transition-all group cursor-pointer ${
                       isActive 
                         ? 'bg-[#35373c] text-white font-semibold shadow-xs' 
                         : 'text-[#949ba4] hover:bg-[#313338] hover:text-[#dbdee1]'
                     }`}
+                    title="Sol tıkla: Kanala gir | Sağ tıkla: Kanal ayarları ve Silme"
                   >
-                    <Hash className={`w-4 h-4 shrink-0 transition-colors ${isActive ? 'text-white' : 'text-[#80848e] group-hover:text-[#dbdee1]'}`} />
-                    <span className="truncate">{ch.name}</span>
-                  </button>
+                    <div className="flex items-center gap-2 truncate">
+                      <Hash className={`w-4 h-4 shrink-0 transition-colors ${isActive ? 'text-white' : 'text-[#80848e] group-hover:text-[#dbdee1]'}`} />
+                      <span className="truncate">{ch.name}</span>
+                    </div>
+
+                    <button
+                      onClick={(e) => handleChannelContextMenu(e, ch)}
+                      className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[#2b2d31] text-[#949ba4] hover:text-white transition-opacity shrink-0"
+                      title="Kanal Seçenekleri (Sağ Tık)"
+                    >
+                      <MoreVertical className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 );
               })}
             </div>
@@ -99,17 +242,29 @@ export default function Sidebar({
 
         {/* SES ODALARI CATEGORY */}
         <div>
-          <div 
-            onClick={() => setVoiceCollapsed(!voiceCollapsed)}
-            className="flex items-center justify-between px-1.5 mb-1 cursor-pointer group"
-          >
-            <div className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-[#949ba4] group-hover:text-[#dbdee1] transition-colors">
+          <div className="flex items-center justify-between px-1.5 mb-1 group">
+            <div 
+              onClick={() => setVoiceCollapsed(!voiceCollapsed)}
+              className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-[#949ba4] group-hover:text-[#dbdee1] transition-colors cursor-pointer"
+            >
               <ChevronDown className={`w-3 h-3 transition-transform ${voiceCollapsed ? '-rotate-90' : ''}`} />
               <span>Ses Odaları</span>
             </div>
-            <span className="text-[9px] px-1.5 py-0.2 rounded bg-[#5865f2]/20 text-[#5865f2] font-mono font-bold">
-              60 FPS
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[9px] px-1.5 py-0.2 rounded bg-[#5865f2]/20 text-[#5865f2] font-mono font-bold">
+                60 FPS
+              </span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenCreateChannel?.('voice');
+                }}
+                className="p-1 rounded-md text-[#949ba4] hover:text-white hover:bg-[#35373c] transition-all cursor-pointer"
+                title="Ses Odası Oluştur"
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
 
           {!voiceCollapsed && (
@@ -128,20 +283,31 @@ export default function Sidebar({
                           onJoinVoice(ch);
                         }
                       }}
+                      onContextMenu={(e) => handleChannelContextMenu(e, ch)}
                       className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-sm transition-all cursor-pointer group ${
                         isViewingThis 
                           ? 'bg-[#35373c] text-white font-semibold shadow-xs' 
                           : 'text-[#949ba4] hover:bg-[#313338] hover:text-[#dbdee1]'
                       }`}
+                      title="Sol tıkla: Odaya katıl | Sağ tıkla: Oda ayarları ve Silme"
                     >
                       <div className="flex items-center gap-2 truncate">
                         <Volume2 className={`w-4 h-4 shrink-0 transition-colors ${isInThisVoice ? 'text-[#23a55a]' : 'text-[#80848e] group-hover:text-[#dbdee1]'}`} />
                         <span className="truncate">{ch.name}</span>
                       </div>
 
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#1e1f22] text-[#949ba4] font-mono">
-                        {ch.bitrate}
-                      </span>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#1e1f22] text-[#949ba4] font-mono">
+                          {ch.bitrate}
+                        </span>
+                        <button
+                          onClick={(e) => handleChannelContextMenu(e, ch)}
+                          className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[#2b2d31] text-[#949ba4] hover:text-white transition-opacity"
+                          title="Oda Seçenekleri (Sağ Tık)"
+                        >
+                          <MoreVertical className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
 
                     {/* Users connected inside this channel */}
@@ -184,6 +350,143 @@ export default function Sidebar({
           )}
         </div>
       </div>
+
+      {/* DISCORD FLOATING RIGHT-CLICK CONTEXT MENU */}
+      {contextMenu && (
+        <div 
+          style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}
+          onClick={(e) => e.stopPropagation()}
+          className="fixed z-50 w-52 rounded-xl bg-[#111214] border border-[#232428] shadow-2xl p-1.5 text-xs text-[#dbdee1] animate-in fade-in zoom-in-95 duration-100 select-none"
+        >
+          <div className="px-2.5 py-1.5 text-[11px] font-bold text-[#949ba4] truncate border-b border-[#232428] mb-1 flex items-center gap-1.5">
+            {contextMenu.channel.type === 'text' ? (
+              <Hash className="w-3.5 h-3.5 text-[#80848e] shrink-0" />
+            ) : (
+              <Volume2 className="w-3.5 h-3.5 text-[#23a55a] shrink-0" />
+            )}
+            <span className="truncate">{contextMenu.channel.name}</span>
+          </div>
+
+          <button
+            onClick={() => handleCopyLink(contextMenu.channel)}
+            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-[#5865f2] hover:text-white transition-colors cursor-pointer group text-left"
+          >
+            <div className="flex items-center gap-2">
+              <Copy className="w-3.5 h-3.5 text-[#949ba4] group-hover:text-white" />
+              <span>Bağlantıyı Kopyala</span>
+            </div>
+            {copiedLink && <Check className="w-3.5 h-3.5 text-emerald-400" />}
+          </button>
+
+          <button
+            onClick={() => handleStartRename(contextMenu.channel)}
+            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-[#5865f2] hover:text-white transition-colors cursor-pointer text-left group"
+          >
+            <Edit3 className="w-3.5 h-3.5 text-[#949ba4] group-hover:text-white" />
+            <span>Kanalı Yeniden Adlandır</span>
+          </button>
+
+          <div className="h-[1px] bg-[#232428] my-1" />
+
+          {contextMenu.channel.id === 'text-genel' ? (
+            <div className="px-2.5 py-1.5 text-[10px] text-[#80848e] italic">
+              🔒 Ana genel sohbet silinemez
+            </div>
+          ) : (
+            <button
+              onClick={() => handleStartDelete(contextMenu.channel)}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[#f23f43] hover:bg-[#da373c] hover:text-white transition-colors cursor-pointer font-semibold text-left"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Kanalı Sil</span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* CONFIRM CHANNEL DELETE DIALOG */}
+      {deleteConfirmChannel && (
+        <div 
+          onClick={() => setDeleteConfirmChannel(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm rounded-2xl bg-[#313338] shadow-2xl border border-[#3f4147] p-6 animate-in fade-in zoom-in-95 duration-150"
+          >
+            <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
+              <Trash2 className="w-5 h-5 text-[#f23f43]" />
+              Kanalı Sil
+            </h3>
+            <p className="text-sm text-[#949ba4] mb-6 leading-relaxed">
+              <strong className="text-white">{deleteConfirmChannel.name}</strong> kanalını silmek istediğinden emin misin? Bu işlem geri alınamaz.
+            </p>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmChannel(null)}
+                className="px-4 py-2 text-sm text-[#dbdee1] hover:underline cursor-pointer"
+              >
+                İptal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                className="px-5 py-2.5 rounded-xl bg-[#da373c] hover:bg-[#a1282c] text-white text-sm font-semibold transition-all shadow-md cursor-pointer"
+              >
+                Kanalı Sil
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* RENAME CHANNEL DIALOG */}
+      {renameTargetChannel && (
+        <div 
+          onClick={() => setRenameTargetChannel(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4"
+        >
+          <form 
+            onSubmit={handleConfirmRename}
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm rounded-2xl bg-[#313338] shadow-2xl border border-[#3f4147] p-6 animate-in fade-in zoom-in-95 duration-150"
+          >
+            <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
+              <Edit3 className="w-5 h-5 text-[#5865f2]" />
+              Kanalı Yeniden Adlandır
+            </h3>
+            <div className="mb-6">
+              <label className="text-xs font-bold uppercase tracking-wider text-[#b5bac1] block mb-2">
+                Yeni Kanal Adı
+              </label>
+              <input
+                type="text"
+                value={newChannelName}
+                onChange={(e) => setNewChannelName(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg bg-[#1e1f22] border border-[#383a40] text-white text-sm focus:outline-hidden focus:border-[#5865f2]"
+                autoFocus
+              />
+            </div>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setRenameTargetChannel(null)}
+                className="px-4 py-2 text-sm text-[#dbdee1] hover:underline cursor-pointer"
+              >
+                İptal
+              </button>
+              <button
+                type="submit"
+                disabled={!newChannelName.trim()}
+                className="px-5 py-2.5 rounded-xl bg-[#5865f2] hover:bg-[#4752c4] disabled:opacity-40 text-white text-sm font-semibold transition-all shadow-md cursor-pointer"
+              >
+                Kaydet
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* DISCORD VOICE CONNECTION STATUS PANEL */}
       {currentVoiceChannel && (

@@ -430,6 +430,54 @@ io.on('connection', (socket) => {
     console.log(`[Channel Created] ${newCh.name} (${newCh.type})`);
   });
 
+  socket.on('delete-channel', (channelId) => {
+    if (channelId === 'text-genel') {
+      socket.emit('channel-error', { message: 'Ana genel sohbet kanalı silinemez.' });
+      return;
+    }
+    const idx = channels.findIndex(c => c.id === channelId);
+    if (idx !== -1) {
+      const [removed] = channels.splice(idx, 1);
+      if (removed.type === 'text') {
+        textMessages.delete(removed.id);
+      }
+      if (removed.type === 'voice') {
+        voiceChannels.delete(removed.id);
+        channelMusic.delete(removed.id);
+        // Kick any members in this voice channel
+        for (const user of users.values()) {
+          if (user.voiceState?.channelId === removed.id) {
+            user.voiceState.channelId = null;
+            user.voiceState.isSpeaking = false;
+            user.voiceState.isScreenSharing = false;
+            user.voiceState.isCameraOn = false;
+          }
+        }
+        if (DJ_BOT_USER.voiceState.channelId === removed.id) {
+          DJ_BOT_USER.voiceState.channelId = null;
+          DJ_BOT_USER.voiceState.isSpeaking = false;
+        }
+        io.emit('members-updated', getAllMembers());
+      }
+      io.emit('channels-updated', channels);
+      io.emit('channel-deleted', channelId);
+      console.log(`[Channel Deleted] ${removed.name} (${channelId})`);
+    }
+  });
+
+  socket.on('rename-channel', ({ channelId, newName }) => {
+    if (!newName || !newName.trim()) return;
+    const ch = channels.find(c => c.id === channelId);
+    if (ch) {
+      const clean = newName.trim();
+      ch.name = (ch.type === 'voice' && !clean.startsWith('🔊') && !clean.startsWith('🎮') && !clean.startsWith('🍿'))
+        ? `🔊 ${clean}`
+        : clean;
+      io.emit('channels-updated', channels);
+      console.log(`[Channel Renamed] ${ch.id} -> ${ch.name}`);
+    }
+  });
+
   socket.on('update-profile', (updated) => {
     const user = users.get(socket.id);
     if (!user) return;

@@ -2,9 +2,16 @@ import React, { useState } from 'react';
 import { Hash, Volume2, X, Plus } from 'lucide-react';
 import { socket } from '../services/socket';
 
-export default function CreateChannelModal({ isOpen, onClose }) {
+export default function CreateChannelModal({ isOpen, onClose, defaultType = 'text' }) {
   const [channelName, setChannelName] = useState('');
-  const [channelType, setChannelType] = useState('text');
+  const [channelType, setChannelType] = useState(defaultType);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      setChannelType(defaultType);
+      setChannelName('');
+    }
+  }, [isOpen, defaultType]);
 
   if (!isOpen) return null;
 

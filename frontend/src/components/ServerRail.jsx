@@ -5,7 +5,6 @@ export default function ServerRail({
   activeView = 'server', 
   onSelectServer, 
   onSelectDM, 
-  onOpenCreateChannel,
   onOpenInfo
 }) {
   const isDM = activeView === 'dm';
@@ -58,17 +57,6 @@ export default function ServerRail({
         </button>
       </div>
 
-      {/* CREATE CHANNEL BUTTON (+) */}
-      <div className="relative group flex items-center justify-center w-full">
-        <div className="absolute left-0 w-1 bg-white rounded-r-full transition-all duration-200 h-0 group-hover:h-5" />
-        <button
-          onClick={onOpenCreateChannel}
-          className="w-12 h-12 rounded-3xl group-hover:rounded-2xl bg-[#313338] hover:bg-[#23a55a] flex items-center justify-center text-[#23a55a] hover:text-white transition-all duration-200 group-hover:scale-105 shadow-sm"
-          title="Yeni Metin veya Ses Kanalı Oluştur"
-        >
-          <Plus className="w-6 h-6" />
-        </button>
-      </div>
 
       {/* EXPLORE / SERVER INFO BUTTON */}
       <div className="relative group flex items-center justify-center w-full">

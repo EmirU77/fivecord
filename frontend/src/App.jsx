@@ -48,6 +48,7 @@ export default function App() {
   // Modals
   const [isScreenModalOpen, setIsScreenModalOpen] = useState(false);
   const [isCreateChannelOpen, setIsCreateChannelOpen] = useState(false);
+  const [createChannelType, setCreateChannelType] = useState('text');
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
   const [isAppInstalled, setIsAppInstalled] = useState(() => {
@@ -132,6 +133,20 @@ export default function App() {
 
     socket.on('channels-updated', (updatedChannels) => {
       setChannels(updatedChannels);
+    });
+
+    socket.on('channel-deleted', (deletedChannelId) => {
+      setChannels(prev => {
+        const updated = prev.filter(c => c.id !== deletedChannelId);
+        if (currentChannel?.id === deletedChannelId) {
+          const fallback = updated.find(c => c.type === 'text') || updated[0];
+          if (fallback) {
+            setCurrentChannel(fallback);
+            socket.emit('fetch-messages', fallback.id);
+          }
+        }
+        return updated;
+      });
     });
 
     socket.on('members-updated', (updatedMembers) => {
@@ -233,6 +248,7 @@ export default function App() {
       socket.off('connect');
       socket.off('initial-data');
       socket.off('channels-updated');
+      socket.off('channel-deleted');
       socket.off('members-updated');
       socket.off('messages-history');
       socket.off('new-message');
@@ -257,6 +273,20 @@ export default function App() {
     if (channel.type === 'text') {
       socket.emit('fetch-messages', channel.id);
     }
+  };
+
+  const handleOpenCreateChannel = (type = 'text') => {
+    setCreateChannelType(type);
+    setIsCreateChannelOpen(true);
+  };
+
+  const handleDeleteChannel = (channelId) => {
+    socket.emit('delete-channel', channelId);
+    soundEffects.playLeave();
+  };
+
+  const handleRenameChannel = (channelId, newName) => {
+    socket.emit('rename-channel', { channelId, newName });
   };
 
   // Switch to a 1-on-1 private DM with a friend
@@ -408,7 +438,6 @@ export default function App() {
             });
           }
         }}
-        onOpenCreateChannel={() => setIsCreateChannelOpen(true)}
         onOpenInfo={() => setIsInfoModalOpen(true)}
       />
 
@@ -447,6 +476,10 @@ export default function App() {
           onToggleCamera={handleToggleCamera}
           onOpenDownload={() => setIsDownloadModalOpen(true)}
           isAppInstalled={isAppInstalled}
+          onOpenCreateChannel={handleOpenCreateChannel}
+          onDeleteChannel={handleDeleteChannel}
+          onRenameChannel={handleRenameChannel}
+          onOpenInfo={() => setIsInfoModalOpen(true)}
         />
       )}
 
@@ -524,6 +557,7 @@ export default function App() {
       <CreateChannelModal
         isOpen={isCreateChannelOpen}
         onClose={() => setIsCreateChannelOpen(false)}
+        defaultType={createChannelType}
       />
 
       <ServerInfoModal
