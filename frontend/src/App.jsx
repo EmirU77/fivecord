@@ -57,17 +57,13 @@ export default function App() {
   const [channelToRename, setChannelToRename] = useState(null);
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
-  const [isAppInstalled, setIsAppInstalled] = useState(() => {
+  const [isAppInstalled] = useState(() => {
     if (typeof window === 'undefined') return false;
     const ua = window.navigator?.userAgent || '';
-    const isElectron = /electron/i.test(ua) || ua.includes('FivecordDesktop') || ua.includes('Fivecord');
+    const isElectron = /electron/i.test(ua) || ua.includes('FivecordDesktop') || ua.includes('Fivecord') || !!window.process?.versions?.electron;
     const isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator?.standalone === true;
     const isQueryParam = window.location.search.includes('desktop') || window.location.search.includes('client=desktop');
-    let hasDownloaded = false;
-    try {
-      hasDownloaded = localStorage.getItem('fivecord_downloaded') === 'true' || localStorage.getItem('fivecord_desktop') === 'true';
-    } catch (e) {}
-    return isElectron || isStandalone || isQueryParam || hasDownloaded || !!window.isFivecordDesktop;
+    return isElectron || isStandalone || isQueryParam || !!window.isFivecordDesktop;
   });
   const [isMusicModalOpen, setIsMusicModalOpen] = useState(false);
   const [musicStates, setMusicStates] = useState(new Map());
@@ -675,12 +671,6 @@ export default function App() {
       <DownloadModal
         isOpen={isDownloadModalOpen}
         onClose={() => setIsDownloadModalOpen(false)}
-        onDownloaded={() => {
-          try {
-            localStorage.setItem('fivecord_downloaded', 'true');
-          } catch (e) {}
-          setIsAppInstalled(true);
-        }}
       />
 
       <MusicPlayerModal

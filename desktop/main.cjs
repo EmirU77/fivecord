@@ -177,6 +177,10 @@ async function createWindow() {
   const baseUA = mainWindow.webContents.getUserAgent();
   mainWindow.webContents.setUserAgent(`${baseUA} FivecordDesktop/1.0.0`);
 
+  mainWindow.webContents.on('dom-ready', () => {
+    mainWindow.webContents.executeJavaScript('window.isFivecordDesktop = true;').catch(() => {});
+  });
+
   // Load splash screen immediately
   mainWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(SPLASH_HTML));
 
