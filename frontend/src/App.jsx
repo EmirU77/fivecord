@@ -199,6 +199,16 @@ export default function App() {
       webrtc.connectToRoom(peers);
     });
 
+    socket.on('user-joined-voice', async ({ socketId, user }) => {
+      console.log(`[Voice Room] ${user?.username || 'User'} joined voice channel (${socketId})`);
+      // When a user joins our voice channel, ensure our local audio stream is ready
+      await webrtc.initLocalAudio();
+    });
+
+    socket.on('user-left-voice', ({ socketId }) => {
+      webrtc.removePeer(socketId);
+    });
+
     socket.on('peer-voice-state-updated', ({ socketId, voiceState }) => {
       setMembers(prev => prev.map(m => m.socketId === socketId ? { ...m, voiceState } : m));
     });
@@ -257,20 +267,60 @@ export default function App() {
     }, 25000);
 
     webrtc.onRemoteStreamAdded = (socketId, stream, isScreen) => {
+      console.log(`[Audio Debug] Remote stream added for ${socketId}:`, {
+        isScreen,
+        audioTracks: stream.getAudioTracks().length,
+        videoTracks: stream.getVideoTracks().length
+      });
+
       if (isScreen) {
         setRemoteScreenStreams(prev => new Map(prev).set(socketId, stream));
       } else {
         setRemoteStreams(prev => new Map(prev).set(socketId, stream));
-        if (audioContainerRef.current) {
-          let audioEl = document.getElementById(`audio-${socketId}`);
-          if (!audioEl) {
-            audioEl = document.createElement('audio');
-            audioEl.id = `audio-${socketId}`;
-            audioEl.autoplay = true;
-            audioEl.playsInline = true;
-            audioContainerRef.current.appendChild(audioEl);
-          }
+      }
+
+      // If stream has audio tracks, ensure it is played actively and unmuted
+      const audioTracks = stream.getAudioTracks();
+      if (audioTracks.length > 0) {
+        let container = audioContainerRef.current || document.getElementById('fivecord-audio-container');
+        if (!container) {
+          container = document.createElement('div');
+          container.id = 'fivecord-audio-container';
+          container.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0.001;pointer-events:none;';
+          document.body.appendChild(container);
+        }
+
+        const audioId = isScreen ? `audio-screen-${socketId}` : `audio-${socketId}`;
+        let audioEl = document.getElementById(audioId);
+        if (!audioEl) {
+          audioEl = document.createElement('audio');
+          audioEl.id = audioId;
+          audioEl.autoplay = true;
+          audioEl.playsInline = true;
+          audioEl.setAttribute('autoplay', 'true');
+          audioEl.setAttribute('playsinline', 'true');
+          container.appendChild(audioEl);
+        }
+
+        if (audioEl.srcObject !== stream) {
           audioEl.srcObject = stream;
+        }
+
+        audioEl.muted = false;
+        audioEl.volume = 1.0;
+
+        const playPromise = audioEl.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(err => {
+            console.warn(`[Autoplay Policy] Play blocked for ${audioId}:`, err);
+            const unlockAudio = () => {
+              audioEl.play().catch(() => {});
+              document.removeEventListener('click', unlockAudio);
+              document.removeEventListener('keydown', unlockAudio);
+            };
+            document.addEventListener('click', unlockAudio, { once: true });
+            document.addEventListener('keydown', unlockAudio, { once: true });
+          });
         }
       }
     };
@@ -288,6 +338,8 @@ export default function App() {
       });
       const el = document.getElementById(`audio-${socketId}`);
       if (el) el.remove();
+      const screenEl = document.getElementById(`audio-screen-${socketId}`);
+      if (screenEl) screenEl.remove();
     };
 
     webrtc.onSpeakingChanged = (speaking) => {
@@ -307,6 +359,8 @@ export default function App() {
       socket.off('new-message');
       socket.off('message-reaction-updated');
       socket.off('voice-room-peers');
+      socket.off('user-joined-voice');
+      socket.off('user-left-voice');
       socket.off('peer-voice-state-updated');
       socket.off('music-state-updated');
       socket.off('watch-together-updated');
@@ -485,7 +539,7 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#1e1f22]">
-      <div ref={audioContainerRef} className="hidden" />
+      <div ref={audioContainerRef} style={{ position: 'fixed', top: -9999, left: -9999, width: 1, height: 1, opacity: 0.001, pointerEvents: 'none' }} />
       <audio ref={bgMusicAudioRef} className="hidden" />
       {activeMusicState?.currentTrack?.source === 'youtube' && (
         <div className="fixed -top-96 -left-96 pointer-events-none opacity-0 w-1 h-1 overflow-hidden">

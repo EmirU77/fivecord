@@ -19,9 +19,14 @@ export default function MemberList({ members, currentUser, onOpenDM }) {
 
   const handleVolumeChange = (socketId, vol) => {
     setUserVolumes(prev => ({ ...prev, [socketId]: vol }));
+    const safeVol = Math.min(1.0, Math.max(0, vol > 1 ? 1.0 : vol));
     const audioEl = document.getElementById(`audio-${socketId}`);
     if (audioEl) {
-      audioEl.volume = vol;
+      audioEl.volume = safeVol;
+    }
+    const screenAudioEl = document.getElementById(`audio-screen-${socketId}`);
+    if (screenAudioEl) {
+      screenAudioEl.volume = safeVol;
     }
   };
 
