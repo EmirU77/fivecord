@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   Mic, MicOff, Headphones, Settings, X, Check, Smile, 
@@ -282,6 +282,16 @@ export default function UserControlBar({
   const avatarFileInputRef = useRef(null);
   const bannerFileInputRef = useRef(null);
 
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') setIsSettingsOpen(false);
+    };
+    if (isSettingsOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isSettingsOpen]);
+
   const toggleMute = () => {
     const next = !isMuted;
     setIsMuted(next);
@@ -514,8 +524,14 @@ export default function UserControlBar({
 
       {/* ULTRA-RICH DISCORD NITRO STYLE CUSTOMIZATION MODAL */}
       {isSettingsOpen && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/80 backdrop-blur-xs p-3 md:p-6 animate-in fade-in duration-150">
-          <div className="w-full max-w-4xl rounded-2xl bg-[#313338] shadow-2xl border border-[#3f4147] overflow-hidden flex flex-col max-h-[92vh]">
+        <div 
+          onClick={() => setIsSettingsOpen(false)}
+          className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/85 backdrop-blur-sm p-3 md:p-6 animate-in fade-in duration-150"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-4xl rounded-2xl bg-[#313338] shadow-2xl border border-[#3f4147] overflow-hidden flex flex-col max-h-[92vh]"
+          >
             
             {/* Header */}
             <div className="relative bg-gradient-to-r from-[#5865f2] via-[#4752c4] to-[#eb459e] px-6 py-4 text-white shrink-0 flex items-center justify-between">
