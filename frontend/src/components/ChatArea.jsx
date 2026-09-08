@@ -19,7 +19,8 @@ export default function ChatArea({
   onSwitchToVoiceStage,
   isScreenSharing,
   onOpenScreenModal,
-  onStopScreenShare
+  onStopScreenShare,
+  onOpenDownload
 }) {
   const [inputText, setInputText] = useState('');
   const [typingUsers, setTypingUsers] = useState([]);
@@ -157,6 +158,14 @@ export default function ChatArea({
           )}
 
           <div className="flex items-center gap-1.5 text-[#b5bac1]">
+            <button
+              onClick={onOpenDownload}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#23a55a] hover:bg-[#1f934f] text-white text-xs font-bold transition-all shadow-sm hover:scale-105"
+              title="Windows İçin Masaüstü Uygulamasını İndir"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Windows İndir</span>
+            </button>
             <button className="p-1.5 hover:text-white rounded hover:bg-[#35373c] transition-colors" title="Bildirimler">
               <Bell className="w-4 h-4" />
             </button>

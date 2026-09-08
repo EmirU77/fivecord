@@ -79,10 +79,8 @@ async function createWindow() {
     }
   });
 
-  await ensureBackend();
-  await waitForServer('http://localhost:3001/api/health');
-
-  mainWindow.loadURL('http://localhost:3001');
+  // Connect directly to 7/24 cloud Fivecord
+  mainWindow.loadURL('https://fivecord.onrender.com');
 
   mainWindow.on('closed', () => {
     mainWindow = null;

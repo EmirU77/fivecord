@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   Hash, Volume2, Monitor, MonitorOff, Video, VideoOff, 
   PhoneOff, ChevronDown, Plus, BadgeCheck, Wifi, SignalHigh, 
-  Radio
+  Radio, Download
 } from 'lucide-react';
 import UserControlBar from './UserControlBar';
 
@@ -24,7 +24,8 @@ export default function Sidebar({
   onOpenScreenModal,
   onStopScreenShare,
   isCameraOn,
-  onToggleCamera
+  onToggleCamera,
+  onOpenDownload
 }) {
   const [textCollapsed, setTextCollapsed] = useState(false);
   const [voiceCollapsed, setVoiceCollapsed] = useState(false);
@@ -35,14 +36,24 @@ export default function Sidebar({
   return (
     <div className="w-60 bg-[#2b2d31] flex flex-col shrink-0 select-none border-r border-[#1f2023] z-10 shadow-sm">
       {/* Sleek Discord Server Header */}
-      <div className="h-12 border-b border-[#1f2023] px-4 flex items-center justify-between shadow-xs hover:bg-[#35373c] transition-colors cursor-pointer group">
+      <div 
+        onClick={onOpenDownload}
+        className="h-12 border-b border-[#1f2023] px-4 flex items-center justify-between shadow-xs hover:bg-[#35373c] transition-colors cursor-pointer group"
+        title="Masaüstü Uygulamasını İndir"
+      >
         <div className="flex items-center gap-2">
           <span className="font-bold text-sm text-white tracking-wide flex items-center gap-1.5">
             Fivecord VIP
             <BadgeCheck className="w-4 h-4 text-[#5865f2] inline fill-[#5865f2]/20" />
           </span>
         </div>
-        <ChevronDown className="w-4 h-4 text-[#949ba4] group-hover:text-white transition-transform group-hover:translate-y-0.5" />
+        <div className="flex items-center gap-1.5">
+          <span className="px-2 py-0.5 rounded bg-[#23a55a]/20 text-[#23a55a] group-hover:bg-[#23a55a] group-hover:text-white transition-all text-[11px] font-bold flex items-center gap-1">
+            <Download className="w-3 h-3" />
+            <span className="text-[10px]">İndir</span>
+          </span>
+          <ChevronDown className="w-4 h-4 text-[#949ba4] group-hover:text-white transition-transform group-hover:translate-y-0.5" />
+        </div>
       </div>
 
       {/* Channel List Area */}

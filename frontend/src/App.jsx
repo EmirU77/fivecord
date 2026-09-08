@@ -8,6 +8,7 @@ import MemberList from './components/MemberList';
 import ScreenShareModal from './components/ScreenShareModal';
 import CreateChannelModal from './components/CreateChannelModal';
 import ServerInfoModal from './components/ServerInfoModal';
+import DownloadModal from './components/DownloadModal';
 import { socket } from './services/socket';
 import { webrtc } from './services/webrtc';
 import { soundEffects } from './services/soundEffects';
@@ -47,6 +48,7 @@ export default function App() {
   const [isScreenModalOpen, setIsScreenModalOpen] = useState(false);
   const [isCreateChannelOpen, setIsCreateChannelOpen] = useState(false);
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
+  const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
 
   // Remote WebRTC streams
   const [remoteStreams, setRemoteStreams] = useState(new Map());
@@ -322,6 +324,7 @@ export default function App() {
           onStopScreenShare={handleStopScreenShare}
           isCameraOn={isCameraOn}
           onToggleCamera={handleToggleCamera}
+          onOpenDownload={() => setIsDownloadModalOpen(true)}
         />
       )}
 
@@ -357,6 +360,7 @@ export default function App() {
           isScreenSharing={isScreenSharing}
           onOpenScreenModal={() => setIsScreenModalOpen(true)}
           onStopScreenShare={handleStopScreenShare}
+          onOpenDownload={() => setIsDownloadModalOpen(true)}
         />
       ) : (
         <div className="flex-1 flex items-center justify-center text-[#949ba4]">
@@ -388,6 +392,11 @@ export default function App() {
       <ServerInfoModal
         isOpen={isInfoModalOpen}
         onClose={() => setIsInfoModalOpen(false)}
+      />
+
+      <DownloadModal
+        isOpen={isDownloadModalOpen}
+        onClose={() => setIsDownloadModalOpen(false)}
       />
     </div>
   );
