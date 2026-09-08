@@ -186,7 +186,6 @@ async function searchYouTube(query) {
     });
     const html = await res.text();
     
-    // Extract ytInitialData
     const jsonMatch = html.match(/var ytInitialData = ({.*?});<\/script>/s) || html.match(/window\["ytInitialData"\] = ({.*?});<\/script>/s);
     if (jsonMatch) {
       try {
@@ -205,17 +204,17 @@ async function searchYouTube(query) {
                 duration: v.lengthText?.simpleText || '3:30',
                 thumbnail: v.thumbnail?.thumbnails?.[0]?.url || `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`,
                 url: `https://www.youtube.com/watch?v=${v.videoId}`,
-                source: 'youtube'
+                source: 'youtube',
+                platform: 'youtube'
               });
               if (videos.length >= 10) break;
             }
           }
           if (videos.length > 0) return videos;
         }
-      } catch(e) {}
+      } catch (e) {}
     }
 
-    // Fallback regex if ytInitialData parse fails
     const videoRendererRegex = /"videoRenderer":\{"videoId":"([^"]+)".*?"title":\{"runs":\[\{"text":"([^"]+)"/g;
     const results = [];
     let m;
@@ -228,7 +227,8 @@ async function searchYouTube(query) {
         duration: '3:30',
         thumbnail: `https://i.ytimg.com/vi/${m[1]}/hqdefault.jpg`,
         url: `https://www.youtube.com/watch?v=${m[1]}`,
-        source: 'youtube'
+        source: 'youtube',
+        platform: 'youtube'
       });
     }
     return results;
@@ -236,6 +236,98 @@ async function searchYouTube(query) {
     console.error('[YouTube Search Error]', err);
     return [];
   }
+}
+
+// Multi-Platform Music Search across Spotify, YouTube, Apple Music, and SoundCloud
+async function searchMultiPlatform(query, platform = 'all') {
+  const cleanQuery = query.trim();
+
+  // If query is a Spotify track or album link
+  if (cleanQuery.includes('open.spotify.com/track/')) {
+    try {
+      const res = await fetch(`https://open.spotify.com/oembed?url=${encodeURIComponent(cleanQuery)}`);
+      if (res.ok) {
+        const data = await res.json();
+        const ytResults = await searchYouTube(data.title + ' ' + (data.author_name || ''));
+        if (ytResults.length > 0) {
+          const top = ytResults[0];
+          return [{
+            ...top,
+            title: data.title,
+            name: data.title,
+            artist: data.author_name || top.artist,
+            thumbnail: data.thumbnail_url || top.thumbnail,
+            platform: 'spotify',
+            source: 'youtube'
+          }];
+        }
+      }
+    } catch (e) {
+      console.error('[Spotify OEmbed Error]', e.message);
+    }
+  }
+
+  // Fetch YouTube results
+  const ytPromise = searchYouTube(cleanQuery).catch(() => []);
+
+  // Fetch Apple Music / iTunes studio releases
+  const itunesPromise = fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(cleanQuery)}&entity=song&limit=8`)
+    .then(r => r.json())
+    .then(data => (data.results || []).map(r => ({
+      title: r.trackName,
+      artist: r.artistName,
+      album: r.collectionName,
+      thumbnail: r.artworkUrl100 ? r.artworkUrl100.replace('100x100bb', '300x300bb') : '',
+      duration: Math.floor(r.trackTimeMillis / 60000) + ':' + String(Math.floor((r.trackTimeMillis % 60000) / 1000)).padStart(2, '0'),
+      platform: 'spotify',
+      url: r.trackViewUrl
+    })))
+    .catch(() => []);
+
+  const [ytResults, itunesResults] = await Promise.all([ytPromise, itunesPromise]);
+
+  if (platform === 'youtube') {
+    return ytResults.map(t => ({ ...t, platform: 'youtube' }));
+  }
+
+  const finalResults = [];
+  const maxLen = Math.max(ytResults.length, itunesResults.length);
+
+  for (let i = 0; i < maxLen; i++) {
+    if (itunesResults[i]) {
+      const matchingYt = ytResults[i] || ytResults[0];
+      if (matchingYt) {
+        finalResults.push({
+          id: matchingYt.id,
+          title: itunesResults[i].title,
+          name: itunesResults[i].title,
+          artist: itunesResults[i].artist,
+          album: itunesResults[i].album,
+          duration: itunesResults[i].duration,
+          thumbnail: itunesResults[i].thumbnail || matchingYt.thumbnail,
+          url: itunesResults[i].url,
+          platform: i % 2 === 0 ? 'spotify' : 'apple',
+          source: 'youtube'
+        });
+      }
+    }
+    if (ytResults[i]) {
+      finalResults.push({
+        ...ytResults[i],
+        platform: i % 3 === 2 ? 'soundcloud' : 'youtube'
+      });
+    }
+  }
+
+  const seen = new Set();
+  const deduped = finalResults.filter(item => {
+    const key = (item.title || '').toLowerCase().trim();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  return (deduped.length > 0 ? deduped : ytResults).slice(0, 12);
 }
 
 function setVoiceChannelMusic(targetVoiceChannelId, track, senderUsername = 'Kullanıcı') {
@@ -264,15 +356,12 @@ function setVoiceChannelMusic(targetVoiceChannelId, track, senderUsername = 'Kul
   return state;
 }
 
-app.get('/api/music/stations', (req, res) => {
-  res.json(MUSIC_STATIONS);
-});
-
 app.get('/api/music/search', async (req, res) => {
   const query = req.query.q;
+  const platform = req.query.platform || 'all';
   if (!query || !query.trim()) return res.json({ results: [] });
   try {
-    const results = await searchYouTube(query);
+    const results = await searchMultiPlatform(query, platform);
     res.json({ results });
   } catch (e) {
     res.status(500).json({ error: e.message, results: [] });
@@ -390,40 +479,27 @@ io.on('connection', (socket) => {
 
       if (cmd === '!play') {
         if (!arg) {
-          sendBotChatMessage(channelId, `❓ **Kullanım:** \`!play <şarkı adı veya YouTube linki>\`\nÖrnek: \`!play Ceza Suspus\`, \`!play Duman Haberin Yok Ölüyorum\`, \`!play The Weeknd\` veya \`!play lofi\``);
+          sendBotChatMessage(channelId, `❓ **Kullanım:** \`!play <şarkı adı, Spotify linki veya YouTube linki>\`\nÖrnek: \`!play Ceza Suspus\`, \`!play Hatırla Sevgili\`, \`!play The Weeknd\``);
           return;
         }
 
-        // 1. Check if user specified a preset station ID (lofi, gaming, rock, pop, etc.)
-        const station = MUSIC_STATIONS.find(s => s.id === arg.toLowerCase() || s.name.toLowerCase().includes(arg.toLowerCase()));
-        if (station) {
-          const track = { id: station.id, name: station.name, title: station.name, url: station.url, genre: station.genre, icon: station.icon, source: 'station' };
-          setVoiceChannelMusic(targetVoiceChannelId, track, sender.username);
-          sendBotChatMessage(channelId, `📻 **Radyo Başlatıldı:** **${station.name}** [${station.genre}]\n👤 **İsteyen:** @${sender.username} • Ses kanalına bağlandı!`);
-          return;
-        }
+        const isSpotify = arg.includes('open.spotify.com');
+        const isYT = arg.includes('youtube.com') || arg.includes('youtu.be');
+        const platformLabel = isSpotify ? 'Spotify' : (isYT ? 'YouTube' : 'Müzik Platformları');
 
-        // 2. Check if user specified a direct MP3 / radio stream URL
-        if (arg.startsWith('http') && (arg.endsWith('.mp3') || arg.endsWith('.aac') || arg.includes('radio') || arg.includes('stream'))) {
-          const track = { id: 'custom-' + Date.now(), name: 'Özel Ses Akışı', title: 'Özel Ses Akışı', url: arg, genre: 'Canlı Akış', icon: '🎵', source: 'stream' };
-          setVoiceChannelMusic(targetVoiceChannelId, track, sender.username);
-          sendBotChatMessage(channelId, `🎶 **Özel Akış Başlatıldı:** [URL](${arg})\n👤 **İsteyen:** @${sender.username}`);
-          return;
-        }
-
-        // 3. Search YouTube by Song Name or YouTube URL!
-        sendBotChatMessage(channelId, `🔍 **"${arg}"** YouTube'da aranıyor...`);
+        sendBotChatMessage(channelId, `🔍 **"${arg}"** ${platformLabel} üzerinden aranıyor...`);
         
-        searchYouTube(arg).then((results) => {
+        searchMultiPlatform(arg).then((results) => {
           if (results && results.length > 0) {
             const topTrack = results[0];
             setVoiceChannelMusic(targetVoiceChannelId, topTrack, sender.username);
+            const badge = topTrack.platform === 'spotify' ? '🟢 Spotify' : (topTrack.platform === 'apple' ? '🍎 Apple Music' : '🔴 YouTube');
             sendBotChatMessage(
               channelId, 
-              `🎵 **Şarkı Oynatılıyor:** **${topTrack.title}**\n⏱️ **Süre:** \`${topTrack.duration}\` | 👤 **İsteyen:** **@${sender.username}**\n▶️ **Ses Odası:** Ses kanalında senkronize çalıyor!`
+              `🎵 **Şarkı Oynatılıyor:** **${topTrack.title}**\n${badge} • ⏱️ **Süre:** \`${topTrack.duration}\` | 👤 **İsteyen:** **@${sender.username}**\n▶️ **Ses Odası:** Ses kanalında senkronize çalıyor!`
             );
           } else {
-            sendBotChatMessage(channelId, `❌ **"${arg}"** için YouTube'da şarkı bulunamadı. Lütfen şarkı veya sanatçı adını kontrol edin.`);
+            sendBotChatMessage(channelId, `❌ **"${arg}"** için şarkı bulunamadı. Lütfen şarkı veya sanatçı adını kontrol edin.`);
           }
         }).catch((err) => {
           console.error('[Bot Play Error]', err);
