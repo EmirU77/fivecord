@@ -106,29 +106,6 @@ export default function VoiceRoom({
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Watch Together Button in Header */}
-          <button
-            onClick={onOpenWatchTogether}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all border ${
-              watchTogetherState?.videoId
-                ? 'bg-[#ea3323] text-white border-[#ea3323] animate-pulse shadow-xs'
-                : 'bg-[#ea3323]/15 hover:bg-[#ea3323] text-[#ea3323] hover:text-white border-[#ea3323]/30'
-            }`}
-          >
-            <span>🍿</span>
-            <span>{watchTogetherState?.videoId ? 'Birlikte İzleniyor' : 'Birlikte İzle'}</span>
-          </button>
-
-          {/* Quick Open Music Bot in Header */}
-          <button
-            onClick={onOpenMusicModal}
-            className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#5865f2]/20 hover:bg-[#5865f2] text-[#5865f2] hover:text-white text-xs font-bold transition-all border border-[#5865f2]/30"
-          >
-            <Disc3 className={`w-3.5 h-3.5 ${musicState?.isPlaying ? 'animate-spin' : ''}`} />
-            <span>Müzik Botu</span>
-          </button>
-        </div>
       </div>
 
       {/* 24/7 MUSIC BOT ACTIVE BAR */}
