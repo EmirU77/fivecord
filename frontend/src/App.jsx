@@ -235,6 +235,31 @@ export default function App() {
       soundEffects.speakTTS(text);
     });
 
+    socket.on('game-scan-result', ({ detected, game }) => {
+      if (detected && game) {
+        setCurrentUser(prev => {
+          if (prev.activity !== game.name) {
+            const updated = {
+              ...prev,
+              activity: game.name,
+              activityIcon: game.icon,
+              activityDetail: game.detail,
+              activityStartTime: prev.activity === game.name ? prev.activityStartTime : Date.now()
+            };
+            localStorage.setItem('fivecord_user', JSON.stringify(updated));
+            return updated;
+          }
+          return prev;
+        });
+      }
+    });
+
+    // Auto scan for games running on Windows
+    socket.emit('scan-active-game');
+    const gameScanInterval = setInterval(() => {
+      socket.emit('scan-active-game');
+    }, 25000);
+
     webrtc.onRemoteStreamAdded = (socketId, stream, isScreen) => {
       if (isScreen) {
         setRemoteScreenStreams(prev => new Map(prev).set(socketId, stream));
@@ -291,6 +316,8 @@ export default function App() {
       socket.off('watch-together-updated');
       socket.off('entrance-sound-played');
       socket.off('tts-speak');
+      socket.off('game-scan-result');
+      clearInterval(gameScanInterval);
     };
   }, [currentUser, currentChannel, activeView]);
 

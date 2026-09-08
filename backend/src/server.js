@@ -6,9 +6,55 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { exec } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// --- KNOWN GAME SIGNATURES FOR RICH PRESENCE ---
+const GAME_SIGNATURES = [
+  { exe: 'cs2.exe', name: 'Counter-Strike 2', icon: '🔫', detail: 'Premier / Rekabetçi' },
+  { exe: 'csgo.exe', name: 'Counter-Strike: Global Offensive', icon: '🔫', detail: 'Rekabetçi' },
+  { exe: 'valorant.exe', name: 'VALORANT', icon: '🎯', detail: 'Dereceli Maç' },
+  { exe: 'valorant-win64-shipping.exe', name: 'VALORANT', icon: '🎯', detail: 'Dereceli Maç' },
+  { exe: 'leagueclientux.exe', name: 'League of Legends', icon: '⚔️', detail: 'Sihirdar Vadisi' },
+  { exe: 'league of legends.exe', name: 'League of Legends', icon: '⚔️', detail: 'Sihirdar Vadisi' },
+  { exe: 'gta5.exe', name: 'Grand Theft Auto V', icon: '🚗', detail: 'GTA Online' },
+  { exe: 'gtav.exe', name: 'Grand Theft Auto V', icon: '🚗', detail: 'GTA Online' },
+  { exe: 'javaw.exe', name: 'Minecraft', icon: '⛏️', detail: 'Survival Dünyası' },
+  { exe: 'minecraft.exe', name: 'Minecraft', icon: '⛏️', detail: 'Survival Dünyası' },
+  { exe: 'rust.exe', name: 'Rust', icon: '🏹', detail: 'VIP Sunucu' },
+  { exe: 'rustclient.exe', name: 'Rust', icon: '🏹', detail: 'VIP Sunucu' },
+  { exe: 'rocketleague.exe', name: 'Rocket League', icon: '🏎️', detail: '3v3 Rekabetçi' },
+  { exe: 'apex.exe', name: 'Apex Legends', icon: '💥', detail: 'Battle Royale' },
+  { exe: 'r5apex.exe', name: 'Apex Legends', icon: '💥', detail: 'Battle Royale' },
+  { exe: 'fortniteclient-win64-shipping.exe', name: 'Fortnite', icon: '🪂', detail: 'Battle Royale' },
+  { exe: 'dota2.exe', name: 'Dota 2', icon: '🛡️', detail: 'Ranked Match' },
+  { exe: 'tslgame.exe', name: 'PUBG: BATTLEGROUNDS', icon: '🍳', detail: 'Erangel' },
+  { exe: 'rainbowsix.exe', name: 'Rainbow Six Siege', icon: '🎯', detail: 'Dereceli' },
+  { exe: 'overwatch.exe', name: 'Overwatch 2', icon: '🤖', detail: 'Hızlı Karşılaşma' },
+  { exe: 'cyberpunk2077.exe', name: 'Cyberpunk 2077', icon: '⚡', detail: 'Night City' },
+  { exe: 'spotify.exe', name: 'Spotify', icon: '🎵', detail: 'Müzik Dinliyor' },
+  { exe: 'code.exe', name: 'Visual Studio Code', icon: '💻', detail: 'Kod Yazıyor' }
+];
+
+function scanWindowsGames() {
+  return new Promise((resolve) => {
+    if (process.platform !== 'win32') {
+      return resolve(null);
+    }
+    exec('tasklist /fo csv /nh', { timeout: 3000 }, (err, stdout) => {
+      if (err || !stdout) return resolve(null);
+      const lower = stdout.toLowerCase();
+      for (const game of GAME_SIGNATURES) {
+        if (lower.includes(game.exe.toLowerCase())) {
+          return resolve(game);
+        }
+      }
+      resolve(null);
+    });
+  });
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -54,6 +100,12 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
+});
+
+// Instant Game Detection API
+app.get('/api/detect-game', async (req, res) => {
+  const game = await scanWindowsGames();
+  res.json({ detected: !!game, game });
 });
 
 // Serve frontend production build statically if present
@@ -402,6 +454,9 @@ io.on('connection', (socket) => {
       status: userData.status || 'online',
       customStatus: userData.customStatus || 'Fivecord kullanıyor',
       activity: userData.activity || '',
+      activityIcon: userData.activityIcon || '🎮',
+      activityDetail: userData.activityDetail || '',
+      activityStartTime: userData.activityStartTime || (userData.activity ? Date.now() : null),
       entranceSound: userData.entranceSound || 'mvp',
       voiceState: {
         channelId: null,
@@ -518,6 +573,50 @@ io.on('connection', (socket) => {
     if (soundUrl) {
       io.emit('entrance-sound-played', { channelId, soundUrl, username, senderSocketId: socket.id });
     }
+  });
+
+  // --- GAME DETECTION & RICH PRESENCE ---
+  socket.on('scan-active-game', async () => {
+    const user = users.get(socket.id);
+    if (!user) return;
+    try {
+      const detected = await scanWindowsGames();
+      if (detected) {
+        user.activity = detected.name;
+        user.activityIcon = detected.icon;
+        user.activityDetail = detected.detail;
+        user.activityStartTime = user.activityStartTime || Date.now();
+        socket.emit('game-scan-result', { detected: true, game: detected });
+        io.emit('members-updated', getAllMembers());
+        console.log(`[Game Detected] ${user.username} is playing ${detected.name}`);
+      } else {
+        socket.emit('game-scan-result', { detected: false });
+      }
+    } catch (e) {
+      console.warn('[Game Scan Error]', e);
+      socket.emit('game-scan-result', { detected: false, error: e.message });
+    }
+  });
+
+  socket.on('set-activity', ({ activity, icon, detail }) => {
+    const user = users.get(socket.id);
+    if (!user) return;
+    user.activity = activity ? activity.trim() : '';
+    user.activityIcon = icon || '🎮';
+    user.activityDetail = detail ? detail.trim() : '';
+    user.activityStartTime = activity ? Date.now() : null;
+    io.emit('members-updated', getAllMembers());
+    console.log(`[Activity Updated] ${user.username} -> ${user.activity}`);
+  });
+
+  socket.on('clear-activity', () => {
+    const user = users.get(socket.id);
+    if (!user) return;
+    user.activity = '';
+    user.activityIcon = '🎮';
+    user.activityDetail = '';
+    user.activityStartTime = null;
+    io.emit('members-updated', getAllMembers());
   });
 
   socket.on('update-profile', (updated) => {

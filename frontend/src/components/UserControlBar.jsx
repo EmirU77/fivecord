@@ -2,7 +2,8 @@ import React, { useState, useRef } from 'react';
 import { 
   Mic, MicOff, Headphones, Settings, X, Check, Smile, 
   Upload, Link2, Sparkles, Palette, Image as ImageIcon, Loader2,
-  Crown, Zap, Shield, Flame, User, Info, Hash, Circle, Volume2, Play
+  Crown, Zap, Shield, Flame, User, Info, Hash, Circle, Volume2, Play,
+  Gamepad2, RefreshCw
 } from 'lucide-react';
 import { soundEffects } from '../services/soundEffects';
 
@@ -12,6 +13,19 @@ const ENTRANCE_SOUNDS = [
   { id: 'level_up', name: '8-Bit Retro Level Up', icon: '👾', desc: 'Nostaljik Arcade & Zelda Zafer Melodisi' },
   { id: 'fanfare', name: 'VIP Kraliyet Fanfarı', icon: '🎺', desc: 'VIP Lobi Giriş Çanı ve Töreni' },
   { id: 'none', name: 'Sessiz Giriş', icon: '🔇', desc: 'Odaya sessizce, ses efekti çalmadan gir' },
+];
+
+const POPULAR_GAMES = [
+  { name: 'Counter-Strike 2', icon: '🔫', detail: 'Premier / Rekabetçi' },
+  { name: 'VALORANT', icon: '🎯', detail: 'Dereceli Maç' },
+  { name: 'Grand Theft Auto V', icon: '🚗', detail: 'GTA Online' },
+  { name: 'League of Legends', icon: '⚔️', detail: 'Sihirdar Vadisi' },
+  { name: 'Minecraft', icon: '⛏️', detail: 'Survival Dünyası' },
+  { name: 'Rust', icon: '🏹', detail: 'VIP Sunucu' },
+  { name: 'Rocket League', icon: '🏎️', detail: '3v3 Rekabetçi' },
+  { name: 'Apex Legends', icon: '💥', detail: 'Battle Royale' },
+  { name: 'Spotify', icon: '🎵', detail: 'Müzik Dinliyor' },
+  { name: 'Visual Studio Code', icon: '💻', detail: 'Fivecord Geliştiriyor' }
 ];
 
 // --- PRESET DATA ---
@@ -253,6 +267,11 @@ export default function UserControlBar({
   const [tempNameEffect, setTempNameEffect] = useState(currentUser?.nameEffect || 'normal');
   const [tempBadges, setTempBadges] = useState(currentUser?.badges || ['owner', 'nitro']);
   const [tempEntranceSound, setTempEntranceSound] = useState(currentUser?.entranceSound || 'mvp');
+  const [tempActivity, setTempActivity] = useState(currentUser?.activity || '');
+  const [tempActivityIcon, setTempActivityIcon] = useState(currentUser?.activityIcon || '🎮');
+  const [tempActivityDetail, setTempActivityDetail] = useState(currentUser?.activityDetail || '');
+  const [isScanningGames, setIsScanningGames] = useState(false);
+  const [scanMessage, setScanMessage] = useState('');
 
   const [customAvatarUrlInput, setCustomAvatarUrlInput] = useState('');
   const [customBannerUrlInput, setCustomBannerUrlInput] = useState('');
@@ -289,10 +308,35 @@ export default function UserControlBar({
     setTempNameEffect(currentUser?.nameEffect || 'normal');
     setTempBadges(currentUser?.badges || ['owner', 'nitro']);
     setTempEntranceSound(currentUser?.entranceSound || 'mvp');
+    setTempActivity(currentUser?.activity || '');
+    setTempActivityIcon(currentUser?.activityIcon || '🎮');
+    setTempActivityDetail(currentUser?.activityDetail || '');
+    setScanMessage('');
     setCustomAvatarUrlInput('');
     setCustomBannerUrlInput('');
     setActiveTab('avatar');
     setIsSettingsOpen(true);
+  };
+
+  const handleScanGame = async () => {
+    setIsScanningGames(true);
+    setScanMessage('Windows süreçleri taranıyor...');
+    try {
+      const res = await fetch('http://localhost:3001/api/detect-game');
+      const data = await res.json();
+      if (data.detected && data.game) {
+        setTempActivity(data.game.name);
+        setTempActivityIcon(data.game.icon);
+        setTempActivityDetail(data.game.detail);
+        setScanMessage(`✅ Algılandı: ${data.game.name}`);
+      } else {
+        setScanMessage('ℹ️ Bilgisayarda çalışan bilinen bir oyun bulunamadı.');
+      }
+    } catch (e) {
+      setScanMessage('⚠️ Tarama hatası: ' + e.message);
+    } finally {
+      setIsScanningGames(false);
+    }
   };
 
   const handleSaveProfile = () => {
@@ -308,7 +352,11 @@ export default function UserControlBar({
       color: tempColor,
       nameEffect: tempNameEffect,
       badges: tempBadges,
-      entranceSound: tempEntranceSound
+      entranceSound: tempEntranceSound,
+      activity: tempActivity,
+      activityIcon: tempActivityIcon,
+      activityDetail: tempActivityDetail,
+      activityStartTime: tempActivity ? (currentUser?.activity === tempActivity ? (currentUser?.activityStartTime || Date.now()) : Date.now()) : null
     });
     setIsSettingsOpen(false);
   };
@@ -416,8 +464,17 @@ export default function UserControlBar({
               {currentUser?.badges?.includes('owner') && <span className="text-[10px]">👑</span>}
             </div>
             <div className="text-[10px] text-[#949ba4] truncate flex items-center gap-1">
-              {currentUser?.statusEmoji && <span>{currentUser.statusEmoji}</span>}
-              <span>{currentUser?.customStatus || 'Çevrimiçi'}</span>
+              {currentUser?.activity ? (
+                <span className="text-[#23a55a] font-bold truncate flex items-center gap-1">
+                  <span>{currentUser.activityIcon || '🎮'}</span>
+                  <span className="truncate">{currentUser.activity}</span>
+                </span>
+              ) : (
+                <>
+                  {currentUser?.statusEmoji && <span>{currentUser.statusEmoji}</span>}
+                  <span className="truncate">{currentUser?.customStatus || 'Çevrimiçi'}</span>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -551,6 +608,22 @@ export default function UserControlBar({
               >
                 <span>🎙️</span>
                 <span>Giriş Sesi</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('activity')}
+                className={`px-4 py-2.5 font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
+                  activeTab === 'activity'
+                    ? 'border-[#23a55a] text-white bg-[#35373c]/50 rounded-t-lg'
+                    : 'border-transparent text-[#949ba4] hover:text-white hover:bg-[#35373c]/30 rounded-t-lg'
+                }`}
+              >
+                <span>🎮</span>
+                <span>Oyun (Rich Presence)</span>
+                {tempActivity && (
+                  <span className="w-2 h-2 rounded-full bg-[#23a55a] animate-pulse" />
+                )}
               </button>
             </div>
 
@@ -1082,6 +1155,128 @@ export default function UserControlBar({
                   </div>
                 )}
 
+                {/* TAB 6: GAME DETECTION & RICH PRESENCE */}
+                {activeTab === 'activity' && (
+                  <div className="space-y-4 animate-in fade-in duration-150">
+                    {/* Auto Windows Game Scanner */}
+                    <div className="p-4 rounded-xl bg-[#23a55a]/10 border border-[#23a55a]/40 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs font-black uppercase tracking-wider text-[#23a55a] flex items-center gap-1.5">
+                          <Gamepad2 className="w-4 h-4 text-[#23a55a]" />
+                          <span>Otomatik Windows Oyun Taraması</span>
+                        </div>
+                        <span className="text-[10px] bg-[#23a55a] text-black font-extrabold px-2 py-0.5 rounded-full">
+                          CANLI
+                        </span>
+                      </div>
+                      <p className="text-xs text-[#dbdee1]">
+                        Bilgisayarında çalışan oyunları (CS2, Valorant, GTA V, LoL, Minecraft, Rust vb.) anında tespit eder ve durumuna yansıtır.
+                      </p>
+
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={handleScanGame}
+                          disabled={isScanningGames}
+                          className="px-4 py-2 rounded-xl bg-[#23a55a] hover:bg-[#1f9250] text-white font-bold text-xs flex items-center gap-2 shadow-md transition-all cursor-pointer disabled:opacity-50"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${isScanningGames ? 'animate-spin' : ''}`} />
+                          <span>{isScanningGames ? 'Taranıyor...' : '🔍 Bilgisayarı Şimdi Tara'}</span>
+                        </button>
+                        {tempActivity && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTempActivity('');
+                              setTempActivityDetail('');
+                              setScanMessage('Aktivite kaldırıldı.');
+                            }}
+                            className="px-3 py-2 rounded-xl bg-[#f23f43]/20 hover:bg-[#f23f43] text-[#f23f43] hover:text-white font-bold text-xs transition-all cursor-pointer"
+                          >
+                            Oyun Durumunu Kaldır
+                          </button>
+                        )}
+                      </div>
+
+                      {scanMessage && (
+                        <div className="text-xs font-semibold text-white bg-[#1e1f22] p-2.5 rounded-lg border border-[#383a40]">
+                          {scanMessage}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Quick Pick Presets */}
+                    <div className="p-4 rounded-xl bg-[#2b2d31] border border-[#383a40] space-y-2.5">
+                      <div className="text-xs font-bold uppercase tracking-wider text-[#b5bac1] flex items-center justify-between">
+                        <span>Hızlı Oyun Seç (Tek Tıkla Belirle)</span>
+                        <span className="text-[10px] text-[#949ba4]">Popüler Oyunlar</span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        {POPULAR_GAMES.map((game) => {
+                          const isSelected = tempActivity === game.name;
+                          return (
+                            <button
+                              key={game.name}
+                              type="button"
+                              onClick={() => {
+                                setTempActivity(game.name);
+                                setTempActivityIcon(game.icon);
+                                setTempActivityDetail(game.detail);
+                                setScanMessage(`Seçildi: ${game.name}`);
+                              }}
+                              className={`p-2.5 rounded-xl border text-left flex items-center gap-2.5 transition-all cursor-pointer ${
+                                isSelected
+                                  ? 'bg-[#23a55a]/20 border-[#23a55a] text-white shadow-sm'
+                                  : 'bg-[#1e1f22] border-[#383a40] hover:border-[#5865f2] text-[#dbdee1]'
+                              }`}
+                            >
+                              <span className="text-lg shrink-0">{game.icon}</span>
+                              <div className="truncate min-w-0">
+                                <div className="text-xs font-bold text-white truncate">{game.name}</div>
+                                <div className="text-[10px] text-[#949ba4] truncate">{game.detail}</div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Custom Game Details */}
+                    <div className="p-4 rounded-xl bg-[#2b2d31] border border-[#383a40] space-y-3">
+                      <div className="text-xs font-bold uppercase tracking-wider text-[#b5bac1]">
+                        Özel Oyun veya Aktivite Adı
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <div>
+                          <label className="text-[10px] font-bold uppercase tracking-wider text-[#949ba4] block mb-1">
+                            Oyun Adı
+                          </label>
+                          <input
+                            type="text"
+                            value={tempActivity}
+                            onChange={(e) => setTempActivity(e.target.value)}
+                            placeholder="Örn: Counter-Strike 2"
+                            className="w-full px-3 py-2 rounded-xl bg-[#1e1f22] border border-[#383a40] text-white text-xs focus:outline-hidden focus:border-[#23a55a]"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold uppercase tracking-wider text-[#949ba4] block mb-1">
+                            Oyun Modu / Detay
+                          </label>
+                          <input
+                            type="text"
+                            value={tempActivityDetail}
+                            onChange={(e) => setTempActivityDetail(e.target.value)}
+                            placeholder="Örn: Faceit Seviye 10"
+                            className="w-full px-3 py-2 rounded-xl bg-[#1e1f22] border border-[#383a40] text-white text-xs focus:outline-hidden focus:border-[#23a55a]"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
               </div>
 
               {/* RIGHT COLUMN: REALISTIC STICKY DISCORD PROFILE PREVIEW (5 cols) */}
@@ -1171,6 +1366,27 @@ export default function UserControlBar({
                           <div className="flex items-center gap-1.5 text-xs text-white bg-[#1e1f22] px-2.5 py-1.5 rounded-lg border border-[#2b2d31]">
                             <span>{tempStatusEmoji || '💬'}</span>
                             <span className="truncate">{tempStatus || 'Özel durum...'}</span>
+                          </div>
+                        )}
+
+                        {/* Live Gaming Activity Card */}
+                        {tempActivity && (
+                          <div className="bg-[#23a55a]/15 border border-[#23a55a]/40 p-2.5 rounded-xl space-y-1 my-1.5">
+                            <span className="text-[9px] font-black uppercase tracking-wider text-[#23a55a] flex items-center gap-1">
+                              <span>{tempActivityIcon || '🎮'}</span>
+                              <span>OYNUYOR (CANLI)</span>
+                            </span>
+                            <div className="text-xs font-black text-white truncate">
+                              {tempActivity}
+                            </div>
+                            {tempActivityDetail && (
+                              <div className="text-[10px] text-[#dbdee1] font-medium truncate">
+                                {tempActivityDetail}
+                              </div>
+                            )}
+                            <div className="text-[9px] text-[#949ba4] font-mono">
+                              ⏱️ 1 dakikadır oynuyor
+                            </div>
                           </div>
                         )}
 

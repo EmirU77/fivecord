@@ -92,6 +92,23 @@ export default function MemberList({ members, currentUser, onOpenDM }) {
                     {member.statusEmoji && <span>{member.statusEmoji}</span>}
                     <span>{member.customStatus || 'Çevrimiçi'}</span>
                   </div>
+
+                  {/* DISCORD RICH PRESENCE GAMING BADGE */}
+                  {member.activity && (
+                    <div className="mt-1 px-2 py-0.5 rounded-md bg-[#23a55a]/15 border border-[#23a55a]/30 flex items-center gap-1.5 shadow-xs">
+                      <span className="text-xs shrink-0 animate-pulse">{member.activityIcon || '🎮'}</span>
+                      <div className="truncate min-w-0">
+                        <span className="text-[10px] font-black text-[#23a55a] truncate block leading-tight">
+                          {member.activity}
+                        </span>
+                        {member.activityDetail && (
+                          <span className="text-[8px] text-[#b5bac1] font-medium truncate block leading-tight">
+                            {member.activityDetail}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* State badges */}
@@ -118,6 +135,29 @@ export default function MemberList({ members, currentUser, onOpenDM }) {
                       className="h-12 w-full rounded-lg overflow-hidden bg-cover bg-center border border-white/10"
                       style={{ backgroundImage: `url(${member.banner})` }}
                     />
+                  )}
+
+                  {/* GAMING ACTIVITY (RICH PRESENCE) */}
+                  {member.activity && (
+                    <div className="bg-[#23a55a]/10 border border-[#23a55a]/30 p-2.5 rounded-xl space-y-1">
+                      <span className="text-[9px] font-black uppercase tracking-wider text-[#23a55a] flex items-center gap-1">
+                        <span>{member.activityIcon || '🎮'}</span>
+                        <span>OYNUYOR (CANLI)</span>
+                      </span>
+                      <div className="text-xs font-black text-white truncate">
+                        {member.activity}
+                      </div>
+                      {member.activityDetail && (
+                        <div className="text-[10px] text-[#dbdee1] font-medium truncate">
+                          {member.activityDetail}
+                        </div>
+                      )}
+                      <div className="text-[9px] text-[#949ba4] font-mono">
+                        {member.activityStartTime 
+                          ? `⏱️ ${Math.max(1, Math.floor((Date.now() - member.activityStartTime) / 60000))} dakikadır oynuyor`
+                          : '⏱️ Az önce başladı'}
+                      </div>
+                    </div>
                   )}
 
                   {member.bio && (
