@@ -112,14 +112,26 @@ export default function DownloadModal({ isOpen, onClose }) {
             </div>
 
             <div className="mt-3 pt-3 border-t border-[#383a40]/60 flex items-center justify-between gap-2">
-              <span className="text-[11px] text-[#949ba4]">Sunucu sahibi veya arkadaşlarınızdan zip dosyasını temin edebilirsiniz</span>
-              <button
-                onClick={handleCopyLink}
-                className="px-3 py-1.5 rounded-lg bg-[#383a40] hover:bg-[#4e5058] text-white text-xs font-semibold transition-all flex items-center gap-1.5"
-              >
-                {copied ? <Check className="w-3.5 h-3.5 text-[#23a55a]" /> : <ExternalLink className="w-3.5 h-3.5" />}
-                <span>{copied ? 'Link Kopyalandı!' : 'Site Linkini Kopyala'}</span>
-              </button>
+              <span className="text-[11px] text-[#949ba4]">Tüm Windows sürümleriyle uyumlu (150 MB)</span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleCopyLink}
+                  className="px-3 py-1.5 rounded-lg bg-[#383a40] hover:bg-[#4e5058] text-white text-xs font-semibold transition-all flex items-center gap-1.5"
+                  title="İndirme Linkini Kopyala"
+                >
+                  {copied ? <Check className="w-3.5 h-3.5 text-[#23a55a]" /> : <ExternalLink className="w-3.5 h-3.5" />}
+                  <span>{copied ? 'Kopyalandı!' : 'Linki Kopyala'}</span>
+                </button>
+                <a
+                  href="https://github.com/EmirU77/fivecord/releases/download/v1.0.0/Fivecord-Masaustu-Uygulamasi.zip"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-1.5 rounded-lg bg-[#23a55a] hover:bg-[#1f934f] text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 hover:scale-105"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Fivecord İndir (.zip)</span>
+                </a>
+              </div>
             </div>
           </div>
 

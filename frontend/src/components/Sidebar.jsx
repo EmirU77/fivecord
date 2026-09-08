@@ -239,6 +239,17 @@ export default function Sidebar({
         </div>
       )}
 
+      {/* Quick Download Desktop Banner */}
+      <div className="px-3 py-2 border-t border-[#1f2023] bg-[#232428]/80">
+        <button
+          onClick={onOpenDownload}
+          className="w-full py-2 px-3 rounded-lg bg-gradient-to-r from-[#23a55a] to-[#1f934f] hover:from-[#1f934f] hover:to-[#1a7f44] text-white text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 group hover:scale-[1.02]"
+        >
+          <Download className="w-4 h-4 text-white group-hover:animate-bounce" />
+          <span>Masaüstü Uygulaması İndir</span>
+        </button>
+      </div>
+
       {/* User Profile Bar at bottom */}
       <UserControlBar
         currentUser={currentUser}
