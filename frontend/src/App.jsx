@@ -9,6 +9,7 @@ import ScreenShareModal from './components/ScreenShareModal';
 import CreateChannelModal from './components/CreateChannelModal';
 import ServerInfoModal from './components/ServerInfoModal';
 import DownloadModal from './components/DownloadModal';
+import MusicPlayerModal from './components/MusicPlayerModal';
 import { socket } from './services/socket';
 import { webrtc } from './services/webrtc';
 import { soundEffects } from './services/soundEffects';
@@ -49,6 +50,9 @@ export default function App() {
   const [isCreateChannelOpen, setIsCreateChannelOpen] = useState(false);
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
+  const [isMusicModalOpen, setIsMusicModalOpen] = useState(false);
+  const [musicStates, setMusicStates] = useState(new Map());
+  const [musicStations, setMusicStations] = useState([]);
 
   // Remote WebRTC streams
   const [remoteStreams, setRemoteStreams] = useState(new Map());
@@ -69,8 +73,9 @@ export default function App() {
       socket.emit('user-join', currentUser);
     });
 
-    socket.on('initial-data', ({ channels }) => {
+    socket.on('initial-data', ({ channels, stations }) => {
       setChannels(channels);
+      if (stations) setMusicStations(stations);
       const defaultText = channels.find(c => c.type === 'text');
       if (defaultText && activeView === 'server') {
         setCurrentChannel(defaultText);
@@ -113,6 +118,15 @@ export default function App() {
 
     socket.on('peer-voice-state-updated', ({ socketId, voiceState }) => {
       setMembers(prev => prev.map(m => m.socketId === socketId ? { ...m, voiceState } : m));
+    });
+
+    socket.on('music-state-updated', ({ channelId, state }) => {
+      setMusicStates(prev => {
+        const next = new Map(prev);
+        if (state) next.set(channelId, state);
+        else next.delete(channelId);
+        return next;
+      });
     });
 
     webrtc.onRemoteStreamAdded = (socketId, stream, isScreen) => {
@@ -166,6 +180,7 @@ export default function App() {
       socket.off('message-reaction-updated');
       socket.off('voice-room-peers');
       socket.off('peer-voice-state-updated');
+      socket.off('music-state-updated');
     };
   }, [currentUser, currentChannel, activeView]);
 
@@ -254,6 +269,37 @@ export default function App() {
 
   const handleSendMessage = ({ channelId, content, file }) => {
     socket.emit('send-message', { channelId, content, file });
+  };
+
+  // Music bot controls
+  const handlePlayStation = (stationId) => {
+    const chId = currentVoiceChannel?.id || 'voice-genel';
+    socket.emit('music-play', { channelId: chId, stationId });
+  };
+
+  const handlePlayCustom = (customUrl, customName) => {
+    const chId = currentVoiceChannel?.id || 'voice-genel';
+    socket.emit('music-play', { channelId: chId, customUrl, customName });
+  };
+
+  const handlePauseMusic = () => {
+    const chId = currentVoiceChannel?.id || 'voice-genel';
+    socket.emit('music-pause', { channelId: chId });
+  };
+
+  const handleResumeMusic = () => {
+    const chId = currentVoiceChannel?.id || 'voice-genel';
+    socket.emit('music-resume', { channelId: chId });
+  };
+
+  const handleStopMusic = () => {
+    const chId = currentVoiceChannel?.id || 'voice-genel';
+    socket.emit('music-stop', { channelId: chId });
+  };
+
+  const handleSetMusicVolume = (volume) => {
+    const chId = currentVoiceChannel?.id || 'voice-genel';
+    socket.emit('music-volume', { channelId: chId, volume });
   };
 
   const isViewingVoice = currentChannel?.type === 'voice';
@@ -348,6 +394,14 @@ export default function App() {
           onOpenScreenModal={() => setIsScreenModalOpen(true)}
           onStopScreenShare={handleStopScreenShare}
           onLeaveVoice={handleLeaveVoice}
+          musicState={currentVoiceChannel ? musicStates.get(currentVoiceChannel.id) : null}
+          onOpenMusicModal={() => setIsMusicModalOpen(true)}
+          onToggleMusicPlay={() => {
+            const s = currentVoiceChannel ? musicStates.get(currentVoiceChannel.id) : null;
+            if (s?.isPlaying) handlePauseMusic();
+            else handleResumeMusic();
+          }}
+          onStopMusic={handleStopMusic}
         />
       ) : currentChannel ? (
         <ChatArea
@@ -397,6 +451,20 @@ export default function App() {
       <DownloadModal
         isOpen={isDownloadModalOpen}
         onClose={() => setIsDownloadModalOpen(false)}
+      />
+
+      <MusicPlayerModal
+        isOpen={isMusicModalOpen}
+        onClose={() => setIsMusicModalOpen(false)}
+        currentVoiceChannel={currentVoiceChannel}
+        musicState={currentVoiceChannel ? musicStates.get(currentVoiceChannel.id) : null}
+        stations={musicStations}
+        onPlayStation={handlePlayStation}
+        onPlayCustom={handlePlayCustom}
+        onPause={handlePauseMusic}
+        onResume={handleResumeMusic}
+        onStop={handleStopMusic}
+        onSetVolume={handleSetMusicVolume}
       />
     </div>
   );

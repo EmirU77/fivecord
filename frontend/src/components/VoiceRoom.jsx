@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { 
   Monitor, MonitorOff, Video, VideoOff, Mic, MicOff, Headphones, 
-  PhoneOff, Maximize, Sparkles, Volume2, Radio, Check
+  PhoneOff, Maximize, Sparkles, Volume2, Radio, Check, Disc3, Music, Pause, Play
 } from 'lucide-react';
 import { soundEffects } from '../services/soundEffects';
 import { webrtc } from '../services/webrtc';
@@ -23,10 +23,29 @@ export default function VoiceRoom({
   isScreenSharing,
   onOpenScreenModal,
   onStopScreenShare,
-  onLeaveVoice
+  onLeaveVoice,
+  musicState,
+  onOpenMusicModal,
+  onToggleMusicPlay,
+  onStopMusic
 }) {
   const [activeScreenUser, setActiveScreenUser] = useState(null);
   const mainVideoRef = useRef(null);
+  const musicAudioRef = useRef(null);
+
+  // Synchronized background music stream player
+  useEffect(() => {
+    if (!musicAudioRef.current) return;
+    if (musicState?.isPlaying && musicState?.currentTrack?.url) {
+      if (musicAudioRef.current.src !== musicState.currentTrack.url) {
+        musicAudioRef.current.src = musicState.currentTrack.url;
+      }
+      musicAudioRef.current.volume = Math.min(Math.max((musicState.volume ?? 80) / 100, 0), 1);
+      musicAudioRef.current.play().catch(e => console.warn('Music audio play error:', e));
+    } else {
+      musicAudioRef.current.pause();
+    }
+  }, [musicState]);
 
   // Determine if anyone (local or remote) is sharing screen
   useEffect(() => {
@@ -77,7 +96,54 @@ export default function VoiceRoom({
           </span>
         </div>
 
+        {/* Quick Open Music Bot in Header */}
+        <button
+          onClick={onOpenMusicModal}
+          className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#5865f2]/20 hover:bg-[#5865f2] text-[#5865f2] hover:text-white text-xs font-bold transition-all border border-[#5865f2]/30"
+        >
+          <Disc3 className={`w-3.5 h-3.5 ${musicState?.isPlaying ? 'animate-spin' : ''}`} />
+          <span>Müzik Botu</span>
+        </button>
       </div>
+
+      {/* 24/7 MUSIC BOT ACTIVE BAR */}
+      {musicState?.currentTrack && (
+        <div className="bg-[#2b2d31] border-b border-[#383a40] px-6 py-2 flex items-center justify-between text-xs shadow-inner">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 text-[#5865f2] font-black">
+              <Disc3 className={`w-4 h-4 ${musicState.isPlaying ? 'animate-spin' : ''}`} />
+              <span>Fivecord DJ [BOT]:</span>
+            </div>
+            <span className="text-white font-bold">{musicState.currentTrack.name}</span>
+            <span className="text-[10px] text-[#949ba4] px-1.5 py-0.2 rounded bg-[#1e1f22]">
+              {musicState.currentTrack.genre || 'Canlı Müzik'}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onToggleMusicPlay}
+              className="px-3 py-1 rounded-lg bg-[#383a40] hover:bg-[#4e5058] text-white text-xs font-bold transition-all flex items-center gap-1.5"
+            >
+              {musicState.isPlaying ? <Pause className="w-3 h-3 fill-current" /> : <Play className="w-3 h-3 fill-current" />}
+              <span>{musicState.isPlaying ? 'Duraklat' : 'Oynat'}</span>
+            </button>
+            <button
+              onClick={onOpenMusicModal}
+              className="px-3 py-1 rounded-lg bg-[#5865f2] hover:bg-[#4752c4] text-white text-xs font-bold transition-all"
+            >
+              İstasyonlar / Ayar
+            </button>
+            <button
+              onClick={onStopMusic}
+              className="px-2.5 py-1 rounded-lg bg-[#f23f43]/20 hover:bg-[#f23f43] text-[#f23f43] hover:text-white text-xs font-bold transition-all"
+              title="Müziği Kapat"
+            >
+              Kapat
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main Grid Stage */}
       <div className="flex-1 p-6 overflow-y-auto flex flex-col justify-center">
@@ -166,8 +232,26 @@ export default function VoiceRoom({
                         : 'border-[#383a40] hover:border-[#4e5058]'
                     }`}
                   >
-                    {/* CAMERA VIDEO FEED (If Camera is ON) */}
-                    {hasCamera ? (
+                    {/* BOT TILE / VINYL VISUALIZER */}
+                    {member.isBot ? (
+                      <div className="flex flex-col items-center justify-center space-y-3">
+                        <div className="relative">
+                          <div className={`w-28 h-28 rounded-full bg-gradient-to-tr from-[#5865f2] to-[#eb459e] flex items-center justify-center text-white shadow-2xl ${
+                            member.voiceState?.isSpeaking ? 'animate-spin' : ''
+                          }`}>
+                            <Disc3 className="w-16 h-16" />
+                          </div>
+                          <div className="absolute bottom-1 right-1 w-6 h-6 rounded-full bg-[#5865f2] border-3 border-[#2b2d31] flex items-center justify-center text-white text-[10px] font-bold shadow">
+                            ✓
+                          </div>
+                        </div>
+                        <div className="text-center">
+                          <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-[#5865f2]/20 text-[#5865f2] font-black tracking-wider uppercase">
+                            {member.voiceState?.isSpeaking ? '🎵 MÜZİK ÇALIYOR' : 'HAZIR'}
+                          </span>
+                        </div>
+                      </div>
+                    ) : hasCamera ? (
                       <div className="absolute inset-0 w-full h-full bg-black">
                         {isLocal ? (
                           <video
@@ -218,6 +302,7 @@ export default function VoiceRoom({
                       <span className="text-xs font-bold text-white truncate">
                         {member.username}
                         {isLocal && <span className="text-[#949ba4] font-normal ml-1">(Sen)</span>}
+                        {member.isBot && <span className="ml-1 px-1.5 py-0.2 rounded bg-[#5865f2] text-[9px] font-black text-white">BOT</span>}
                       </span>
                       {member.voiceState?.isMuted && (
                         <MicOff className="w-3.5 h-3.5 text-[#f23f43] shrink-0" />
@@ -320,6 +405,20 @@ export default function VoiceRoom({
           )}
         </button>
 
+        {/* MUSIC BOT BUTTON */}
+        <button
+          onClick={onOpenMusicModal}
+          className={`px-5 py-3.5 rounded-full flex items-center gap-2 font-bold text-xs transition-all shadow-lg ${
+            musicState?.isPlaying 
+              ? 'bg-[#5865f2] text-white animate-pulse shadow-[#5865f2]/40' 
+              : 'bg-[#2b2d31] hover:bg-[#35373c] text-white'
+          }`}
+          title="Müzik Botu (Fivecord DJ)"
+        >
+          <Radio className="w-4 h-4 text-pink-400" />
+          <span>{musicState?.isPlaying ? '🎵 Müzik Çalıyor' : '🎵 Müzik Botu'}</span>
+        </button>
+
         {/* Disconnect Call */}
         <button
           onClick={onLeaveVoice}
@@ -329,6 +428,9 @@ export default function VoiceRoom({
           <PhoneOff className="w-5 h-5" />
         </button>
       </div>
+
+      {/* SYNCHRONIZED HTML5 AUDIO ELEMENT FOR MUSIC BOT */}
+      <audio ref={musicAudioRef} autoPlay playsInline />
     </div>
   );
 }

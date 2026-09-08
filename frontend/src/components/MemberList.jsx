@@ -13,6 +13,9 @@ export default function MemberList({ members, currentUser, onOpenDM }) {
   const [selectedMember, setSelectedMember] = useState(null);
   const [userVolumes, setUserVolumes] = useState({});
 
+  const humanMembers = members.filter(m => !m.isBot);
+  const botMembers = members.filter(m => m.isBot);
+
   const handleVolumeChange = (socketId, vol) => {
     setUserVolumes(prev => ({ ...prev, [socketId]: vol }));
     const audioEl = document.getElementById(`audio-${socketId}`);
@@ -23,17 +26,17 @@ export default function MemberList({ members, currentUser, onOpenDM }) {
 
   return (
     <div className="w-60 bg-[#2b2d31] flex flex-col shrink-0 select-none border-l border-[#1f2023] p-3 overflow-y-auto">
-      {/* Category header */}
+      {/* Human Members Category header */}
       <div className="flex items-center justify-between px-2 mb-3">
         <span className="text-[11px] font-bold uppercase tracking-wider text-[#949ba4] flex items-center gap-1.5">
           <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-          <span>VIP Ekip — {members.length}/5</span>
+          <span>VIP Ekip — {humanMembers.length}/5</span>
         </span>
         <span className="text-[10px] font-mono text-[#23a55a] font-bold">ONLINE</span>
       </div>
 
       <div className="space-y-1.5">
-        {members.map((member, idx) => {
+        {humanMembers.map((member, idx) => {
           const roleInfo = DEFAULT_VIP_ROLES[idx] || DEFAULT_VIP_ROLES[0];
           const isCurrent = member.id === currentUser?.id;
           const isSpeaking = member.voiceState?.isSpeaking;
@@ -138,21 +141,65 @@ export default function MemberList({ members, currentUser, onOpenDM }) {
           );
         })}
 
-        {/* Empty slots for 5 people */}
-        {Array.from({ length: Math.max(0, 5 - members.length) }).map((_, i) => (
+        {/* Empty slots for 5 people (Never blocked by bots) */}
+        {Array.from({ length: Math.max(0, 5 - humanMembers.length) }).map((_, i) => (
           <div 
             key={'empty-' + i} 
             className="flex items-center gap-3 p-2 rounded-xl border border-dashed border-[#3f4147] opacity-40 hover:opacity-75 transition-all"
           >
             <div className="w-9 h-9 rounded-full bg-[#1e1f22] border border-dashed border-[#4e5058] flex items-center justify-center text-xs font-bold text-[#949ba4]">
-              {members.length + i + 1}
+              {humanMembers.length + i + 1}
             </div>
             <div className="text-xs text-[#949ba4]">
               <div className="font-semibold text-[#80848e]">Boş VIP Slot</div>
-              <div className="text-[10px] text-[#6b6f7b]">{members.length + i + 1}. Arkadaşını Bekliyor</div>
+              <div className="text-[10px] text-[#6b6f7b]">{humanMembers.length + i + 1}. Arkadaşını Bekliyor</div>
             </div>
           </div>
         ))}
+
+        {/* Dedicated BOT SECTION (Doesn't count towards human limit) */}
+        {botMembers.length > 0 && (
+          <div className="pt-3 mt-3 border-t border-[#383a40]/60 space-y-2">
+            <div className="px-2 text-[10px] font-bold uppercase tracking-wider text-[#949ba4] flex items-center justify-between">
+              <span>BOTLAR — {botMembers.length}</span>
+              <span className="text-[9px] px-1.5 py-0.2 rounded bg-[#5865f2]/20 text-[#5865f2] font-semibold">MÜZİK</span>
+            </div>
+
+            {botMembers.map((bot) => (
+              <div
+                key={bot.id}
+                className="flex items-center gap-3 p-2 rounded-xl bg-[#232428]/60 border border-[#383a40] hover:border-[#5865f2]/50 transition-all group"
+              >
+                <div className="relative shrink-0">
+                  <img
+                    src={bot.avatar}
+                    alt={bot.username}
+                    className={`w-9 h-9 rounded-full object-cover border-2 transition-all ${
+                      bot.voiceState?.isSpeaking ? 'speaking-indicator border-[#5865f2] animate-pulse' : 'border-[#383a40]'
+                    }`}
+                  />
+                  <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-[#5865f2] border-2 border-[#2b2d31] flex items-center justify-center text-[7px] text-white font-bold">
+                    ✓
+                  </div>
+                </div>
+
+                <div className="overflow-hidden flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold truncate text-[#5865f2]">
+                      {bot.username}
+                    </span>
+                    <span className="text-[9px] px-1 py-0.2 rounded bg-[#5865f2] text-white font-black tracking-wider">
+                      BOT
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-[#949ba4] truncate mt-0.5">
+                    {bot.customStatus || '🎵 7/24 Müzik Botu'}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

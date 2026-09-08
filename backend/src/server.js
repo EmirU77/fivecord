@@ -72,6 +72,107 @@ const io = new Server(server, {
 const users = new Map();
 const voiceChannels = new Map();
 const textMessages = new Map();
+const channelMusic = new Map();
+
+// High Quality Free 24/7 Music Stations
+const MUSIC_STATIONS = [
+  {
+    id: 'lofi',
+    name: '🎧 Lofi Girl & Chill Beats',
+    genre: 'Lofi / Chillhop',
+    url: 'https://streams.ilovemusic.de/iloveradio17.mp3',
+    icon: '☕'
+  },
+  {
+    id: 'synthwave',
+    name: '⚡ Synthwave & Cyberpunk Radio',
+    genre: 'Retrowave / Electro',
+    url: 'https://streams.ilovemusic.de/iloveradio20.mp3',
+    icon: '🌆'
+  },
+  {
+    id: 'gaming',
+    name: '🎮 Gaming Phonk & Bass Energy',
+    genre: 'EDM / Gaming Beats',
+    url: 'https://streams.ilovemusic.de/iloveradio2.mp3',
+    icon: '⚡'
+  },
+  {
+    id: 'chill',
+    name: '☕ Smooth Jazz & Cafe Relax',
+    genre: 'Jazz / Acoustic',
+    url: 'https://streams.ilovemusic.de/iloveradio10.mp3',
+    icon: '🎷'
+  },
+  {
+    id: 'rock',
+    name: '🎸 Classic Rock & Metal Hits',
+    genre: 'Rock / Metal',
+    url: 'https://streams.ilovemusic.de/iloveradio21.mp3',
+    icon: '🔥'
+  },
+  {
+    id: 'pop',
+    name: '🌍 Top 100 World Pop & Dance',
+    genre: 'Pop / Dance',
+    url: 'https://streams.ilovemusic.de/iloveradio1.mp3',
+    icon: '🎉'
+  }
+];
+
+// Virtual Music Bot User (Always available, doesn't consume human slots)
+const DJ_BOT_USER = {
+  id: 'bot-fivecord-dj',
+  socketId: 'bot-fivecord-dj',
+  username: 'Fivecord DJ',
+  tag: 'BOT',
+  isBot: true,
+  avatar: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150&auto=format&fit=crop&q=80',
+  color: '#5865F2',
+  status: 'online',
+  customStatus: '🎵 7/24 Müzik Botu',
+  activity: 'Fivecord DJ',
+  role: 'BOT',
+  voiceState: {
+    channelId: null,
+    isMuted: false,
+    isDeafened: false,
+    isScreenSharing: false,
+    isCameraOn: false,
+    isSpeaking: false
+  }
+};
+
+function getAllMembers() {
+  return [...Array.from(users.values()), DJ_BOT_USER];
+}
+
+function sendBotChatMessage(channelId, text) {
+  const botMessage = {
+    id: 'msg-bot-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+    channelId,
+    sender: {
+      id: DJ_BOT_USER.id,
+      username: DJ_BOT_USER.username,
+      avatar: DJ_BOT_USER.avatar,
+      color: DJ_BOT_USER.color,
+      isBot: true
+    },
+    content: text,
+    file: null,
+    timestamp: new Date().toISOString(),
+    reactions: {}
+  };
+  const msgs = textMessages.get(channelId) || [];
+  msgs.push(botMessage);
+  if (msgs.length > 300) msgs.shift();
+  textMessages.set(channelId, msgs);
+  io.emit('new-message', botMessage);
+}
+
+app.get('/api/music/stations', (req, res) => {
+  res.json(MUSIC_STATIONS);
+});
 
 const channels = [
   { id: 'text-genel', name: 'genel-sohbet', type: 'text', topic: '5 kişilik ana sohbet alanı' },
@@ -91,7 +192,8 @@ io.on('connection', (socket) => {
   console.log(`[Socket Connected] ID: ${socket.id}`);
 
   socket.emit('initial-data', {
-    channels
+    channels,
+    stations: MUSIC_STATIONS
   });
 
   socket.on('user-join', (userData) => {
@@ -114,7 +216,7 @@ io.on('connection', (socket) => {
       }
     };
     users.set(socket.id, user);
-    io.emit('members-updated', Array.from(users.values()));
+    io.emit('members-updated', getAllMembers());
   });
 
   socket.on('create-channel', ({ name, type }) => {
@@ -139,7 +241,7 @@ io.on('connection', (socket) => {
     if (!user) return;
     Object.assign(user, updated);
     users.set(socket.id, user);
-    io.emit('members-updated', Array.from(users.values()));
+    io.emit('members-updated', getAllMembers());
   });
 
   socket.on('fetch-messages', (channelId) => {
@@ -172,6 +274,86 @@ io.on('connection', (socket) => {
     textMessages.set(channelId, msgs);
 
     io.emit('new-message', message);
+
+    // Bot command check (!play, !stop, !pause, !resume, !radio, !help)
+    const trimmed = (content || '').trim();
+    if (trimmed.startsWith('!')) {
+      const parts = trimmed.split(' ');
+      const cmd = parts[0].toLowerCase();
+      const arg = parts.slice(1).join(' ').trim();
+      const targetVoiceChannelId = sender.voiceState?.channelId || 'voice-genel';
+
+      if (cmd === '!play') {
+        let station = MUSIC_STATIONS.find(s => s.id === arg.toLowerCase() || s.name.toLowerCase().includes(arg.toLowerCase()));
+        let track;
+        if (station) {
+          track = { id: station.id, name: station.name, url: station.url, genre: station.genre, icon: station.icon };
+        } else if (arg.startsWith('http')) {
+          track = { id: 'custom-' + Date.now(), name: 'Özel Radyo / Ses Yayını', url: arg, genre: 'Özel URL', icon: '🎵' };
+        } else {
+          station = MUSIC_STATIONS[0];
+          track = { id: station.id, name: station.name, url: station.url, genre: station.genre, icon: station.icon };
+        }
+
+        const state = {
+          isPlaying: true,
+          currentTrack: track,
+          volume: 80,
+          startedAt: Date.now()
+        };
+        channelMusic.set(targetVoiceChannelId, state);
+
+        DJ_BOT_USER.voiceState.channelId = targetVoiceChannelId;
+        DJ_BOT_USER.voiceState.isSpeaking = true;
+        DJ_BOT_USER.customStatus = `🎵 ${track.name}`;
+
+        if (voiceChannels.has(targetVoiceChannelId)) {
+          voiceChannels.get(targetVoiceChannelId).add(DJ_BOT_USER.id);
+        }
+
+        io.emit('music-state-updated', { channelId: targetVoiceChannelId, state });
+        io.emit('members-updated', getAllMembers());
+
+        sendBotChatMessage(channelId, `🎶 **Fivecord DJ** odaya katıldı ve çalıyor: **${track.name}** [${track.genre}]`);
+      } else if (cmd === '!stop') {
+        const state = { isPlaying: false, currentTrack: null, volume: 80, startedAt: 0 };
+        channelMusic.set(targetVoiceChannelId, state);
+
+        DJ_BOT_USER.voiceState.channelId = null;
+        DJ_BOT_USER.voiceState.isSpeaking = false;
+        DJ_BOT_USER.customStatus = '🎵 7/24 Müzik Botu';
+
+        if (voiceChannels.has(targetVoiceChannelId)) {
+          voiceChannels.get(targetVoiceChannelId).delete(DJ_BOT_USER.id);
+        }
+
+        io.emit('music-state-updated', { channelId: targetVoiceChannelId, state });
+        io.emit('members-updated', getAllMembers());
+
+        sendBotChatMessage(channelId, `⏹️ **Fivecord DJ**: Müzik durduruldu ve odadan ayrıldı.`);
+      } else if (cmd === '!pause') {
+        const state = channelMusic.get(targetVoiceChannelId);
+        if (state) {
+          state.isPlaying = false;
+          DJ_BOT_USER.voiceState.isSpeaking = false;
+          io.emit('music-state-updated', { channelId: targetVoiceChannelId, state });
+          io.emit('members-updated', getAllMembers());
+          sendBotChatMessage(channelId, `⏸️ **Fivecord DJ**: Müzik duraklatıldı.`);
+        }
+      } else if (cmd === '!resume') {
+        const state = channelMusic.get(targetVoiceChannelId);
+        if (state && state.currentTrack) {
+          state.isPlaying = true;
+          DJ_BOT_USER.voiceState.isSpeaking = true;
+          io.emit('music-state-updated', { channelId: targetVoiceChannelId, state });
+          io.emit('members-updated', getAllMembers());
+          sendBotChatMessage(channelId, `▶️ **Fivecord DJ**: Müzik devam ediyor.`);
+        }
+      } else if (cmd === '!radio' || cmd === '!help') {
+        const list = MUSIC_STATIONS.map(s => `• \`!play ${s.id}\` — ${s.name}`).join('\n');
+        sendBotChatMessage(channelId, `📻 **Fivecord DJ 7/24 Müzik İstasyonları:**\n${list}\n\n*Komutlar: \`!play <istasyon/url>\`, \`!pause\`, \`!resume\`, \`!stop\`*`);
+      }
+    }
   });
 
   socket.on('toggle-reaction', ({ channelId, messageId, emoji }) => {
@@ -251,7 +433,7 @@ io.on('connection', (socket) => {
       user
     });
 
-    io.emit('members-updated', Array.from(users.values()));
+    io.emit('members-updated', getAllMembers());
   });
 
   socket.on('leave-voice-channel', () => {
@@ -275,7 +457,7 @@ io.on('connection', (socket) => {
       user
     });
 
-    io.emit('members-updated', Array.from(users.values()));
+    io.emit('members-updated', getAllMembers());
   });
 
   socket.on('signal', ({ targetSocketId, signal, streamType }) => {
@@ -296,9 +478,97 @@ io.on('connection', (socket) => {
         voiceState: user.voiceState
       });
     }
-    io.emit('members-updated', Array.from(users.values()));
+    io.emit('members-updated', getAllMembers());
   });
 
+  // --- MUSIC BOT SOCKET CONTROLS ---
+  socket.on('fetch-music-state', (channelId) => {
+    const state = channelMusic.get(channelId) || null;
+    socket.emit('music-state-updated', { channelId, state });
+  });
+
+  socket.on('music-play', ({ channelId, stationId, customUrl, customName }) => {
+    let track;
+    if (stationId) {
+      const station = MUSIC_STATIONS.find(s => s.id === stationId);
+      if (station) {
+        track = { id: station.id, name: station.name, url: station.url, genre: station.genre, icon: station.icon };
+      }
+    } else if (customUrl) {
+      track = {
+        id: 'custom-' + Date.now(),
+        name: customName || 'Özel Radyo / Ses Yayını',
+        url: customUrl,
+        genre: 'Özel Akış',
+        icon: '🎵'
+      };
+    }
+
+    if (!track) return;
+
+    const state = {
+      isPlaying: true,
+      currentTrack: track,
+      volume: 80,
+      startedAt: Date.now()
+    };
+    channelMusic.set(channelId, state);
+
+    DJ_BOT_USER.voiceState.channelId = channelId;
+    DJ_BOT_USER.voiceState.isSpeaking = true;
+    DJ_BOT_USER.customStatus = `🎵 ${track.name}`;
+
+    if (voiceChannels.has(channelId)) {
+      voiceChannels.get(channelId).add(DJ_BOT_USER.id);
+    }
+
+    io.emit('music-state-updated', { channelId, state });
+    io.emit('members-updated', getAllMembers());
+  });
+
+  socket.on('music-pause', ({ channelId }) => {
+    const state = channelMusic.get(channelId);
+    if (state) {
+      state.isPlaying = false;
+      DJ_BOT_USER.voiceState.isSpeaking = false;
+      io.emit('music-state-updated', { channelId, state });
+      io.emit('members-updated', getAllMembers());
+    }
+  });
+
+  socket.on('music-resume', ({ channelId }) => {
+    const state = channelMusic.get(channelId);
+    if (state && state.currentTrack) {
+      state.isPlaying = true;
+      DJ_BOT_USER.voiceState.isSpeaking = true;
+      io.emit('music-state-updated', { channelId, state });
+      io.emit('members-updated', getAllMembers());
+    }
+  });
+
+  socket.on('music-stop', ({ channelId }) => {
+    const state = { isPlaying: false, currentTrack: null, volume: 80, startedAt: 0 };
+    channelMusic.set(channelId, state);
+
+    DJ_BOT_USER.voiceState.channelId = null;
+    DJ_BOT_USER.voiceState.isSpeaking = false;
+    DJ_BOT_USER.customStatus = '🎵 7/24 Müzik Botu';
+
+    if (voiceChannels.has(channelId)) {
+      voiceChannels.get(channelId).delete(DJ_BOT_USER.id);
+    }
+
+    io.emit('music-state-updated', { channelId, state });
+    io.emit('members-updated', getAllMembers());
+  });
+
+  socket.on('music-volume', ({ channelId, volume }) => {
+    const state = channelMusic.get(channelId);
+    if (state) {
+      state.volume = volume;
+      io.emit('music-state-updated', { channelId, state });
+    }
+  });
 
   socket.on('disconnect', () => {
     const user = users.get(socket.id);
@@ -312,7 +582,7 @@ io.on('connection', (socket) => {
         });
       }
       users.delete(socket.id);
-      io.emit('members-updated', Array.from(users.values()));
+      io.emit('members-updated', getAllMembers());
     }
   });
 });
