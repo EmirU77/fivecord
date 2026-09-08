@@ -4,7 +4,7 @@ import {
   FileText, Download, Heart, Flame, ThumbsUp, Laugh,
   Monitor, MonitorOff, Video, Sparkles, Volume2, Radio,
   Bell, Pin, Users, Search, Disc3, Mic, X, Check, Copy,
-  Trash2, ExternalLink, Dices, Gift, MessageSquare
+  Trash2, ExternalLink, Dices, Gift, MessageSquare, Zap
 } from 'lucide-react';
 import { socket } from '../services/socket';
 import { soundEffects } from '../services/soundEffects';
