@@ -1,25 +1,15 @@
 import { socket } from './socket';
 
-// High reliability ICE servers: Cloudflare STUN + Google STUN + OpenRelay (Metered) Free Public TURN
-// Essential for NAT traversal (CGNAT, symmetric NATs, cellular hotspot, Turkish ISPs)
+// High reliability Google + Cloudflare STUN servers (resolve in <10ms, no rate limits, works across LAN/NAT)
 const ICE_SERVERS = {
   iceServers: [
-    { urls: 'stun:stun.cloudflare.com:3478' },
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun.voip.blackberry.com:3478' },
-    {
-      urls: [
-        'turn:openrelay.metered.ca:80',
-        'turn:openrelay.metered.ca:443',
-        'turn:openrelay.metered.ca:443?transport=tcp'
-      ],
-      username: 'openrelayproject',
-      credential: 'openrelayproject'
-    }
-  ],
-  iceCandidatePoolSize: 10
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+    { urls: 'stun:stun.cloudflare.com:3478' }
+  ]
 };
 
 export const QUALITY_PRESETS = {
@@ -31,7 +21,7 @@ export const QUALITY_PRESETS = {
       height: { ideal: 2160, max: 2160 },
       frameRate: { ideal: 60, max: 60 }
     },
-    bitrate: 15000000
+    bitrate: 8000000
   },
   '1080p-60': {
     name: 'Pro HD (1080p @ 60 FPS)',
@@ -41,7 +31,7 @@ export const QUALITY_PRESETS = {
       height: { ideal: 1080, max: 1080 },
       frameRate: { ideal: 60, max: 60 }
     },
-    bitrate: 8000000
+    bitrate: 4500000
   },
   '720p-60': {
     name: 'Akıcı Oyun (720p @ 60 FPS)',
@@ -51,7 +41,7 @@ export const QUALITY_PRESETS = {
       height: { ideal: 720, max: 720 },
       frameRate: { ideal: 60, max: 60 }
     },
-    bitrate: 4500000
+    bitrate: 3000000
   },
   '1080p-30': {
     name: 'Standart (1080p @ 30 FPS)',
@@ -61,7 +51,7 @@ export const QUALITY_PRESETS = {
       height: { ideal: 1080, max: 1080 },
       frameRate: { ideal: 30, max: 30 }
     },
-    bitrate: 3500000
+    bitrate: 2500000
   }
 };
 
@@ -73,8 +63,8 @@ class WebRTCManager {
     this.cameraTrack = null;
     this.cameraStream = null;
     this.screenStream = null;
-    this.remoteStreams = new Map(); // socketId -> MediaStream
-    this.remoteScreenStreams = new Map(); // socketId -> MediaStream
+    this.remoteStreams = new Map(); // socketId -> MediaStream (Voice audio)
+    this.remoteScreenStreams = new Map(); // socketId -> MediaStream (Dedicated Screen Video)
     this.peerScreenStreamIds = new Map(); // socketId -> screenStreamId
 
     this.audioContext = null;
@@ -85,6 +75,8 @@ class WebRTCManager {
 
     this.onRemoteStreamAdded = null;
     this.onRemoteStreamRemoved = null;
+    this.onScreenStreamAdded = null;
+    this.onScreenStreamRemoved = null;
     this.onScreenShareEnded = null;
     this.onSpeakingChanged = null;
     this.onConnectionStateChange = null;
@@ -238,6 +230,23 @@ class WebRTCManager {
     return this.isNoiseSuppressionOn;
   }
 
+  preferVP8Codec(pc, sender) {
+    if (!pc || !sender || !pc.getTransceivers || !window.RTCRtpReceiver?.getCapabilities) return;
+    try {
+      const transceiver = pc.getTransceivers().find(t => t.sender === sender);
+      if (transceiver && transceiver.setCodecPreferences) {
+        const codecs = RTCRtpReceiver.getCapabilities('video')?.codecs || [];
+        const vp8Codecs = codecs.filter(c => c.mimeType.toLowerCase() === 'video/vp8');
+        const otherCodecs = codecs.filter(c => c.mimeType.toLowerCase() !== 'video/vp8');
+        if (vp8Codecs.length > 0) {
+          transceiver.setCodecPreferences([...vp8Codecs, ...otherCodecs]);
+        }
+      }
+    } catch (e) {
+      console.warn('[WebRTC] VP8 preference error:', e);
+    }
+  }
+
   createPeerConnection(targetSocketId, isInitiator) {
     if (this.peers.has(targetSocketId)) {
       return this.peers.get(targetSocketId);
@@ -248,13 +257,13 @@ class WebRTCManager {
     this.peers.set(targetSocketId, pc);
     this.pendingCandidates.set(targetSocketId, []);
 
-    // 1. Add existing local audio track
+    // 1. Add existing local audio track (Microphone)
     if (this.localStream) {
-      this.localStream.getTracks().forEach(track => {
+      this.localStream.getAudioTracks().forEach(track => {
         try {
           pc.addTrack(track, this.localStream);
         } catch (e) {
-          console.warn('[WebRTC] Error adding local track:', e);
+          console.warn('[WebRTC] Error adding local audio track:', e);
         }
       });
     }
@@ -262,35 +271,22 @@ class WebRTCManager {
     // 2. Add camera track if active
     if (this.cameraTrack && this.cameraStream) {
       try {
-        pc.addTrack(this.cameraTrack, this.cameraStream);
+        const s = pc.addTrack(this.cameraTrack, this.cameraStream);
+        this.preferVP8Codec(pc, s);
       } catch (e) {}
     }
 
-    // 3. Add screen track if active
+    // 3. Add screen track if currently active (handles peer joining during active stream)
     if (this.screenStream) {
       this.screenStream.getTracks().forEach(track => {
         try {
-          pc.addTrack(track, this.screenStream);
+          const s = pc.addTrack(track, this.screenStream);
+          if (track.kind === 'video') this.preferVP8Codec(pc, s);
         } catch (e) {}
       });
     }
 
-    // 4. Ensure transceivers for audio and video exist with direction sendrecv
-    const senders = pc.getSenders();
-    const hasAudio = senders.some(s => s.track && s.track.kind === 'audio');
-    if (!hasAudio) {
-      try {
-        pc.addTransceiver('audio', { direction: 'sendrecv' });
-      } catch (e) {}
-    }
-    const hasVideo = senders.some(s => s.track && s.track.kind === 'video');
-    if (!hasVideo) {
-      try {
-        pc.addTransceiver('video', { direction: 'sendrecv' });
-      } catch (e) {}
-    }
-
-    // 5. ICE Candidate emitter
+    // 4. ICE Candidate emitter
     pc.onicecandidate = (event) => {
       if (event.candidate) {
         socket.emit('signal', {
@@ -300,59 +296,60 @@ class WebRTCManager {
       }
     };
 
-    // 6. Remote track receiver
+    // 5. Remote track receiver: clean separation of voice audio vs. screen video
     pc.ontrack = (event) => {
-      console.log(`[WebRTC] Remote track received from ${targetSocketId}:`, {
-        kind: event.track.kind,
-        id: event.track.id,
-        label: event.track.label,
-        streamsCount: event.streams.length,
-        streamId: event.streams[0]?.id
-      });
+      console.log(`[WebRTC] Remote track received from ${targetSocketId}: kind=${event.track.kind}, id=${event.track.id}`);
 
-      let stream = event.streams && event.streams[0];
-      if (!stream) {
-        // Fallback: create or retrieve existing stream for this peer
-        let existing = this.remoteStreams.get(targetSocketId);
-        if (!existing) {
-          existing = new MediaStream();
+      if (event.track.kind === 'video') {
+        // Dedicated, fresh MediaStream for remote screen / camera video
+        const stream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
+        if (!stream.getVideoTracks().includes(event.track)) {
+          stream.addTrack(event.track);
         }
-        existing.addTrack(event.track);
-        stream = existing;
-      }
 
-      const hasVideo = stream && stream.getVideoTracks().length > 0;
-      const isScreen = event.track.kind === 'video' || hasVideo;
-
-      if (isScreen) {
         this.remoteScreenStreams.set(targetSocketId, stream);
-      }
-      this.remoteStreams.set(targetSocketId, stream);
 
-      event.track.onended = () => {
-        console.log(`[WebRTC] Remote track ended for ${targetSocketId} (${event.track.kind})`);
-        if (isScreen) {
+        const notifyAdded = () => {
+          if (this.onScreenStreamAdded) {
+            this.onScreenStreamAdded(targetSocketId, stream);
+          }
+          if (this.onRemoteStreamAdded) {
+            this.onRemoteStreamAdded(targetSocketId, stream, true, event.track);
+          }
+        };
+
+        notifyAdded();
+
+        event.track.onunmute = () => {
+          console.log(`[WebRTC] Remote video track unmuted from ${targetSocketId}! First frame arrived.`);
+          notifyAdded();
+        };
+
+        event.track.onended = () => {
+          console.log(`[WebRTC] Remote video track ended for ${targetSocketId}`);
           this.remoteScreenStreams.delete(targetSocketId);
           this.peerScreenStreamIds.delete(targetSocketId);
-        }
-        if (this.onRemoteStreamRemoved) {
-          this.onRemoteStreamRemoved(targetSocketId);
-        }
-      };
-
-      event.track.onunmute = () => {
-        console.log(`[WebRTC] Remote track unmuted for ${targetSocketId} (${event.track.kind})`);
+          if (this.onScreenStreamRemoved) {
+            this.onScreenStreamRemoved(targetSocketId);
+          }
+        };
+      } else if (event.track.kind === 'audio') {
+        const stream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
+        this.remoteStreams.set(targetSocketId, stream);
         if (this.onRemoteStreamAdded) {
-          this.onRemoteStreamAdded(targetSocketId, stream, isScreen, event.track);
+          this.onRemoteStreamAdded(targetSocketId, stream, false, event.track);
         }
-      };
 
-      if (this.onRemoteStreamAdded) {
-        this.onRemoteStreamAdded(targetSocketId, stream, isScreen, event.track);
+        event.track.onended = () => {
+          this.remoteStreams.delete(targetSocketId);
+          if (this.onRemoteStreamRemoved) {
+            this.onRemoteStreamRemoved(targetSocketId);
+          }
+        };
       }
     };
 
-    // 7. Connection state changes
+    // 6. Connection state changes
     pc.onconnectionstatechange = () => {
       console.log(`[WebRTC] Peer ${targetSocketId} connectionState -> ${pc.connectionState}`);
       if (this.onConnectionStateChange) {
@@ -371,7 +368,7 @@ class WebRTCManager {
       }
     };
 
-    // 8. Explicitly initiate offer if initiator!
+    // 7. Explicitly initiate offer if initiator
     if (isInitiator) {
       this.initiateOffer(targetSocketId, pc);
     }
@@ -388,7 +385,9 @@ class WebRTCManager {
       await pc.setLocalDescription(offer);
       socket.emit('signal', {
         targetSocketId,
-        signal: { sdp: pc.localDescription }
+        signal: { sdp: pc.localDescription },
+        streamType: this.screenStream ? 'screen' : 'user',
+        screenStreamId: this.screenStream ? this.screenStream.id : null
       });
       console.log(`[WebRTC] Initiator sent SDP offer to ${targetSocketId}`);
     } catch (err) {
@@ -411,10 +410,9 @@ class WebRTCManager {
         console.log(`[WebRTC] Received SDP ${signal.sdp.type} from ${senderSocketId} (streamType: ${streamType})`);
         await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
 
-        // Drain buffered ICE candidates now that remote description is set!
+        // Drain buffered ICE candidates now that remote description is set
         const pending = this.pendingCandidates.get(senderSocketId) || [];
         if (pending.length > 0) {
-          console.log(`[WebRTC] Adding ${pending.length} buffered candidates for ${senderSocketId}`);
           for (const cand of pending) {
             try {
               await pc.addIceCandidate(cand);
@@ -425,43 +423,27 @@ class WebRTCManager {
           this.pendingCandidates.set(senderSocketId, []);
         }
 
-        // Reliably capture incoming screen video from transceivers (even if ontrack didn't fire)
-        if (streamType === 'screen' || screenStreamId) {
-          const vTransceiver = pc.getTransceivers().find(t => t.receiver?.track?.kind === 'video');
-          if (vTransceiver && vTransceiver.receiver?.track) {
-            const vTrack = vTransceiver.receiver.track;
-            let screenStream = this.remoteScreenStreams.get(senderSocketId);
-            if (!screenStream || !screenStream.getVideoTracks().includes(vTrack)) {
-              screenStream = new MediaStream([vTrack]);
-              this.remoteScreenStreams.set(senderSocketId, screenStream);
+        // If screen share stopped
+        if (streamType === 'user' && !screenStreamId) {
+          if (this.remoteScreenStreams.has(senderSocketId)) {
+            this.remoteScreenStreams.delete(senderSocketId);
+            this.peerScreenStreamIds.delete(senderSocketId);
+            if (this.onScreenStreamRemoved) {
+              this.onScreenStreamRemoved(senderSocketId);
             }
-            if (this.onRemoteStreamAdded) {
-              this.onRemoteStreamAdded(senderSocketId, screenStream, true, vTrack);
-            }
-          }
-        } else if (streamType === 'user' && !screenStreamId) {
-          // Stream ended
-          this.remoteScreenStreams.delete(senderSocketId);
-          this.peerScreenStreamIds.delete(senderSocketId);
-          if (this.onRemoteStreamRemoved) {
-            this.onRemoteStreamRemoved(senderSocketId);
           }
         }
 
         if (signal.sdp.type === 'offer') {
-          // Make sure all local tracks (audio, screen, camera) are attached before creating answer
+          // If we have active screen share, make sure our screen track is attached before answering
           const senders = pc.getSenders();
-          if (this.localStream) {
-            this.localStream.getTracks().forEach(track => {
-              if (!senders.some(s => s.track === track)) {
-                try { pc.addTrack(track, this.localStream); } catch (e) {}
-              }
-            });
-          }
           if (this.screenStream) {
             this.screenStream.getTracks().forEach(track => {
               if (!senders.some(s => s.track === track)) {
-                try { pc.addTrack(track, this.screenStream); } catch (e) {}
+                try {
+                  const s = pc.addTrack(track, this.screenStream);
+                  if (track.kind === 'video') this.preferVP8Codec(pc, s);
+                } catch (e) {}
               }
             });
           }
@@ -469,6 +451,13 @@ class WebRTCManager {
             this.cameraStream.getTracks().forEach(track => {
               if (!senders.some(s => s.track === track)) {
                 try { pc.addTrack(track, this.cameraStream); } catch (e) {}
+              }
+            });
+          }
+          if (this.localStream) {
+            this.localStream.getTracks().forEach(track => {
+              if (!senders.some(s => s.track === track)) {
+                try { pc.addTrack(track, this.localStream); } catch (e) {}
               }
             });
           }
@@ -488,7 +477,6 @@ class WebRTCManager {
         if (pc.remoteDescription && pc.remoteDescription.type) {
           await pc.addIceCandidate(iceCandidate);
         } else {
-          // Buffer candidate until remote description arrives
           const pending = this.pendingCandidates.get(senderSocketId) || [];
           pending.push(iceCandidate);
           this.pendingCandidates.set(senderSocketId, pending);
@@ -508,14 +496,21 @@ class WebRTCManager {
       await pc.setLocalDescription(offer);
       socket.emit('signal', {
         targetSocketId,
-        signal: { sdp: pc.localDescription }
+        signal: { sdp: pc.localDescription },
+        streamType: this.screenStream ? 'screen' : 'user',
+        screenStreamId: this.screenStream ? this.screenStream.id : null
       });
     } catch (e) {
       console.warn(`[WebRTC] Error restarting ICE for ${targetSocketId}:`, e);
     }
   }
 
+  restartStream(targetSocketId) {
+    this.restartIce(targetSocketId);
+  }
+
   async renegotiate(targetSocketId, pc, streamType = 'user', screenStreamId = null) {
+    if (!pc || pc.connectionState === 'closed') return;
     try {
       if (pc.signalingState !== 'stable') {
         console.log(`[WebRTC] Delaying renegotiate for ${targetSocketId} (state: ${pc.signalingState})`);
@@ -523,7 +518,7 @@ class WebRTCManager {
           if (pc.signalingState === 'stable') {
             this.renegotiate(targetSocketId, pc, streamType, screenStreamId);
           }
-        }, 400);
+        }, 300);
         return;
       }
       const offer = await pc.createOffer({
@@ -580,23 +575,19 @@ class WebRTCManager {
       this.peers.forEach((pc, targetSocketId) => {
         displayStream.getTracks().forEach((track) => {
           const sender = pc.addTrack(track, displayStream);
-
           if (track.kind === 'video') {
-            const params = sender.getParameters();
-            if (!params.encodings || params.encodings.length === 0) {
-              params.encodings = [{}];
-            }
-            params.encodings[0].maxBitrate = preset.bitrate;
-            params.encodings[0].degradationPreference = 'maintain-framerate';
-            sender.setParameters(params).catch(e => console.warn('Bitrate adjust notice:', e));
+            this.preferVP8Codec(pc, sender);
           }
         });
         this.renegotiate(targetSocketId, pc, 'screen', displayStream.id);
       });
 
-      displayStream.getVideoTracks()[0].onended = () => {
-        this.stopScreenShare();
-      };
+      const videoTrack = displayStream.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.onended = () => {
+          this.stopScreenShare();
+        };
+      }
 
       socket.emit('update-voice-state', { isScreenSharing: true, screenStreamId: displayStream.id });
       return { success: true, stream: displayStream, preset };
@@ -610,7 +601,9 @@ class WebRTCManager {
     if (!this.screenStream) return;
 
     const tracks = this.screenStream.getTracks();
-    tracks.forEach(track => track.stop());
+    tracks.forEach(track => {
+      try { track.stop(); } catch (e) {}
+    });
 
     this.peers.forEach((pc, targetSocketId) => {
       const senders = pc.getSenders();
@@ -645,7 +638,8 @@ class WebRTCManager {
         this.localStream.addTrack(videoTrack);
 
         this.peers.forEach((pc, targetSocketId) => {
-          pc.addTrack(videoTrack, this.localStream);
+          const s = pc.addTrack(videoTrack, this.localStream);
+          this.preferVP8Codec(pc, s);
           this.renegotiate(targetSocketId, pc);
         });
 
@@ -719,9 +713,13 @@ class WebRTCManager {
     this.pendingCandidates.delete(socketId);
     this.remoteStreams.delete(socketId);
     this.remoteScreenStreams.delete(socketId);
+    this.peerScreenStreamIds.delete(socketId);
 
     if (this.onRemoteStreamRemoved) {
       this.onRemoteStreamRemoved(socketId);
+    }
+    if (this.onScreenStreamRemoved) {
+      this.onScreenStreamRemoved(socketId);
     }
   }
 
@@ -746,6 +744,7 @@ class WebRTCManager {
     this.pendingCandidates.clear();
     this.remoteStreams.clear();
     this.remoteScreenStreams.clear();
+    this.peerScreenStreamIds.clear();
   }
 }
 

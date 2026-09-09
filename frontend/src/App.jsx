@@ -313,6 +313,30 @@ export default function App() {
       socket.emit('scan-active-game');
     }, 25000);
 
+    webrtc.onScreenStreamAdded = (socketId, stream) => {
+      console.log(`[WebRTC] Screen stream added for ${socketId}`);
+      setRemoteScreenStreams(prev => {
+        const next = new Map(prev);
+        next.set(socketId, stream);
+        return next;
+      });
+    };
+
+    webrtc.onScreenStreamRemoved = (socketId) => {
+      console.log(`[WebRTC] Screen stream removed for ${socketId}`);
+      setRemoteScreenStreams(prev => {
+        if (!prev.has(socketId)) return prev;
+        const next = new Map(prev);
+        next.delete(socketId);
+        return next;
+      });
+      const screenEl = document.getElementById(`audio-screen-${socketId}`);
+      if (screenEl) {
+        screenEl.srcObject = null;
+        screenEl.pause();
+      }
+    };
+
     webrtc.onRemoteStreamAdded = (socketId, stream, isScreen) => {
       console.log(`[Audio Debug] Remote stream added for ${socketId}:`, {
         isScreen,
@@ -321,9 +345,18 @@ export default function App() {
       });
 
       if (isScreen) {
-        setRemoteScreenStreams(prev => new Map(prev).set(socketId, stream));
+        setRemoteScreenStreams(prev => {
+          const next = new Map(prev);
+          next.set(socketId, stream);
+          return next;
+        });
+      } else {
+        setRemoteStreams(prev => {
+          const next = new Map(prev);
+          next.set(socketId, stream);
+          return next;
+        });
       }
-      setRemoteStreams(prev => new Map(prev).set(socketId, stream));
 
       // If stream has audio tracks, ensure it is played actively and unmuted
       const audioTracks = stream.getAudioTracks();
@@ -376,11 +409,7 @@ export default function App() {
 
     webrtc.onRemoteStreamRemoved = (socketId) => {
       setRemoteStreams(prev => {
-        const next = new Map(prev);
-        next.delete(socketId);
-        return next;
-      });
-      setRemoteScreenStreams(prev => {
+        if (!prev.has(socketId)) return prev;
         const next = new Map(prev);
         next.delete(socketId);
         return next;
@@ -389,11 +418,6 @@ export default function App() {
       if (el) {
         el.srcObject = null;
         el.pause();
-      }
-      const screenEl = document.getElementById(`audio-screen-${socketId}`);
-      if (screenEl) {
-        screenEl.srcObject = null;
-        screenEl.pause();
       }
     };
 

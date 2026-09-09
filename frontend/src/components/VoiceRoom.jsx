@@ -21,69 +21,95 @@ function formatTime(seconds) {
 }
 
 // Standalone bulletproof Stream Player that guarantees NO black screen
-function StreamPlayer({ streamItem, isFocused = false, onFocus }) {
+function StreamPlayer({ streamItem, isFocused = false, onFocus, onRetry }) {
   const videoRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [loadSeconds, setLoadSeconds] = useState(0);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !streamItem?.stream) return;
 
+    setIsPlaying(false);
+    setLoadSeconds(0);
+
     // Set muted on DOM properties directly before srcObject (bypasses browser autoplay policy)
     video.muted = true;
     video.defaultMuted = true;
-    if (video.srcObject !== streamItem.stream) {
-      video.srcObject = streamItem.stream;
-    }
+    video.playsInline = true;
+    video.setAttribute('playsinline', 'true');
+    video.setAttribute('webkit-playsinline', 'true');
+    video.setAttribute('autoplay', 'true');
 
-    const checkPlaying = () => {
-      if (video.videoWidth > 0 || video.currentTime > 0) {
-        setIsPlaying(true);
-      }
+    video.srcObject = streamItem.stream;
+
+    const markPlaying = () => {
+      setIsPlaying(true);
     };
 
     const tryPlay = () => {
       video.muted = true;
-      video.play().then(() => {
-        checkPlaying();
-      }).catch(() => {});
+      const playPromise = video.play();
+      if (playPromise !== undefined) {
+        playPromise.then(() => {
+          if (video.videoWidth > 0 || video.currentTime > 0) {
+            markPlaying();
+          }
+        }).catch(() => {});
+      }
     };
 
     tryPlay();
 
-    const onLoadedMetadata = () => { tryPlay(); checkPlaying(); };
-    const onCanPlay = () => { tryPlay(); checkPlaying(); };
-    const onPlaying = () => setIsPlaying(true);
-    const onTimeUpdate = () => checkPlaying();
+    const onLoadedMetadata = () => { tryPlay(); if (video.videoWidth > 0) markPlaying(); };
+    const onCanPlay = () => { tryPlay(); if (video.videoWidth > 0) markPlaying(); };
+    const onPlaying = () => markPlaying();
+    const onResize = () => { if (video.videoWidth > 0) markPlaying(); };
+    const onTimeUpdate = () => { if (video.videoWidth > 0 || video.currentTime > 0) markPlaying(); };
 
+    video.addEventListener('loadeddata', markPlaying);
     video.addEventListener('loadedmetadata', onLoadedMetadata);
     video.addEventListener('canplay', onCanPlay);
     video.addEventListener('playing', onPlaying);
+    video.addEventListener('resize', onResize);
     video.addEventListener('timeupdate', onTimeUpdate);
 
     // Watch video track unmute (when first UDP RTP video packet arrives)
     const vTrack = streamItem.stream.getVideoTracks()[0];
     const onUnmute = () => {
       tryPlay();
-      setIsPlaying(true);
+      markPlaying();
     };
     if (vTrack) {
       if (!vTrack.muted && vTrack.readyState === 'live') {
-        setIsPlaying(true);
+        markPlaying();
       }
       vTrack.addEventListener('unmute', onUnmute);
     }
 
+    // High frequency watchdog interval to detect first frame immediately
+    const checkInterval = setInterval(() => {
+      setLoadSeconds(prev => prev + 0.25);
+      if (video.videoWidth > 0 || video.currentTime > 0) {
+        markPlaying();
+      } else {
+        tryPlay();
+      }
+    }, 250);
+
     return () => {
+      clearInterval(checkInterval);
+      video.removeEventListener('loadeddata', markPlaying);
       video.removeEventListener('loadedmetadata', onLoadedMetadata);
       video.removeEventListener('canplay', onCanPlay);
       video.removeEventListener('playing', onPlaying);
+      video.removeEventListener('resize', onResize);
       video.removeEventListener('timeupdate', onTimeUpdate);
       if (vTrack) {
         vTrack.removeEventListener('unmute', onUnmute);
       }
     };
-  }, [streamItem?.stream]);
+  }, [streamItem?.stream, streamItem?.id]);
 
   const toggleFullscreen = () => {
     if (videoRef.current) {
@@ -141,9 +167,25 @@ function StreamPlayer({ streamItem, isFocused = false, onFocus }) {
 
       {/* Loading overlay if video hasn't rendered first frame */}
       {!isPlaying && (
-        <div className="absolute inset-0 bg-black/85 flex flex-col items-center justify-center gap-2.5 text-white z-0 pointer-events-none">
-          <Loader2 className="w-8 h-8 text-[#5865f2] animate-spin" />
+        <div className="absolute inset-0 bg-black/85 flex flex-col items-center justify-center gap-3 text-white z-0">
+          <Loader2 className="w-9 h-9 text-[#5865f2] animate-spin" />
           <span className="text-xs font-medium text-[#dbdee1]">Yayın yükleniyor ve senkronize ediliyor...</span>
+          {loadSeconds > 3.0 && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (videoRef.current) {
+                  videoRef.current.load();
+                  videoRef.current.play().catch(() => {});
+                }
+                if (onRetry) onRetry(streamItem.socketId);
+              }}
+              className="mt-1 px-3.5 py-1.5 rounded-lg bg-[#5865f2] hover:bg-[#4752c4] text-white text-xs font-bold transition-all shadow-md cursor-pointer flex items-center gap-1.5 pointer-events-auto"
+            >
+              <RotateCw className="w-3.5 h-3.5" />
+              <span>Yeniden Senkronize Et</span>
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -228,7 +270,7 @@ export default function VoiceRoom({
         const liveVideo = stream && stream.getVideoTracks().find(t => t.readyState === 'live');
         if (stream && liveVideo) {
           list.push({
-            id: member.socketId,
+            id: `${member.socketId}-${liveVideo.id}`,
             socketId: member.socketId,
             username: member.username,
             avatar: member.avatar,
@@ -247,7 +289,7 @@ export default function VoiceRoom({
         const liveVideo = stream && stream.getVideoTracks().find(t => t.readyState === 'live');
         if (isSharing && liveVideo && !list.some(s => s.socketId === socketId)) {
           list.push({
-            id: socketId,
+            id: `${socketId}-${liveVideo.id}`,
             socketId,
             username: peer?.username || 'Arkadaşın',
             avatar: peer?.avatar,
@@ -589,6 +631,7 @@ export default function VoiceRoom({
                   <div key={streamItem.id} className="aspect-video w-full">
                     <StreamPlayer
                       streamItem={streamItem}
+                      onRetry={onReconnectVoice}
                       onFocus={() => {
                         setSelectedStreamId(streamItem.id);
                         setLayoutMode('focus');
@@ -604,6 +647,7 @@ export default function VoiceRoom({
                   <StreamPlayer
                     streamItem={focusedStream}
                     isFocused={true}
+                    onRetry={onReconnectVoice}
                   />
                 </div>
               )
