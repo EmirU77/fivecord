@@ -436,6 +436,7 @@ export default function App() {
   // --- CHANNEL & DM ACTIONS ---
   const handleSelectChannel = (channel) => {
     setCurrentChannel(channel);
+    currentChannelRef.current = channel;
     if (channel.type === 'text') {
       socket.emit('fetch-messages', channel.id);
     }
@@ -534,13 +535,13 @@ export default function App() {
     }
   };
 
-  const handleSendMessage = (contentOrObj, maybeFile) => {
+  const handleSendMessage = (contentOrObj, maybeFile, explicitChannelId) => {
     let content = '';
     let file = null;
-    let chId = currentChannelRef.current?.id || currentChannel?.id;
+    let chId = explicitChannelId || currentChannelRef.current?.id || currentChannel?.id;
 
     if (typeof contentOrObj === 'object' && contentOrObj !== null && !contentOrObj.url) {
-      chId = contentOrObj.channelId || chId;
+      chId = contentOrObj.channelId || explicitChannelId || chId;
       content = contentOrObj.content || '';
       file = contentOrObj.file || null;
     } else {

@@ -116,7 +116,7 @@ export default function ChatArea({
       return;
     }
 
-    onSendMessage(trimmed);
+    onSendMessage(trimmed, null, channel.id);
     setInputText('');
     setShowEmojiPicker(false);
     setShowGifPicker(false);
@@ -130,12 +130,12 @@ export default function ChatArea({
       name: 'GIF',
       url: gifUrl,
       mimetype: 'image/gif'
-    });
+    }, channel.id);
     setShowGifPicker(false);
   };
 
   const handleSendQuickGreeting = () => {
-    onSendMessage('👋 Selam beyler, Fivecord VIP odasındayım! Oyuna kimler geliyor? 🎮');
+    onSendMessage('👋 Selam beyler, Fivecord VIP odasındayım! Oyuna kimler geliyor? 🎮', null, channel.id);
   };
 
   const handleInsertCommand = (cmd) => {
@@ -145,7 +145,7 @@ export default function ChatArea({
 
   const handleRollDice = () => {
     const roll = Math.floor(Math.random() * 100) + 1;
-    onSendMessage(`🎲 **Zar Atıldı (1-100):** Sonuç **${roll}**!`);
+    onSendMessage(`🎲 **Zar Atıldı (1-100):** Sonuç **${roll}**!`, null, channel.id);
     setShowPlusMenu(false);
   };
 
@@ -170,7 +170,7 @@ export default function ChatArea({
           url: data.url,
           mimetype: file.type,
           size: file.size
-        });
+        }, channel.id);
       }
     } catch (err) {
       alert('Dosya yüklenemedi: ' + err.message);
@@ -348,7 +348,7 @@ export default function ChatArea({
       {/* 2. MAIN CHAT AREA (HERO HUB + MESSAGES) */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
         
-        {/* HERO WELCOME & ACTION HUB */}
+        {/* NATIVE DISCORD-STYLE MINIMAL CHANNEL START */}
         {channel.id === 'dm-empty' ? (
           <div className="flex-1 flex flex-col items-center justify-center p-12 text-center select-none my-auto">
             <div className="w-16 h-16 rounded-3xl bg-[#5865f2]/20 flex items-center justify-center text-[#5865f2] mb-4 shadow-lg shadow-[#5865f2]/20">
@@ -356,224 +356,38 @@ export default function ChatArea({
             </div>
             <h2 className="text-xl font-black text-white mb-2">Henüz Bir Arkadaş Seçilmedi</h2>
             <p className="text-sm text-[#949ba4] max-w-md">
-              Özel mesajlaşmak için sol taraftaki direkt mesaj listesinden bir arkadaşınızı seçin veya genel sohbette arkadaşınızın profiline tıklayın.
+              Özel mesajlaşmak için sol taraftaki listeden bir arkadaşını seç.
             </p>
           </div>
         ) : channel.type === 'dm' ? (
-          <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-b from-[#2b2d31] via-[#232428] to-[#1e1f22] border border-[#3f4147] shadow-xl relative overflow-hidden select-none mb-6">
-            <div className="relative z-10 flex flex-col items-start gap-4">
-              <div className="relative">
-                <img
-                  src={channel.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${channel.name}`}
-                  alt={channel.name}
-                  className="w-18 h-18 rounded-full bg-[#1e1f22] object-cover border-4 border-[#5865f2] shadow-xl"
-                />
-                <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-[#23a55a] border-3 border-[#2b2d31]" />
-              </div>
-
-              <div>
-                <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                  @{channel.name}
-                </h1>
-                <p className="text-xs sm:text-sm text-[#949ba4] mt-1.5 max-w-xl leading-relaxed">
-                  Bu sizin <strong>@{channel.name}</strong> ile olan doğrudan özel mesajlaşma geçmişinizin başlangıcıdır.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => onSendMessage('👋 Selam! Nasılsın?')}
-                  className="px-4 py-2 rounded-xl bg-[#5865f2] hover:bg-[#4752c4] text-white text-xs font-bold transition-all shadow-md cursor-pointer hover:scale-105"
-                >
-                  👋 Selam Ver
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onSendMessage('🎮 Akşam Fivecord\'da oyuna geliyor musun?')}
-                  className="px-4 py-2 rounded-xl bg-[#2b2d31] hover:bg-[#35373c] text-white text-xs font-bold border border-[#3f4147] transition-all cursor-pointer hover:scale-105"
-                >
-                  🎮 Oyuna Çağır
-                </button>
-              </div>
+          <div className="pt-6 pb-2 px-2 select-none">
+            <div className="relative inline-block mb-3">
+              <img
+                src={channel.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${channel.name}`}
+                alt={channel.name}
+                className="w-20 h-20 rounded-full bg-[#1e1f22] object-cover border-4 border-[#313338] shadow-lg"
+              />
+              <div className="absolute bottom-1 right-1 w-5 h-5 rounded-full bg-[#23a55a] border-3 border-[#313338]" />
             </div>
+            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+              @{channel.name}
+            </h1>
+            <p className="text-xs sm:text-sm text-[#949ba4] mt-1 max-w-xl leading-relaxed">
+              Bu, <strong>@{channel.name}</strong> ile olan doğrudan özel mesajlaşma geçmişinizin başlangıcıdır.
+            </p>
           </div>
         ) : (
-          <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-b from-[#2b2d31] via-[#232428] to-[#1e1f22] border border-[#3f4147] shadow-xl relative overflow-hidden select-none mb-6">
-            {/* Subtle Ambient Glow */}
-            <div className="absolute -top-24 -left-24 w-72 h-72 bg-[#5865f2]/15 rounded-full blur-3xl pointer-events-none" />
-            <div className="absolute -bottom-24 -right-24 w-72 h-72 bg-[#eb459e]/10 rounded-full blur-3xl pointer-events-none" />
-
-          {/* Hero Header */}
-          <div className="relative z-10 flex flex-col items-start gap-3">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#5865f2] to-[#eb459e] flex items-center justify-center text-white shadow-lg shadow-[#5865f2]/25 ring-4 ring-white/10">
-              <Hash className="w-9 h-9 stroke-[2.5]" />
+          <div className="pt-6 pb-2 px-2 select-none">
+            <div className="w-16 h-16 rounded-full bg-[#5865f2]/20 flex items-center justify-center text-[#5865f2] mb-3">
+              <Hash className="w-8 h-8 stroke-[2.5]" />
             </div>
-
-            <div>
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                  #{channel.name} Odasına Hoş Geldiniz!
-                </h1>
-                <span className="px-2.5 py-0.5 rounded-full bg-[#5865f2]/20 border border-[#5865f2]/40 text-[#5865f2] text-xs font-bold">
-                  VIP ODA
-                </span>
-              </div>
-              <p className="text-xs sm:text-sm text-[#949ba4] mt-1.5 max-w-xl leading-relaxed">
-                Burası 5 kişilik özel arkadaş grubunuzun ana toplanma merkezidir. Spotify, YouTube ve SoundCloud'dan müzik dinleyebilir, 60 FPS ekran paylaşabilir ve dilediğiniz dosyayı paylaşabilirsiniz.
-              </p>
-            </div>
+            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+              #{channel.name} kanalına hoş geldiniz!
+            </h1>
+            <p className="text-xs sm:text-sm text-[#949ba4] mt-1 max-w-xl leading-relaxed">
+              Burası #{channel.name} kanalının başlangıcıdır.
+            </p>
           </div>
-
-          {/* 4 INTERACTIVE QUICK ACTION CARDS */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-6 relative z-10">
-            
-            {/* Card 1: Music Player */}
-            <div 
-              onClick={onOpenMusicModal}
-              className="p-3.5 rounded-2xl bg-[#2b2d31]/80 hover:bg-[#35373c] border border-[#3f4147] hover:border-[#1db954]/50 transition-all cursor-pointer group shadow-sm flex flex-col justify-between gap-3"
-            >
-              <div className="flex items-start gap-3">
-                <div className="w-9 h-9 rounded-xl bg-[#1db954]/15 border border-[#1db954]/30 flex items-center justify-center text-[#1db954] shrink-0 group-hover:scale-110 transition-transform">
-                  <Disc3 className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-white group-hover:text-[#1db954] transition-colors">
-                    Fivecord DJ'i Aç
-                  </h4>
-                  <p className="text-[11px] text-[#949ba4] mt-0.5 leading-snug">
-                    Spotify & YouTube'dan şarkı ara ve odada çal.
-                  </p>
-                </div>
-              </div>
-              <button className="w-full py-1.5 rounded-lg bg-[#1db954]/20 hover:bg-[#1db954] text-[#1db954] hover:text-white text-xs font-bold transition-colors">
-                Müziği Başlat ▶
-              </button>
-            </div>
-
-            {/* Card 2: Voice Channel Join */}
-            <div 
-              onClick={() => onJoinVoice?.(firstVoice)}
-              className="p-3.5 rounded-2xl bg-[#2b2d31]/80 hover:bg-[#35373c] border border-[#3f4147] hover:border-[#23a55a]/50 transition-all cursor-pointer group shadow-sm flex flex-col justify-between gap-3"
-            >
-              <div className="flex items-start gap-3">
-                <div className="w-9 h-9 rounded-xl bg-[#23a55a]/15 border border-[#23a55a]/30 flex items-center justify-center text-[#23a55a] shrink-0 group-hover:scale-110 transition-transform">
-                  <Volume2 className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-white group-hover:text-[#23a55a] transition-colors">
-                    Ses Odasına Gir
-                  </h4>
-                  <p className="text-[11px] text-[#949ba4] mt-0.5 leading-snug">
-                    Düşük gecikmeli, kristal netliğinde ses odasına bağlan.
-                  </p>
-                </div>
-              </div>
-              <button className="w-full py-1.5 rounded-lg bg-[#23a55a]/20 hover:bg-[#23a55a] text-[#23a55a] hover:text-white text-xs font-bold transition-colors">
-                Odaya Katıl 🔊
-              </button>
-            </div>
-
-            {/* Card 3: Screen Share */}
-            <div 
-              onClick={isScreenSharing ? onStopScreenShare : onOpenScreenModal}
-              className="p-3.5 rounded-2xl bg-[#2b2d31]/80 hover:bg-[#35373c] border border-[#3f4147] hover:border-[#5865f2]/50 transition-all cursor-pointer group shadow-sm flex flex-col justify-between gap-3"
-            >
-              <div className="flex items-start gap-3">
-                <div className="w-9 h-9 rounded-xl bg-[#5865f2]/15 border border-[#5865f2]/30 flex items-center justify-center text-[#5865f2] shrink-0 group-hover:scale-110 transition-transform">
-                  <Monitor className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-white group-hover:text-[#5865f2] transition-colors">
-                    60 FPS Canlı Yayın
-                  </h4>
-                  <p className="text-[11px] text-[#949ba4] mt-0.5 leading-snug">
-                    Oyununu veya masaüstünü arkadaşlarına canlı yayınla.
-                  </p>
-                </div>
-              </div>
-              <button className="w-full py-1.5 rounded-lg bg-[#5865f2]/20 hover:bg-[#5865f2] text-[#5865f2] hover:text-white text-xs font-bold transition-colors">
-                Yayın Başlat 📺
-              </button>
-            </div>
-
-            {/* Card 4: Quick Greeting */}
-            <div 
-              onClick={handleSendQuickGreeting}
-              className="p-3.5 rounded-2xl bg-[#2b2d31]/80 hover:bg-[#35373c] border border-[#3f4147] hover:border-[#f0b232]/50 transition-all cursor-pointer group shadow-sm flex flex-col justify-between gap-3"
-            >
-              <div className="flex items-start gap-3">
-                <div className="w-9 h-9 rounded-xl bg-[#f0b232]/15 border border-[#f0b232]/30 flex items-center justify-center text-[#f0b232] shrink-0 group-hover:scale-110 transition-transform">
-                  <Smile className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-white group-hover:text-[#f0b232] transition-colors">
-                    Hızlı Selam Gönder
-                  </h4>
-                  <p className="text-[11px] text-[#949ba4] mt-0.5 leading-snug">
-                    Sohbete tek tıkla VIP açılış selamı gönder.
-                  </p>
-                </div>
-              </div>
-              <button className="w-full py-1.5 rounded-lg bg-[#f0b232]/20 hover:bg-[#f0b232] text-[#f0b232] hover:text-black text-xs font-bold transition-colors">
-                Selam Ver 👋
-              </button>
-            </div>
-
-          </div>
-
-          {/* QUICK COMMANDS CHEAT SHEET BAR */}
-          <div className="mt-5 pt-4 border-t border-[#3f4147]/60 flex items-center justify-between flex-wrap gap-2 text-xs relative z-10">
-            <span className="text-white font-bold flex items-center gap-1.5">
-              <span>💡 Hızlı Komutlar (Tıkla ve Gönder):</span>
-            </span>
-
-            <div className="flex items-center gap-2 flex-wrap text-[11px] font-mono">
-              <button 
-                type="button"
-                onClick={() => handleInsertCommand('!play')}
-                className="px-2.5 py-1 rounded-lg bg-[#1e1f22] hover:bg-[#5865f2] text-[#5865f2] hover:text-white border border-[#383a40] transition-colors cursor-pointer"
-              >
-                !play [şarkı]
-              </button>
-              <button 
-                type="button"
-                onClick={() => handleInsertCommand('!pause')}
-                className="px-2.5 py-1 rounded-lg bg-[#1e1f22] hover:bg-[#5865f2] text-[#5865f2] hover:text-white border border-[#383a40] transition-colors cursor-pointer"
-              >
-                !pause
-              </button>
-              <button 
-                type="button"
-                onClick={() => handleInsertCommand('!resume')}
-                className="px-2.5 py-1 rounded-lg bg-[#1e1f22] hover:bg-[#5865f2] text-[#5865f2] hover:text-white border border-[#383a40] transition-colors cursor-pointer"
-              >
-                !resume
-              </button>
-              <button 
-                type="button"
-                onClick={() => handleInsertCommand('!stop')}
-                className="px-2.5 py-1 rounded-lg bg-[#1e1f22] hover:bg-[#5865f2] text-[#5865f2] hover:text-white border border-[#383a40] transition-colors cursor-pointer"
-              >
-                !stop
-              </button>
-              <button 
-                type="button"
-                onClick={() => handleInsertCommand('!volume 100')}
-                className="px-2.5 py-1 rounded-lg bg-[#1e1f22] hover:bg-[#5865f2] text-[#5865f2] hover:text-white border border-[#383a40] transition-colors cursor-pointer"
-              >
-                !volume 100
-              </button>
-              <button 
-                type="button"
-                onClick={() => handleInsertCommand('!np')}
-                className="px-2.5 py-1 rounded-lg bg-[#1e1f22] hover:bg-[#5865f2] text-[#5865f2] hover:text-white border border-[#383a40] transition-colors cursor-pointer"
-              >
-                !np
-              </button>
-            </div>
-          </div>
-        </div>
         )}
 
         {/* 3. MESSAGES STREAM */}
@@ -954,6 +768,12 @@ export default function ChatArea({
             type="text"
             value={inputText}
             onChange={handleInputChange}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSend(e);
+              }
+            }}
             placeholder={
               channel.type === 'dm'
                 ? `@${channel.name} kullanıcısına özel mesaj gönder...`
