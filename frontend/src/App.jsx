@@ -16,6 +16,9 @@ import BackgroundMusicPlayer, { loadYouTubeApi } from './components/BackgroundMu
 import DecisionWheelModal from './components/DecisionWheelModal';
 import WatchTogetherModal from './components/WatchTogetherModal';
 import LoginModal from './components/LoginModal';
+import UserContextMenu from './components/UserContextMenu';
+import MiniPlayer from './components/MiniPlayer';
+import RoleManagementModal from './components/RoleManagementModal';
 import { socket } from './services/socket';
 import { webrtc } from './services/webrtc';
 import { voiceRelay } from './services/voiceRelay';
@@ -91,6 +94,9 @@ export default function App() {
   // Remote WebRTC streams
   const [remoteStreams, setRemoteStreams] = useState(new Map());
   const [remoteScreenStreams, setRemoteScreenStreams] = useState(new Map());
+  const [roles, setRoles] = useState([]);
+  const [showRoleManager, setShowRoleManager] = useState(false);
+  const [contextMenu, setContextMenu] = useState(null); // { x, y, targetMember }
 
   const audioContainerRef = useRef(null);
   const peerSpeakingTimers = useRef(new Map());
@@ -151,9 +157,10 @@ export default function App() {
       alert(message || 'Hesabınıza başka bir sekmeden veya cihazdan giriş yapıldı.');
     });
 
-    socket.on('initial-data', ({ channels, stations, watchTogether, music }) => {
+    socket.on('initial-data', ({ channels, stations, watchTogether, music, roles }) => {
       setChannels(channels);
       if (stations) setMusicStations(stations);
+      if (roles) setRoles(roles);
       if (watchTogether) {
         setWatchTogetherRooms(new Map(Object.entries(watchTogether)));
       }
@@ -167,6 +174,20 @@ export default function App() {
         currentChannelRef.current = targetChannel;
         socket.emit('fetch-messages', targetChannel.id);
       }
+    });
+
+    socket.on('roles-updated', (updatedRoles) => {
+      setRoles(updatedRoles);
+    });
+
+    socket.on('kicked-from-server', ({ reason }) => {
+      alert(`[Sunucudan Atıldınız]\n${reason || 'Sunucu yetkilisi tarafından sunucudan atıldınız.'}`);
+      window.location.reload();
+    });
+
+    socket.on('banned-from-server', ({ reason }) => {
+      alert(`[Sunucudan Yasaklandınız]\n${reason || 'Sunucudan kalıcı olarak yasaklandınız.'}`);
+      window.location.reload();
     });
 
     socket.on('channels-updated', (updatedChannels) => {
@@ -390,9 +411,15 @@ export default function App() {
         // Screen audio and microphone audio both stay unmuted for high-fidelity Opus playback.
         // (voiceRelay coordinates via suppressPeer to prevent duplicate echo when WebRTC connects).
         audioEl.muted = false;
-        const userVol = voiceRelay.getUserVolume(socketId);
-        const masterVol = voiceRelay.getMasterOutputVolume() / 100;
-        audioEl.volume = Math.max(0, Math.min(1, userVol * masterVol));
+        if (isScreen) {
+          const savedStreamVol = localStorage.getItem(`stream_vol_${socketId}`);
+          const streamVolumeFactor = savedStreamVol !== null ? Number(savedStreamVol) / 100 : 1.0;
+          audioEl.volume = Math.max(0, Math.min(1, streamVolumeFactor));
+        } else {
+          const userVol = voiceRelay.getUserVolume(socketId);
+          const masterVol = voiceRelay.getMasterOutputVolume() / 100;
+          audioEl.volume = Math.max(0, Math.min(1, userVol * masterVol));
+        }
 
         const playPromise = audioEl.play();
         if (playPromise !== undefined) {
@@ -574,6 +601,15 @@ export default function App() {
     socket.emit('fetch-messages', dmChannelId);
   };
 
+  const handleOpenContextMenu = (e, targetMember) => {
+    e.preventDefault();
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      targetMember
+    });
+  };
+
   const handleJoinVoice = async (channel) => {
     soundEffects.playJoin();
     await voiceRelay.resumeContexts();
@@ -736,6 +772,30 @@ export default function App() {
   };
 
   const isViewingVoice = Boolean(currentVoiceChannel && currentChannel?.id === currentVoiceChannel.id);
+  const voiceMembers = members.filter(m => m.voiceState?.channelId === currentVoiceChannel?.id);
+  const activeScreenStreams = [];
+  voiceMembers.forEach(m => {
+    if (m.id !== currentUser?.id && m.voiceState?.isScreenSharing) {
+      activeScreenStreams.push({
+        id: m.socketId,
+        socketId: m.socketId,
+        username: m.username,
+        avatar: m.avatar,
+        stream: remoteScreenStreams?.get(m.socketId) || null,
+        isLocal: false
+      });
+    }
+  });
+  if (isScreenSharing && screenStream) {
+    activeScreenStreams.push({
+      id: 'local',
+      socketId: 'local',
+      username: currentUser?.username || 'Sen',
+      avatar: currentUser?.avatar,
+      stream: screenStream,
+      isLocal: true
+    });
+  }
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#1e1f22]">
@@ -950,7 +1010,10 @@ export default function App() {
         <MemberList
           members={members}
           currentUser={currentUser}
+          roles={roles}
           onOpenDM={handleSelectDmUser}
+          onContextMenu={handleOpenContextMenu}
+          onOpenRoleManager={() => setShowRoleManager(true)}
         />
       )}
 
@@ -1029,6 +1092,43 @@ export default function App() {
         onClose={() => setIsLoginModalOpen(false)}
         currentUser={currentUser}
       />
+
+      {/* PICTURE-IN-PICTURE (PiP) MINIPLAYER */}
+      {currentVoiceChannel && currentChannel?.id !== currentVoiceChannel.id && (
+        <MiniPlayer
+          voiceChannel={currentVoiceChannel}
+          activeScreenStreams={activeScreenStreams}
+          channelMembers={voiceMembers}
+          currentUser={currentUser}
+          isMuted={isMuted}
+          onToggleMute={handleToggleMute}
+          isDeafened={isDeafened}
+          onToggleDeafen={handleToggleDeafen}
+          onLeaveVoice={handleLeaveVoice}
+          onReturnToVoice={() => setCurrentChannel(currentVoiceChannel)}
+        />
+      )}
+
+      {/* USER RIGHT-CLICK CONTEXT MENU */}
+      {contextMenu && (
+        <UserContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          targetMember={contextMenu.targetMember}
+          currentUser={currentUser}
+          roles={roles}
+          onClose={() => setContextMenu(null)}
+          onOpenDM={handleSelectDmUser}
+        />
+      )}
+
+      {/* ROLE MANAGEMENT MODAL */}
+      {showRoleManager && (
+        <RoleManagementModal
+          roles={roles}
+          onClose={() => setShowRoleManager(false)}
+        />
+      )}
     </div>
   );
 }

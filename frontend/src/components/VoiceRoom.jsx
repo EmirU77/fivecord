@@ -29,6 +29,25 @@ function StreamPlayer({ streamItem, isFocused = false, onFocus, onRetry }) {
   const [isWebRtcPlaying, setIsWebRtcPlaying] = useState(false);
   const [isRelayPlaying, setIsRelayPlaying] = useState(false);
   const [loadSeconds, setLoadSeconds] = useState(0);
+  const [streamVol, setStreamVol] = useState(() => {
+    try {
+      const s = localStorage.getItem(`stream_vol_${streamItem?.socketId}`);
+      return s !== null ? Number(s) : 100;
+    } catch (e) {
+      return 100;
+    }
+  });
+
+  const handleStreamVolChange = (val) => {
+    setStreamVol(val);
+    try {
+      localStorage.setItem(`stream_vol_${streamItem?.socketId}`, val);
+    } catch (e) {}
+    const screenAudio = document.getElementById(`audio-screen-${streamItem.socketId}`);
+    if (screenAudio) {
+      screenAudio.volume = Math.min(1.0, Math.max(0, val / 100));
+    }
+  };
 
   // --- 1. WebRTC Direct Video Pipeline ---
   useEffect(() => {
@@ -241,8 +260,25 @@ function StreamPlayer({ streamItem, isFocused = false, onFocus, onRetry }) {
         </span>
       </div>
 
-      {/* Top Right: Actions */}
+      {/* Top Right: Actions & Stream Audio Mixer */}
       <div className="absolute top-3.5 right-3.5 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+        {/* Stream Audio Mixer Slider */}
+        {!streamItem.isLocal && (
+          <div className="flex items-center bg-black/80 backdrop-blur-xs rounded-xl px-2.5 py-1.5 border border-white/10 gap-2">
+            <Volume2 className="w-3.5 h-3.5 text-[#23a55a] shrink-0" />
+            <input
+              type="range"
+              min="0"
+              max="200"
+              value={streamVol}
+              onChange={(e) => handleStreamVolChange(Number(e.target.value))}
+              className="w-16 accent-[#23a55a] h-1.5 bg-[#2b2d31] rounded cursor-pointer"
+              title={`Yayın Sesi: ${streamVol}%`}
+            />
+            <span className="text-[10px] font-mono text-white font-bold min-w-[28px]">{streamVol}%</span>
+          </div>
+        )}
+
         {onFocus && (
           <button
             onClick={onFocus}

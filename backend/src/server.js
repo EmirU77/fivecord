@@ -207,7 +207,58 @@ const DJ_BOT_USER = {
 };
 
 function getAllMembers() {
-  return [...Array.from(users.values()), DJ_BOT_USER];
+  const accounts = persistence.loadAccounts();
+  const roles = persistence.loadRoles();
+  const onlineMap = new Map();
+  for (const u of users.values()) {
+    if (u.id) onlineMap.set(u.id, u);
+    if (u.username) onlineMap.set(u.username.toLowerCase(), u);
+  }
+
+  const memberList = accounts.map(acc => {
+    const liveUser = onlineMap.get(acc.id) || onlineMap.get(acc.username?.toLowerCase());
+    const isOnline = Boolean(liveUser);
+    const userRoles = Array.isArray(acc.roles) && acc.roles.length > 0 ? acc.roles : ['role-member'];
+    
+    // Find highest role based on position
+    const highestRole = roles
+      .filter(r => userRoles.includes(r.id))
+      .sort((a, b) => a.position - b.position)[0] || null;
+
+    return {
+      id: acc.id,
+      username: acc.username,
+      avatar: acc.avatar,
+      avatarDecoration: acc.avatarDecoration || 'none',
+      banner: acc.banner || null,
+      bio: acc.bio || '',
+      color: highestRole?.color || acc.color || '#5865F2',
+      nameEffect: acc.nameEffect || 'normal',
+      badges: acc.badges || [],
+      customStatus: liveUser?.customStatus || acc.customStatus || '',
+      statusEmoji: liveUser?.statusEmoji || acc.statusEmoji || '',
+      status: isOnline ? (liveUser.status || acc.status || 'online') : 'offline',
+      isOnline,
+      socketId: liveUser ? liveUser.socketId : null,
+      voiceState: liveUser ? liveUser.voiceState : null,
+      gameActivity: liveUser?.gameActivity || acc.gameActivity || null,
+      roles: userRoles,
+      highestRole,
+      lastSeen: acc.lastSeen || 0
+    };
+  });
+
+  // Ensure DJ bot is in member list
+  if (!memberList.some(m => m.id === DJ_BOT_USER.id)) {
+    memberList.push({
+      ...DJ_BOT_USER,
+      isOnline: true,
+      roles: ['role-bot'],
+      highestRole: { id: 'role-bot', name: 'BOT', color: '#5865f2', position: 99, hoist: false }
+    });
+  }
+
+  return memberList;
 }
 
 function sendBotChatMessage(channelId, text) {
@@ -547,12 +598,22 @@ io.on('connection', (socket) => {
     channels,
     stations: MUSIC_STATIONS,
     watchTogether: Object.fromEntries(watchTogetherRooms),
-    music: Object.fromEntries(channelMusic)
+    music: Object.fromEntries(channelMusic),
+    roles: persistence.loadRoles(),
+    bans: persistence.loadBans()
   });
 
   socket.on('user-join', (userData) => {
     if (!userData) return;
     const cleanUsername = (userData.username || `Üye-${socket.id.slice(0, 4)}`).trim();
+
+    if (persistence.isBanned(userData.id, cleanUsername)) {
+      socket.emit('banned-from-server', {
+        reason: 'Bu sunucudan kalıcı olarak yasaklandınız.'
+      });
+      socket.disconnect(true);
+      return;
+    }
 
     // DEDUPLICATION: Check if another socket has the exact same username or ID
     // If so, replace old socket so user NEVER takes up duplicate slots (+1 yer kaplamaz)
@@ -1332,6 +1393,174 @@ io.on('connection', (socket) => {
       state.volume = volume;
       io.emit('music-state-updated', { channelId, state });
     }
+  });
+
+  // --- ROLES & PERMISSIONS SYSTEM ---
+  socket.on('get-roles', () => {
+    socket.emit('roles-updated', persistence.loadRoles());
+  });
+
+  socket.on('create-role', ({ name, color, permissions, hoist }) => {
+    const roles = persistence.loadRoles();
+    const newRole = {
+      id: 'role-' + Date.now().toString(36),
+      name: (name || '').trim() || 'Yeni Rol',
+      color: color || '#99aab5',
+      position: roles.length + 1,
+      hoist: Boolean(hoist),
+      permissions: Array.isArray(permissions) ? permissions : []
+    };
+    roles.push(newRole);
+    persistence.saveRoles(roles);
+    io.emit('roles-updated', roles);
+    io.emit('members-updated', getAllMembers());
+  });
+
+  socket.on('update-role', ({ roleId, updates }) => {
+    let roles = persistence.loadRoles();
+    const idx = roles.findIndex(r => r.id === roleId);
+    if (idx !== -1) {
+      roles[idx] = { ...roles[idx], ...updates };
+      persistence.saveRoles(roles);
+      io.emit('roles-updated', roles);
+      io.emit('members-updated', getAllMembers());
+    }
+  });
+
+  socket.on('delete-role', ({ roleId }) => {
+    if (roleId === 'role-founder') return; // Protect founder role
+    let roles = persistence.loadRoles().filter(r => r.id !== roleId);
+    persistence.saveRoles(roles);
+
+    // Remove deleted role from accounts
+    const accounts = persistence.loadAccounts();
+    accounts.forEach(acc => {
+      if (Array.isArray(acc.roles)) {
+        acc.roles = acc.roles.filter(r => r !== roleId);
+      }
+    });
+    persistence.safeWriteJSON(persistence.ACCOUNTS_FILE, accounts);
+
+    io.emit('roles-updated', roles);
+    io.emit('members-updated', getAllMembers());
+  });
+
+  socket.on('assign-role', ({ targetUserId, roleId, action }) => {
+    const accounts = persistence.loadAccounts();
+    const target = accounts.find(a => a.id === targetUserId);
+    if (!target) return;
+
+    if (!Array.isArray(target.roles)) target.roles = [];
+    if (action === 'add' && !target.roles.includes(roleId)) {
+      target.roles.push(roleId);
+    } else if (action === 'remove') {
+      target.roles = target.roles.filter(r => r !== roleId);
+    }
+    persistence.safeWriteJSON(persistence.ACCOUNTS_FILE, accounts);
+
+    // Update in-memory active user
+    for (const u of users.values()) {
+      if (u.id === targetUserId) {
+        u.roles = target.roles;
+        break;
+      }
+    }
+
+    io.emit('members-updated', getAllMembers());
+  });
+
+  // --- MODERATION: KICK, BAN, SERVER-MUTE ---
+  socket.on('kick-member', ({ targetUserId, reason }) => {
+    const sender = users.get(socket.id);
+    let targetSocket = null;
+    let targetUser = null;
+
+    for (const [sId, u] of users.entries()) {
+      if (u.id === targetUserId) {
+        targetSocket = io.sockets.sockets.get(sId);
+        targetUser = u;
+        break;
+      }
+    }
+
+    if (targetSocket && targetUser) {
+      targetSocket.emit('kicked-from-server', {
+        reason: reason || 'Sunucu yetkilisi tarafından sunucudan atıldınız.'
+      });
+      if (targetUser.voiceState?.channelId) {
+        const vCh = voiceChannels.get(targetUser.voiceState.channelId);
+        if (vCh) vCh.delete(targetUser.id);
+        targetSocket.leave(`voice-${targetUser.voiceState.channelId}`);
+      }
+      users.delete(targetSocket.id);
+      targetSocket.disconnect(true);
+
+      sendBotChatMessage('text-genel', `👞 **${targetUser.username}** sunucudan atıldı. (Yetkili: ${sender?.username || 'Yönetici'})`);
+      io.emit('members-updated', getAllMembers());
+    }
+  });
+
+  socket.on('ban-member', ({ targetUserId, reason }) => {
+    const sender = users.get(socket.id);
+    const accounts = persistence.loadAccounts();
+    const acc = accounts.find(a => a.id === targetUserId);
+    const targetUsername = acc ? acc.username : 'Kullanıcı';
+
+    const bans = persistence.loadBans();
+    if (!bans.some(b => b.userId === targetUserId)) {
+      bans.push({
+        userId: targetUserId,
+        username: targetUsername,
+        reason: reason || 'Sunucudan yasaklandı.',
+        bannedBy: sender?.username || 'Yönetici',
+        bannedAt: Date.now()
+      });
+      persistence.saveBans(bans);
+    }
+
+    for (const [sId, u] of users.entries()) {
+      if (u.id === targetUserId) {
+        const targetSocket = io.sockets.sockets.get(sId);
+        if (targetSocket) {
+          targetSocket.emit('banned-from-server', {
+            reason: reason || 'Sunucudan kalıcı olarak yasaklandınız.'
+          });
+          targetSocket.disconnect(true);
+        }
+        users.delete(sId);
+        break;
+      }
+    }
+
+    sendBotChatMessage('text-genel', `⛔ **${targetUsername}** sunucudan kalıcı olarak yasaklandı! (Sebep: ${reason || 'Belirtilmedi'})`);
+    io.emit('bans-updated', bans);
+    io.emit('members-updated', getAllMembers());
+  });
+
+  socket.on('unban-member', ({ targetUserId }) => {
+    let bans = persistence.loadBans().filter(b => b.userId !== targetUserId);
+    persistence.saveBans(bans);
+    io.emit('bans-updated', bans);
+  });
+
+  socket.on('get-bans', () => {
+    socket.emit('bans-updated', persistence.loadBans());
+  });
+
+  socket.on('server-mute-member', ({ targetUserId, isMuted }) => {
+    for (const u of users.values()) {
+      if (u.id === targetUserId && u.voiceState) {
+        u.voiceState.isMuted = Boolean(isMuted);
+        if (u.voiceState.channelId) {
+          io.to(`voice-${u.voiceState.channelId}`).emit('peer-voice-state-updated', {
+            socketId: u.socketId,
+            voiceState: u.voiceState
+          });
+        }
+        break;
+      }
+    }
+    io.emit('members-updated', getAllMembers());
   });
 
   socket.on('disconnect', () => {
