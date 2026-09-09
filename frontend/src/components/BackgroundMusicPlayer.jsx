@@ -32,7 +32,6 @@ export function loadYouTubeApi() {
       resolve(window.YT);
     };
 
-    // Polling fallback in case onYouTubeIframeAPIReady fired earlier
     const checkInterval = setInterval(() => {
       if (window.YT && window.YT.Player) {
         clearInterval(checkInterval);
@@ -47,7 +46,8 @@ export function loadYouTubeApi() {
 export default function BackgroundMusicPlayer({
   musicState,
   userVolume = 80,
-  onTrackEnd
+  onTrackEnd,
+  onSyncedStart
 }) {
   const containerRef = useRef(null);
   const ytPlayerRef = useRef(null);
@@ -58,10 +58,15 @@ export default function BackgroundMusicPlayer({
   const currentVideoIdRef = useRef(null);
   const userVolumeRef = useRef(userVolume);
   const onTrackEndRef = useRef(onTrackEnd);
+  const onSyncedStartRef = useRef(onSyncedStart);
 
   useEffect(() => {
     onTrackEndRef.current = onTrackEnd;
   }, [onTrackEnd]);
+
+  useEffect(() => {
+    onSyncedStartRef.current = onSyncedStart;
+  }, [onSyncedStart]);
 
   useEffect(() => {
     musicStateRef.current = musicState;
@@ -123,13 +128,13 @@ export default function BackgroundMusicPlayer({
     };
   }, []);
 
-  // 1. YouTube Player Instance Initialization (Keep warm in background, do not destroy)
+  // 1. YouTube Player Instance Initialization (Keep warm in background)
   useEffect(() => {
     let isSubscribed = true;
 
     loadYouTubeApi().then((YT) => {
       if (!isSubscribed) return;
-      if (ytPlayerRef.current) return; // Player already created
+      if (ytPlayerRef.current) return;
       if (!containerRef.current) return;
 
       containerRef.current.innerHTML = '<div id="fivecord-bg-yt-player"></div>';
@@ -157,15 +162,11 @@ export default function BackgroundMusicPlayer({
               if (userVolumeRef.current > 0) p.unMute();
             } catch (err) {}
 
-            // If a track was queued before onReady fired:
             const curr = musicStateRef.current;
             if (curr?.currentTrack?.source === 'youtube' && curr.currentTrack.id) {
-              const elapsed = curr.isPlaying && curr.updatedAt
-                ? (Date.now() - curr.updatedAt) / 1000
-                : 0;
-              const startSeconds = (curr.currentTime < 5 && elapsed < 6)
-                ? 0
-                : Math.max(0, (curr.currentTime || 0) + elapsed);
+              const isLateJoin = (curr.currentTime || 0) > 15 || (curr.startedAt && (Date.now() - curr.startedAt) > 20000);
+              const elapsed = (!curr.isBuffering && curr.isPlaying && curr.startedAt) ? (Date.now() - curr.startedAt) / 1000 : 0;
+              const startSeconds = isLateJoin ? Math.max(0, (curr.currentTime || 0) + elapsed) : 0;
 
               currentVideoIdRef.current = curr.currentTrack.id;
               p.loadVideoById({
@@ -179,12 +180,18 @@ export default function BackgroundMusicPlayer({
             }
           },
           onStateChange: (e) => {
-            if (e.data === 1 && userVolumeRef.current > 0) {
-              try { e.target.unMute(); } catch (err) {}
+            if (e.data === 1) { // 1 === YT.PlayerState.PLAYING
+              if (userVolumeRef.current > 0) {
+                try { e.target.unMute(); } catch (err) {}
+              }
+              // Notify server and room that real audio has begun playing at 0:00
+              const curr = musicStateRef.current;
+              if (curr?.isBuffering && onSyncedStartRef.current && currentVideoIdRef.current) {
+                onSyncedStartRef.current(currentVideoIdRef.current, e.target.getCurrentTime() || 0);
+              }
             }
-            // 0 === YT.PlayerState.ENDED -> Song has finished!
-            if (e.data === 0) {
-              console.log('[BackgroundMusicPlayer] YouTube video reached ENDED state');
+            if (e.data === 0) { // 0 === YT.PlayerState.ENDED
+              console.log('[BackgroundMusicPlayer] YouTube video ended');
               if (onTrackEndRef.current && currentVideoIdRef.current) {
                 onTrackEndRef.current(currentVideoIdRef.current);
               }
@@ -217,12 +224,10 @@ export default function BackgroundMusicPlayer({
       return;
     }
 
-    const elapsed = curr.isPlaying && curr.updatedAt
-      ? (Date.now() - curr.updatedAt) / 1000
-      : 0;
-
-    const isNewTrackStart = (curr.currentTime || 0) < 5 && elapsed < 6;
-    const targetTime = isNewTrackStart ? 0 : Math.max(0, (curr.currentTime || 0) + elapsed);
+    // Zero-delay initial start: If track just started, always start at 0:00!
+    const isLateJoin = (curr.currentTime || 0) > 15 || (curr.startedAt && (Date.now() - curr.startedAt) > 20000);
+    const elapsed = (!curr.isBuffering && curr.isPlaying && curr.startedAt) ? (Date.now() - curr.startedAt) / 1000 : 0;
+    const targetTime = isLateJoin ? Math.max(0, (curr.currentTime || 0) + elapsed) : 0;
 
     // --- YOUTUBE SOURCE ---
     if (isYouTube && videoId) {
@@ -235,7 +240,7 @@ export default function BackgroundMusicPlayer({
         const p = ytPlayerRef.current;
 
         if (currentVideoIdRef.current !== videoId) {
-          // New YouTube track requested
+          // New YouTube track: Load immediately starting from 0:00!
           currentVideoIdRef.current = videoId;
           isSeekingRef.current = true;
           p.loadVideoById({
@@ -250,7 +255,8 @@ export default function BackgroundMusicPlayer({
           if (!curr.isPlaying) {
             p.pauseVideo();
           }
-          setTimeout(() => { isSeekingRef.current = false; }, 1200);
+          // Prevent any seek during track intro (1.5s)
+          setTimeout(() => { isSeekingRef.current = false; }, 1500);
         } else {
           try {
             const st = p.getPlayerState();
@@ -264,8 +270,9 @@ export default function BackgroundMusicPlayer({
               }
             }
 
+            // Only seek if difference is large (> 3.5s) and not in song intro
             const localTime = p.getCurrentTime() || 0;
-            if (Math.abs(localTime - targetTime) > 2.5 && (st === 1 || st === 2)) {
+            if (localTime > 15 && targetTime > 15 && Math.abs(localTime - targetTime) > 3.5 && (st === 1 || st === 2)) {
               isSeekingRef.current = true;
               p.seekTo(targetTime, true);
               setTimeout(() => { isSeekingRef.current = false; }, 800);
@@ -288,7 +295,7 @@ export default function BackgroundMusicPlayer({
           audio.src = curr.currentTrack.url;
         }
         if (curr.currentTrack.source !== 'station') {
-          if (Math.abs(audio.currentTime - targetTime) > 2.0) {
+          if (isLateJoin && Math.abs(audio.currentTime - targetTime) > 3.0) {
             audio.currentTime = targetTime;
           }
         }
@@ -305,12 +312,13 @@ export default function BackgroundMusicPlayer({
     musicState?.currentTrack?.url, 
     musicState?.isPlaying, 
     musicState?.updatedAt, 
-    musicState?.currentTime, 
+    musicState?.startedAt,
+    musicState?.isBuffering,
     isYouTube, 
     videoId
   ]);
 
-  // 3. Smooth Drift & End-of-Track Monitoring
+  // 3. Smooth Drift Monitoring (Protected Intro: NEVER seek during first 20 seconds!)
   useEffect(() => {
     if (!musicState?.isPlaying) return;
 
@@ -319,10 +327,13 @@ export default function BackgroundMusicPlayer({
       const curr = musicStateRef.current;
       if (!curr || !curr.isPlaying) return;
 
-      const elapsed = (Date.now() - (curr.updatedAt || curr.startedAt || Date.now())) / 1000;
+      // If song is still in buffering phase, do not drift check
+      if (curr.isBuffering || !curr.startedAt) return;
+
+      const elapsed = (Date.now() - (curr.updatedAt || curr.startedAt)) / 1000;
       const targetTime = (curr.currentTime || 0) + elapsed;
 
-      // Check YouTube drift & auto-end
+      // Check YouTube drift
       if (curr.currentTrack?.source === 'youtube' && ytPlayerRef.current && isPlayerReadyRef.current) {
         try {
           const st = ytPlayerRef.current.getPlayerState();
@@ -331,16 +342,22 @@ export default function BackgroundMusicPlayer({
 
           // Track finished (State 0 or reached end of duration)
           if (st === 0 || (maxDur > 0 && localTime >= maxDur - 0.6)) {
-            console.log('[BackgroundMusicPlayer] Track completion detected in drift monitor');
             if (onTrackEndRef.current && currentVideoIdRef.current) {
               onTrackEndRef.current(currentVideoIdRef.current);
             }
-            return; // Never call playVideo() when ended
+            return;
           }
 
-          if (st === 1) {
+          // CRITICAL: NEVER seek during the first 20 seconds of a song!
+          // Both users started at 0:00; seeking here resets the buffer and causes 4s skip!
+          if (localTime < 20 && targetTime < 25) {
+            return;
+          }
+
+          if (st === 1) { // Only when actively playing
             const drift = Math.abs(localTime - targetTime);
-            if (drift > 1.8) {
+            // Relaxed drift threshold (3.5s) to avoid buffer flushes
+            if (drift > 3.5) {
               isSeekingRef.current = true;
               ytPlayerRef.current.seekTo(targetTime, true);
               setTimeout(() => { isSeekingRef.current = false; }, 800);
@@ -351,7 +368,7 @@ export default function BackgroundMusicPlayer({
         } catch (e) {}
       }
 
-      // Check HTML5 Audio drift & auto-end
+      // Check HTML5 Audio drift
       if (curr.currentTrack?.source !== 'youtube' && curr.currentTrack?.source !== 'station' && audioRef.current) {
         try {
           if (audioRef.current.ended || (audioRef.current.duration > 0 && audioRef.current.currentTime >= audioRef.current.duration - 0.6)) {
@@ -360,9 +377,12 @@ export default function BackgroundMusicPlayer({
             }
             return;
           }
+
           const localTime = audioRef.current.currentTime || 0;
+          if (localTime < 20 && targetTime < 25) return;
+
           const drift = Math.abs(localTime - targetTime);
-          if (drift > 2.0) {
+          if (drift > 3.5) {
             audioRef.current.currentTime = targetTime;
           }
           if (audioRef.current.paused) {
@@ -370,10 +390,10 @@ export default function BackgroundMusicPlayer({
           }
         } catch (e) {}
       }
-    }, 1200);
+    }, 1500);
 
     return () => clearInterval(driftInterval);
-  }, [musicState?.isPlaying]);
+  }, [musicState?.isPlaying, musicState?.isBuffering]);
 
   return (
     <div 
@@ -393,7 +413,6 @@ export default function BackgroundMusicPlayer({
         ref={audioRef} 
         playsInline 
         onEnded={() => {
-          console.log('[BackgroundMusicPlayer] HTML5 audio onEnded fired');
           if (onTrackEndRef.current && currentTrack?.id) {
             onTrackEndRef.current(currentTrack.id);
           }

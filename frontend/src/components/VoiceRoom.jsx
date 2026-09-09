@@ -251,9 +251,13 @@ export default function VoiceRoom({
     }
 
     const updateCurrent = () => {
-      const elapsed = (Date.now() - (musicState.updatedAt || musicState.startedAt || Date.now())) / 1000;
+      if (musicState.isBuffering || !musicState.startedAt) {
+        setSliderVal(0);
+        return;
+      }
+      const elapsed = (Date.now() - (musicState.updatedAt || musicState.startedAt)) / 1000;
       const current = Math.min(durationSec, (musicState.currentTime || 0) + elapsed);
-      setSliderVal(current);
+      setSliderVal(Math.max(0, current));
     };
 
     updateCurrent();

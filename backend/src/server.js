@@ -463,6 +463,7 @@ function setVoiceChannelMusic(targetVoiceChannelId, track, senderUsername = 'Kul
   const durationSec = parseDurationToSeconds(track.duration);
   const state = {
     isPlaying: true,
+    isBuffering: true,
     currentTrack: {
       ...track,
       durationSec,
@@ -471,9 +472,20 @@ function setVoiceChannelMusic(targetVoiceChannelId, track, senderUsername = 'Kul
     duration: durationSec,
     currentTime: 0,
     volume: 80,
-    startedAt: Date.now(),
+    startedAt: null,
     updatedAt: Date.now()
   };
+
+  // Fallback timer: if no client reports synced start within 4s, activate timer naturally
+  setTimeout(() => {
+    const current = channelMusic.get(targetVoiceChannelId);
+    if (current && current.isBuffering && current.isPlaying) {
+      current.isBuffering = false;
+      current.startedAt = Date.now();
+      current.updatedAt = Date.now();
+      io.emit('music-state-updated', { channelId: targetVoiceChannelId, state: current });
+    }
+  }, 4000);
   channelMusic.set(targetVoiceChannelId, state);
 
   DJ_BOT_USER.voiceState.channelId = targetVoiceChannelId;
@@ -527,11 +539,12 @@ function stopVoiceChannelMusic(targetVoiceChannelId, reason = 'stop') {
 setInterval(() => {
   for (const [channelId, state] of channelMusic.entries()) {
     if (state && state.isPlaying && state.currentTrack && state.currentTrack.source !== 'station') {
+      if (state.isBuffering) continue;
       const maxDur = state.duration || state.currentTrack.durationSec || 0;
-      if (maxDur > 0) {
-        const elapsed = (Date.now() - (state.updatedAt || state.startedAt || Date.now())) / 1000;
+      if (maxDur > 0 && state.startedAt) {
+        const elapsed = (Date.now() - (state.updatedAt || state.startedAt)) / 1000;
         const totalPlayed = (state.currentTime || 0) + elapsed;
-        if (totalPlayed >= maxDur + 1.5) {
+        if (totalPlayed >= maxDur + 2.5) {
           console.log(`[Music Auto-Ended by Watchdog] ${state.currentTrack.title || state.currentTrack.name} finished in ${channelId}`);
           stopVoiceChannelMusic(channelId, 'duration-completed');
         }
@@ -1313,6 +1326,21 @@ io.on('connection', (socket) => {
     if (trackId && state.currentTrack.id !== trackId) return;
 
     stopVoiceChannelMusic(channelId, 'track-ended');
+  });
+
+  socket.on('music-synced-start', ({ channelId, trackId, currentTime = 0 }) => {
+    const state = channelMusic.get(channelId);
+    if (!state || !state.currentTrack) return;
+    if (trackId && state.currentTrack.id !== trackId) return;
+
+    if (state.isBuffering) {
+      state.isBuffering = false;
+      state.startedAt = Date.now() - (currentTime * 1000);
+      state.updatedAt = Date.now();
+      state.currentTime = currentTime;
+      io.emit('music-state-updated', { channelId, state });
+      console.log(`[Music Synced Start] Audio officially playing at 0:00 for ${state.currentTrack.title || state.currentTrack.name} in ${channelId}`);
+    }
   });
 
   socket.on('music-volume', ({ channelId, volume }) => {

@@ -696,10 +696,18 @@ export default function App() {
         userVolume={userMusicVolume}
         onTrackEnd={(trackId) => {
           if (currentVoiceChannel) {
-            console.log('[App] Track ended, notifying server to stop music in channel:', currentVoiceChannel.id);
             socket.emit('music-ended', { 
               channelId: currentVoiceChannel.id, 
               trackId 
+            });
+          }
+        }}
+        onSyncedStart={(trackId, currentTime) => {
+          if (currentVoiceChannel) {
+            socket.emit('music-synced-start', {
+              channelId: currentVoiceChannel.id,
+              trackId,
+              currentTime
             });
           }
         }}
