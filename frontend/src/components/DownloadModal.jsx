@@ -107,7 +107,7 @@ export default function DownloadModal({ isOpen, onClose, onDownloaded }) {
                 <div>
                   <h4 className="text-sm font-bold text-white">Taşınabilir Windows Paketi (.zip)</h4>
                   <p className="text-xs text-[#949ba4] mt-0.5 leading-relaxed">
-                    İçerisinde doğrudan çalışan <code className="text-[#dbdee1] bg-[#1e1f22] px-1 py-0.5 rounded">Fivecord.exe</code> bulunur. Zipten çıkarıp çift tıklayarak çalıştırabilirsiniz.
+                    İçerisinde doğrudan çalışan <code className="text-[#dbdee1] bg-[#1e1f22] px-1 py-0.5 rounded">Synapse.exe</code> bulunur. Zipten çıkarıp çift tıklayarak çalıştırabilirsiniz.
                   </p>
                 </div>
               </div>
@@ -132,7 +132,7 @@ export default function DownloadModal({ isOpen, onClose, onDownloaded }) {
                   className="px-4 py-1.5 rounded-lg bg-[#23a55a] hover:bg-[#1f934f] text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 hover:scale-105"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>Fivecord İndir (.zip)</span>
+                  <span>Synapse İndir (.zip)</span>
                 </a>
               </div>
             </div>
