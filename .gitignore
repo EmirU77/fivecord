@@ -23,3 +23,5 @@ Thumbs.db
 # Temporary uploads (keep folder)
 backend/uploads/*
 !backend/uploads/.gitkeep
+backend/data/*.tmp
+*.tmp

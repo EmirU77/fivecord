@@ -36,27 +36,52 @@ function StreamPlayer({ streamItem, isFocused = false, onFocus }) {
       video.srcObject = streamItem.stream;
     }
 
+    const checkPlaying = () => {
+      if (video.videoWidth > 0 || video.currentTime > 0) {
+        setIsPlaying(true);
+      }
+    };
+
     const tryPlay = () => {
       video.muted = true;
       video.play().then(() => {
-        setIsPlaying(true);
+        checkPlaying();
       }).catch(() => {});
     };
 
     tryPlay();
 
-    const onLoadedMetadata = () => tryPlay();
-    const onCanPlay = () => tryPlay();
+    const onLoadedMetadata = () => { tryPlay(); checkPlaying(); };
+    const onCanPlay = () => { tryPlay(); checkPlaying(); };
     const onPlaying = () => setIsPlaying(true);
+    const onTimeUpdate = () => checkPlaying();
 
     video.addEventListener('loadedmetadata', onLoadedMetadata);
     video.addEventListener('canplay', onCanPlay);
     video.addEventListener('playing', onPlaying);
+    video.addEventListener('timeupdate', onTimeUpdate);
+
+    // Watch video track unmute (when first UDP RTP video packet arrives)
+    const vTrack = streamItem.stream.getVideoTracks()[0];
+    const onUnmute = () => {
+      tryPlay();
+      setIsPlaying(true);
+    };
+    if (vTrack) {
+      if (!vTrack.muted && vTrack.readyState === 'live') {
+        setIsPlaying(true);
+      }
+      vTrack.addEventListener('unmute', onUnmute);
+    }
 
     return () => {
       video.removeEventListener('loadedmetadata', onLoadedMetadata);
       video.removeEventListener('canplay', onCanPlay);
       video.removeEventListener('playing', onPlaying);
+      video.removeEventListener('timeupdate', onTimeUpdate);
+      if (vTrack) {
+        vTrack.removeEventListener('unmute', onUnmute);
+      }
     };
   }, [streamItem?.stream]);
 
@@ -172,31 +197,31 @@ export default function VoiceRoom({
   const activeScreenStreams = useMemo(() => {
     const list = [];
 
-    // 1. Remote members who are sharing screen
+    // 1. Remote members who are actively sharing screen with a confirmed live video stream
     channelMembers.forEach(member => {
-      if (member.id !== currentUser?.id) {
-        const stream = remoteScreenStreams?.get(member.socketId) || remoteStreams?.get(member.socketId);
-        const hasVideo = stream && stream.getVideoTracks().length > 0;
-        if (hasVideo || member.voiceState?.isScreenSharing) {
-          if (stream) {
-            list.push({
-              id: member.socketId,
-              socketId: member.socketId,
-              username: member.username,
-              avatar: member.avatar,
-              stream,
-              isLocal: false
-            });
-          }
+      if (member.id !== currentUser?.id && member.voiceState?.isScreenSharing) {
+        const stream = remoteScreenStreams?.get(member.socketId);
+        const liveVideo = stream && stream.getVideoTracks().find(t => t.readyState === 'live');
+        if (stream && liveVideo) {
+          list.push({
+            id: member.socketId,
+            socketId: member.socketId,
+            username: member.username,
+            avatar: member.avatar,
+            stream,
+            isLocal: false
+          });
         }
       }
     });
 
-    // 2. Any additional remote screen streams
+    // 2. Any additional remote screen streams with verified active screen share
     if (remoteScreenStreams) {
       for (const [socketId, stream] of remoteScreenStreams.entries()) {
-        if (!list.some(s => s.socketId === socketId) && stream && stream.getVideoTracks().length > 0) {
-          const peer = members.find(m => m.socketId === socketId);
+        const peer = members.find(m => m.socketId === socketId);
+        const isSharing = peer?.voiceState?.isScreenSharing;
+        const liveVideo = stream && stream.getVideoTracks().find(t => t.readyState === 'live');
+        if (isSharing && liveVideo && !list.some(s => s.socketId === socketId)) {
           list.push({
             id: socketId,
             socketId,
@@ -211,18 +236,21 @@ export default function VoiceRoom({
 
     // 3. Local screen share
     if (isScreenSharing && screenStream) {
-      list.push({
-        id: 'local',
-        socketId: 'local',
-        username: currentUser?.username || 'Sen',
-        avatar: currentUser?.avatar,
-        stream: screenStream,
-        isLocal: true
-      });
+      const liveLocalVideo = screenStream.getVideoTracks().find(t => t.readyState === 'live');
+      if (liveLocalVideo) {
+        list.push({
+          id: 'local',
+          socketId: 'local',
+          username: currentUser?.username || 'Sen',
+          avatar: currentUser?.avatar,
+          stream: screenStream,
+          isLocal: true
+        });
+      }
     }
 
     return list;
-  }, [channelMembers, remoteScreenStreams, remoteStreams, isScreenSharing, screenStream, currentUser, members]);
+  }, [channelMembers, remoteScreenStreams, isScreenSharing, screenStream, currentUser, members]);
 
   // Current focused stream (for focus / theater mode)
   const focusedStream = useMemo(() => {

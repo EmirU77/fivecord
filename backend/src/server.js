@@ -7,6 +7,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { exec } from 'child_process';
+import * as persistence from './persistence.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -120,58 +121,19 @@ const io = new Server(server, {
   maxHttpBufferSize: 1e8
 });
 
-// In-memory state
+// In-memory state & Persistence Engine
 const users = new Map();
 const voiceChannels = new Map();
-const textMessages = new Map();
+const textMessages = persistence.loadMessages();
 const channelMusic = new Map();
 const watchTogetherRooms = new Map();
 
-// Persistent Accounts Store (for easy login & deduplication)
-const ACCOUNTS_FILE = path.join(__dirname, '..', 'data', 'accounts.json');
-
 function loadAccounts() {
-  try {
-    if (fs.existsSync(ACCOUNTS_FILE)) {
-      const data = JSON.parse(fs.readFileSync(ACCOUNTS_FILE, 'utf8'));
-      if (Array.isArray(data)) return data;
-    }
-  } catch (e) {
-    console.warn('[Accounts] Error reading accounts:', e.message);
-  }
-  return [];
+  return persistence.loadAccounts();
 }
 
 function saveAccount(userData) {
-  try {
-    const dir = path.dirname(ACCOUNTS_FILE);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    let accounts = loadAccounts();
-    const cleanName = (userData.username || '').trim();
-    if (!cleanName) return;
-
-    const idx = accounts.findIndex(a => a.username.toLowerCase() === cleanName.toLowerCase());
-    const acc = {
-      id: userData.id || ('user-' + cleanName.toLowerCase().replace(/[^a-z0-9_-]/g, '')),
-      username: cleanName,
-      avatar: userData.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanName}`,
-      avatarDecoration: userData.avatarDecoration || 'none',
-      banner: userData.banner || null,
-      bio: userData.bio || '',
-      color: userData.color || '#5865F2',
-      customStatus: userData.customStatus || 'Fivecord kullanıyor',
-      entranceSound: userData.entranceSound || 'mvp',
-      lastSeen: Date.now()
-    };
-    if (idx !== -1) {
-      accounts[idx] = { ...accounts[idx], ...acc };
-    } else {
-      accounts.push(acc);
-    }
-    fs.writeFileSync(ACCOUNTS_FILE, JSON.stringify(accounts, null, 2), 'utf8');
-  } catch (e) {
-    console.warn('[Accounts] Failed to save account:', e.message);
-  }
+  return persistence.saveAccount(userData);
 }
 
 
@@ -268,6 +230,7 @@ function sendBotChatMessage(channelId, text) {
   msgs.push(botMessage);
   if (msgs.length > 300) msgs.shift();
   textMessages.set(channelId, msgs);
+  persistence.scheduleSaveMessages(textMessages);
   io.emit('new-message', botMessage);
 }
 
@@ -570,18 +533,11 @@ app.get('/api/music/search', async (req, res) => {
   }
 });
 
-const channels = [
-  { id: 'text-genel', name: 'genel-sohbet', type: 'text', topic: '5 kişilik ana sohbet alanı' },
-  { id: 'text-oyun', name: 'oyun-odası', type: 'text', topic: 'Oyun içi paylaşımlar ve taktikler' },
-  { id: 'text-medya', name: 'klipler-ve-ss', type: 'text', topic: 'Ekran görüntüleri ve videolar' },
-  { id: 'voice-genel', name: '🔊 Ses Odası - Genel', type: 'voice', bitrate: '128kbps' },
-  { id: 'voice-oyun', name: '🎮 Ses Odası - Oyun & Pro', type: 'voice', bitrate: '256kbps' },
-  { id: 'voice-sinema', name: '🍿 4K Ekran / Sinema', type: 'voice', bitrate: 'Ultra HQ' }
-];
+const channels = persistence.loadChannels();
 
 channels.forEach(ch => {
-  if (ch.type === 'text') textMessages.set(ch.id, []);
-  if (ch.type === 'voice') voiceChannels.set(ch.id, new Set());
+  if (ch.type === 'text' && !textMessages.has(ch.id)) textMessages.set(ch.id, []);
+  if (ch.type === 'voice' && !voiceChannels.has(ch.id)) voiceChannels.set(ch.id, new Set());
 });
 
 io.on('connection', (socket) => {
@@ -670,6 +626,7 @@ io.on('connection', (socket) => {
     channels.push(newCh);
     if (newCh.type === 'text') textMessages.set(newCh.id, []);
     if (newCh.type === 'voice') voiceChannels.set(newCh.id, new Set());
+    persistence.saveChannels(channels);
     io.emit('channels-updated', channels);
     console.log(`[Channel Created] ${newCh.name} (${newCh.type})`);
   });
@@ -703,6 +660,7 @@ io.on('connection', (socket) => {
         }
         io.emit('members-updated', getAllMembers());
       }
+      persistence.saveChannels(channels);
       io.emit('channels-updated', channels);
       io.emit('channel-deleted', channelId);
       console.log(`[Channel Deleted] ${removed.name} (${channelId})`);
@@ -717,6 +675,7 @@ io.on('connection', (socket) => {
       ch.name = (ch.type === 'voice' && !clean.startsWith('🔊') && !clean.startsWith('🎮') && !clean.startsWith('🍿'))
         ? `🔊 ${clean}`
         : clean;
+      persistence.saveChannels(channels);
       io.emit('channels-updated', channels);
       console.log(`[Channel Renamed] ${ch.id} -> ${ch.name}`);
     }
@@ -888,6 +847,7 @@ io.on('connection', (socket) => {
     msgs.push(message);
     if (msgs.length > 300) msgs.shift();
     textMessages.set(channelId, msgs);
+    persistence.scheduleSaveMessages(textMessages);
 
     io.emit('new-message', message);
 
@@ -1084,12 +1044,14 @@ io.on('connection', (socket) => {
       msg.reactions[emoji].push(sender.username);
     }
     io.emit('message-reaction-updated', { channelId, messageId, reactions: msg.reactions });
+    persistence.scheduleSaveMessages(textMessages);
   });
 
   socket.on('delete-message', ({ channelId, messageId }) => {
     const msgs = textMessages.get(channelId) || [];
     const filtered = msgs.filter(m => m.id !== messageId);
     textMessages.set(channelId, filtered);
+    persistence.scheduleSaveMessages(textMessages);
     io.emit('message-deleted', { channelId, messageId });
   });
 
@@ -1098,6 +1060,7 @@ io.on('connection', (socket) => {
     const msg = msgs.find(m => m.id === messageId);
     if (msg) {
       msg.isPinned = !msg.isPinned;
+      persistence.scheduleSaveMessages(textMessages);
       io.emit('message-pinned', { channelId, messageId, isPinned: msg.isPinned });
     }
   });

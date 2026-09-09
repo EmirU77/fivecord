@@ -20,12 +20,28 @@ const COLORS = [
 ];
 
 export default function DecisionWheelModal({ isOpen, onClose, onShareResult }) {
-  const [options, setOptions] = useState(DEFAULT_OPTIONS);
+  const [options, setOptions] = useState(() => {
+    try {
+      const saved = localStorage.getItem('fivecord_decision_wheel_options');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return DEFAULT_OPTIONS;
+  });
   const [newItem, setNewItem] = useState('');
   const [isSpinning, setIsSpinning] = useState(false);
   const [rotation, setRotation] = useState(0);
   const [winner, setWinner] = useState(null);
   const canvasRef = useRef(null);
+
+  // Auto-save wheel options
+  useEffect(() => {
+    try {
+      localStorage.setItem('fivecord_decision_wheel_options', JSON.stringify(options));
+    } catch (e) {}
+  }, [options]);
 
   // Draw the wheel whenever options change or modal opens
   useEffect(() => {

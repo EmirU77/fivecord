@@ -158,10 +158,12 @@ export default function App() {
       if (music) {
         setMusicStates(new Map(Object.entries(music)));
       }
-      const defaultText = channels.find(c => c.type === 'text');
-      if (defaultText && activeView === 'server') {
-        setCurrentChannel(defaultText);
-        socket.emit('fetch-messages', defaultText.id);
+      const lastChId = localStorage.getItem('fivecord_last_channel_id');
+      const targetChannel = (lastChId && channels.find(c => c.id === lastChId)) || channels.find(c => c.type === 'text') || channels[0];
+      if (targetChannel && activeView === 'server') {
+        setCurrentChannel(targetChannel);
+        currentChannelRef.current = targetChannel;
+        socket.emit('fetch-messages', targetChannel.id);
       }
     });
 
@@ -237,10 +239,25 @@ export default function App() {
 
     socket.on('user-left-voice', ({ socketId }) => {
       webrtc.removePeer(socketId);
+      setRemoteScreenStreams(prev => {
+        if (!prev.has(socketId)) return prev;
+        const next = new Map(prev);
+        next.delete(socketId);
+        return next;
+      });
     });
 
     socket.on('peer-voice-state-updated', ({ socketId, voiceState }) => {
       setMembers(prev => prev.map(m => m.socketId === socketId ? { ...m, voiceState } : m));
+      if (voiceState.isScreenSharing === false) {
+        webrtc.remoteScreenStreams.delete(socketId);
+        setRemoteScreenStreams(prev => {
+          if (!prev.has(socketId)) return prev;
+          const next = new Map(prev);
+          next.delete(socketId);
+          return next;
+        });
+      }
     });
 
     socket.on('music-state-updated', ({ channelId, state }) => {
@@ -387,6 +404,11 @@ export default function App() {
       } : m));
     };
 
+    webrtc.onScreenShareEnded = () => {
+      setIsScreenSharing(false);
+      setScreenStream(null);
+    };
+
     return () => {
       socket.off('connect');
       socket.off('initial-data');
@@ -455,6 +477,9 @@ export default function App() {
   const handleSelectChannel = (channel) => {
     setCurrentChannel(channel);
     currentChannelRef.current = channel;
+    try {
+      localStorage.setItem('fivecord_last_channel_id', channel.id);
+    } catch (e) {}
     if (channel.type === 'text') {
       socket.emit('fetch-messages', channel.id);
     }

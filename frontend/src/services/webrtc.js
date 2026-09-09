@@ -85,6 +85,7 @@ class WebRTCManager {
 
     this.onRemoteStreamAdded = null;
     this.onRemoteStreamRemoved = null;
+    this.onScreenShareEnded = null;
     this.onSpeakingChanged = null;
     this.onConnectionStateChange = null;
     this.isNoiseSuppressionOn = true;
@@ -321,18 +322,7 @@ class WebRTCManager {
       }
 
       const hasVideo = stream && stream.getVideoTracks().length > 0;
-      const knownScreenStreamId = this.peerScreenStreamIds.get(targetSocketId);
-
-      // Track is screen share if:
-      // 1. stream id or track id matches known screenStreamId
-      // 2. stream or track label indicates screen
-      // 3. Or it's a remote video stream (in voice stages screen share is primary video)
-      const isScreen = hasVideo && (
-        (knownScreenStreamId && (stream.id === knownScreenStreamId || event.track.id === knownScreenStreamId)) ||
-        (stream.id && stream.id.toLowerCase().includes('screen')) ||
-        (event.track.label && (event.track.label.toLowerCase().includes('screen') || event.track.label.toLowerCase().includes('display'))) ||
-        true
-      );
+      const isScreen = event.track.kind === 'video' || hasVideo;
 
       if (isScreen) {
         this.remoteScreenStreams.set(targetSocketId, stream);
@@ -347,6 +337,13 @@ class WebRTCManager {
         }
         if (this.onRemoteStreamRemoved) {
           this.onRemoteStreamRemoved(targetSocketId);
+        }
+      };
+
+      event.track.onunmute = () => {
+        console.log(`[WebRTC] Remote track unmuted for ${targetSocketId} (${event.track.kind})`);
+        if (this.onRemoteStreamAdded) {
+          this.onRemoteStreamAdded(targetSocketId, stream, isScreen, event.track);
         }
       };
 
@@ -426,6 +423,29 @@ class WebRTCManager {
             }
           }
           this.pendingCandidates.set(senderSocketId, []);
+        }
+
+        // Reliably capture incoming screen video from transceivers (even if ontrack didn't fire)
+        if (streamType === 'screen' || screenStreamId) {
+          const vTransceiver = pc.getTransceivers().find(t => t.receiver?.track?.kind === 'video');
+          if (vTransceiver && vTransceiver.receiver?.track) {
+            const vTrack = vTransceiver.receiver.track;
+            let screenStream = this.remoteScreenStreams.get(senderSocketId);
+            if (!screenStream || !screenStream.getVideoTracks().includes(vTrack)) {
+              screenStream = new MediaStream([vTrack]);
+              this.remoteScreenStreams.set(senderSocketId, screenStream);
+            }
+            if (this.onRemoteStreamAdded) {
+              this.onRemoteStreamAdded(senderSocketId, screenStream, true, vTrack);
+            }
+          }
+        } else if (streamType === 'user' && !screenStreamId) {
+          // Stream ended
+          this.remoteScreenStreams.delete(senderSocketId);
+          this.peerScreenStreamIds.delete(senderSocketId);
+          if (this.onRemoteStreamRemoved) {
+            this.onRemoteStreamRemoved(senderSocketId);
+          }
         }
 
         if (signal.sdp.type === 'offer') {
@@ -604,6 +624,9 @@ class WebRTCManager {
 
     this.screenStream = null;
     socket.emit('update-voice-state', { isScreenSharing: false, screenStreamId: null });
+    if (this.onScreenShareEnded) {
+      this.onScreenShareEnded();
+    }
   }
 
   async toggleCamera(enable) {

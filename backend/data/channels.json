@@ -1,0 +1,38 @@
+[
+  {
+    "id": "text-genel",
+    "name": "genel-sohbet",
+    "type": "text",
+    "topic": "5 kişilik ana sohbet alanı"
+  },
+  {
+    "id": "text-oyun",
+    "name": "oyun-odası",
+    "type": "text",
+    "topic": "Oyun içi paylaşımlar ve taktikler"
+  },
+  {
+    "id": "text-medya",
+    "name": "klipler-ve-ss",
+    "type": "text",
+    "topic": "Ekran görüntüleri ve videolar"
+  },
+  {
+    "id": "voice-genel",
+    "name": "🔊 Ses Odası - Genel",
+    "type": "voice",
+    "bitrate": "128kbps"
+  },
+  {
+    "id": "voice-oyun",
+    "name": "🎮 Ses Odası - Oyun & Pro",
+    "type": "voice",
+    "bitrate": "256kbps"
+  },
+  {
+    "id": "voice-sinema",
+    "name": "🍿 4K Ekran / Sinema",
+    "type": "voice",
+    "bitrate": "Ultra HQ"
+  }
+]

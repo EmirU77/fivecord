@@ -95,19 +95,36 @@ export default function ChatArea({
     return () => socket.off('user-typing', handleTyping);
   }, [channel.id, currentUser?.username]);
 
+  // Auto-restore draft for the current channel
+  useEffect(() => {
+    try {
+      const draft = localStorage.getItem(`fivecord_draft_${channel.id}`) || '';
+      setInputText(draft);
+    } catch (e) {}
+  }, [channel.id]);
+
   const handleInputChange = (e) => {
-    setInputText(e.target.value);
-    if (e.target.value.length > 0) {
-      socket.emit('typing', { channelId: channel.id, isTyping: true });
-    } else {
-      socket.emit('typing', { channelId: channel.id, isTyping: false });
-    }
+    const val = e.target.value;
+    setInputText(val);
+    try {
+      if (val.trim()) {
+        localStorage.setItem(`fivecord_draft_${channel.id}`, val);
+        socket.emit('typing', { channelId: channel.id, isTyping: true });
+      } else {
+        localStorage.removeItem(`fivecord_draft_${channel.id}`);
+        socket.emit('typing', { channelId: channel.id, isTyping: false });
+      }
+    } catch (err) {}
   };
 
   const handleSend = (e) => {
     e?.preventDefault();
     const trimmed = inputText.trim();
     if (!trimmed) return;
+
+    try {
+      localStorage.removeItem(`fivecord_draft_${channel.id}`);
+    } catch (err) {}
 
     // Check for wheel shortcut
     if (trimmed === '/cark' || trimmed === '/wheel' || trimmed === '!cark' || trimmed === '!wheel') {
