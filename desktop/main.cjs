@@ -9,7 +9,7 @@ const SPLASH_HTML = `<!DOCTYPE html>
 <html lang="tr">
 <head>
 <meta charset="UTF-8">
-<title>Fivecord VIP</title>
+<title>Synapse</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -147,6 +147,7 @@ async function createWindow() {
     minHeight: 520,
     backgroundColor: '#1e1f22',
     title: 'Synapse — Sesli & Görüntülü İletişim Platformu',
+    icon: path.join(__dirname, 'synapse.ico'),
     autoHideMenuBar: true,
     show: true,
     webPreferences: {

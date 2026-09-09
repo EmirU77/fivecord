@@ -1,7 +1,7 @@
-﻿@echo off
-title Fivecord Private Launcher
+@echo off
+title Synapse Launcher
 echo ========================================================
-echo   🚀 FIVECORD - 5 Kisilik Ozel Discord Platformu
+echo   🚀 SYNAPSE - Sesli ^& Goruntulu Iletisim Platformu
 echo ========================================================
 echo.
 echo 1. Backend sunucusu baslatiliyor (Port 3001)...

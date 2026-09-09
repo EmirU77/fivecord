@@ -1,8 +1,8 @@
 @echo off
-title Fivecord Masaustu Uygulamasi
+title Synapse Masaustu Uygulamasi
 cd /d "C:\Users\asus\.gemini\antigravity\scratch\fivecord"
 echo ========================================================
-echo   🖥️ FIVECORD - 5 Kisilik Masaustu Uygulamasi
+echo   🖥️ SYNAPSE - Masaustu Uygulamasi
 echo ========================================================
 echo.
 echo Uygulama baslatiliyor, lutfen bekleyin...
