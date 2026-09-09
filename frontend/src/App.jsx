@@ -583,6 +583,16 @@ export default function App() {
     });
   };
 
+  const handleWatchTogetherAction = (action, currentTime) => {
+    const targetChannelId = currentVoiceChannel?.id || 'voice-sinema';
+    socket.emit('watch-together-action', {
+      channelId: targetChannelId,
+      action,
+      currentTime,
+      senderName: currentUser?.username
+    });
+  };
+
   // Karar Çarkı Share Handler
   const handleShareWheelResult = (winner) => {
     const targetTextChannelId = currentChannel?.type === 'text' 
@@ -794,6 +804,7 @@ export default function App() {
           onOpenWatchTogether={() => setIsWatchTogetherOpen(true)}
           onStopWatchTogether={handleStopWatchTogether}
           onNavigateWatchTogether={handleNavigateWatchTogether}
+          onWatchTogetherAction={handleWatchTogetherAction}
           isAppInstalled={isAppInstalled}
           onOpenDownload={() => setIsDownloadModalOpen(true)}
         />

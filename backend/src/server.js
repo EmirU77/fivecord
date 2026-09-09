@@ -566,14 +566,25 @@ io.on('connection', (socket) => {
     console.log(`[WatchTogether Navigate] ${url} in ${channelId}`);
   });
 
-  socket.on('watch-together-action', ({ channelId, action, currentTime }) => {
+  socket.on('watch-together-action', ({ channelId, action, currentTime, senderName }) => {
     const current = watchTogetherRooms.get(channelId);
     if (!current) return;
+    const sender = users.get(socket.id);
+    const username = senderName || (sender ? sender.username : 'Bir arkadaş');
+
     if (action === 'play') current.isPlaying = true;
     if (action === 'pause') current.isPlaying = false;
     if (typeof currentTime === 'number') current.currentTime = currentTime;
+
+    current.lastAction = {
+      type: action,
+      by: username,
+      time: currentTime,
+      timestamp: Date.now()
+    };
     current.updatedAt = Date.now();
     io.emit('watch-together-updated', { channelId, state: current });
+    console.log(`[WatchTogether Action] ${username} -> ${action} (${currentTime}s) in ${channelId}`);
   });
 
   socket.on('watch-together-close', (channelId) => {

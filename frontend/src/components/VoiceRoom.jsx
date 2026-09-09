@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { soundEffects } from '../services/soundEffects';
 import { webrtc } from '../services/webrtc';
+import SharedCinemaPlayer from './SharedCinemaPlayer';
 
 export default function VoiceRoom({
   channel,
@@ -33,6 +34,7 @@ export default function VoiceRoom({
   onOpenWatchTogether,
   onStopWatchTogether,
   onNavigateWatchTogether,
+  onWatchTogetherAction,
   isAppInstalled,
   onOpenDownload
 }) {
@@ -174,155 +176,121 @@ export default function VoiceRoom({
 
       {/* Main Grid Stage */}
       <div className="flex-1 p-6 overflow-y-auto flex flex-col justify-center">
-        {/* WATCH TOGETHER STAGE (GOOGLE OR YOUTUBE) */}
+        {/* WATCH TOGETHER STAGE (GOOGLE OR SYNCHRONIZED CINEMA) */}
         {(watchTogetherState?.videoId || watchTogetherState?.url || watchTogetherState?.type === 'google') && !activeScreenUser ? (
           <div className="space-y-4 max-w-6xl mx-auto w-full">
-            <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden border border-[#3f4147] shadow-2xl flex flex-col">
-              {watchTogetherState?.type === 'google' || watchTogetherState?.url ? (
-                <>
-                  {/* Google Web Browser Header */}
-                  <div className="bg-[#1e1f22] px-4 py-2.5 flex items-center justify-between border-b border-[#383a40] gap-3 shrink-0">
-                    {/* Left: Google Branding */}
-                    <div className="flex items-center gap-2.5 shrink-0">
-                      <div className="w-8 h-8 rounded-xl bg-[#4285f4]/15 border border-[#4285f4]/30 flex items-center justify-center">
-                        <Globe className="w-4 h-4 text-[#4285f4]" />
-                      </div>
-                      <div className="hidden sm:flex flex-col">
-                        <div className="flex items-center gap-1 font-black text-xs">
-                          <span className="text-[#4285f4]">G</span>
-                          <span className="text-[#ea4335]">o</span>
-                          <span className="text-[#fbbc05]">o</span>
-                          <span className="text-[#4285f4]">g</span>
-                          <span className="text-[#34a853]">l</span>
-                          <span className="text-[#ea4335]">e</span>
-                          <span className="text-[10px] bg-[#4285f4]/20 text-[#4285f4] px-1.5 py-0.2 rounded-full font-bold ml-1">WEB</span>
-                        </div>
-                        <span className="text-[10px] text-[#949ba4] truncate max-w-40">
-                          {watchTogetherState.startedBy || 'Arkadaşın'} başlattı
-                        </span>
-                      </div>
+            {watchTogetherState?.type === 'google' ? (
+              <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden border border-[#3f4147] shadow-2xl flex flex-col">
+                {/* Google Web Browser Header */}
+                <div className="bg-[#1e1f22] px-4 py-2.5 flex items-center justify-between border-b border-[#383a40] gap-3 shrink-0">
+                  {/* Left: Google Branding */}
+                  <div className="flex items-center gap-2.5 shrink-0">
+                    <div className="w-8 h-8 rounded-xl bg-[#4285f4]/15 border border-[#4285f4]/30 flex items-center justify-center">
+                      <Globe className="w-4 h-4 text-[#4285f4]" />
                     </div>
+                    <div className="hidden sm:flex flex-col">
+                      <div className="flex items-center gap-1 font-black text-xs">
+                        <span className="text-[#4285f4]">G</span>
+                        <span className="text-[#ea4335]">o</span>
+                        <span className="text-[#fbbc05]">o</span>
+                        <span className="text-[#4285f4]">g</span>
+                        <span className="text-[#34a853]">l</span>
+                        <span className="text-[#ea4335]">e</span>
+                        <span className="text-[10px] bg-[#4285f4]/20 text-[#4285f4] px-1.5 py-0.2 rounded-full font-bold ml-1">WEB</span>
+                      </div>
+                      <span className="text-[10px] text-[#949ba4] truncate max-w-40">
+                        {watchTogetherState.startedBy || 'Arkadaşın'} başlattı
+                      </span>
+                    </div>
+                  </div>
 
-                    {/* Center: Interactive Synchronized URL & Search Bar */}
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        const clean = browserInput.trim();
-                        if (!clean) return;
-                        let targetUrl = clean;
-                        let targetTitle = clean;
-                        if (clean.startsWith('http://') || clean.startsWith('https://')) {
-                          targetUrl = clean;
-                        } else if (clean.includes('.') && !clean.includes(' ')) {
-                          targetUrl = `https://${clean}`;
-                        } else {
-                          targetUrl = `https://www.google.com/search?igu=1&q=${encodeURIComponent(clean)}`;
-                          targetTitle = `Google: ${clean}`;
-                        }
-                        onNavigateWatchTogether && onNavigateWatchTogether(targetUrl, targetTitle);
-                      }}
-                      className="flex-1 max-w-xl flex items-center gap-2 bg-[#111214] border border-[#383a40] focus-within:border-[#4285f4] rounded-xl px-3 py-1.5 transition-all shadow-inner"
+                  {/* Center: Interactive Synchronized URL & Search Bar */}
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const clean = browserInput.trim();
+                      if (!clean) return;
+                      let targetUrl = clean;
+                      let targetTitle = clean;
+                      if (clean.startsWith('http://') || clean.startsWith('https://')) {
+                        targetUrl = clean;
+                      } else if (clean.includes('.') && !clean.includes(' ')) {
+                        targetUrl = `https://${clean}`;
+                      } else {
+                        targetUrl = `https://www.google.com/search?igu=1&q=${encodeURIComponent(clean)}`;
+                        targetTitle = `Google: ${clean}`;
+                      }
+                      onNavigateWatchTogether && onNavigateWatchTogether(targetUrl, targetTitle);
+                    }}
+                    className="flex-1 max-w-xl flex items-center gap-2 bg-[#111214] border border-[#383a40] focus-within:border-[#4285f4] rounded-xl px-3 py-1.5 transition-all shadow-inner"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setIframeKey(k => k + 1)}
+                      className="p-1 text-[#949ba4] hover:text-white rounded-md transition-colors cursor-pointer"
+                      title="Sayfayı Yenile"
                     >
-                      <button
-                        type="button"
-                        onClick={() => setIframeKey(k => k + 1)}
-                        className="p-1 text-[#949ba4] hover:text-white rounded-md transition-colors cursor-pointer"
-                        title="Sayfayı Yenile"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5" />
-                      </button>
-                      <Search className="w-3.5 h-3.5 text-[#949ba4] shrink-0" />
-                      <input
-                        type="text"
-                        value={browserInput}
-                        onChange={(e) => setBrowserInput(e.target.value)}
-                        placeholder="Google'da ara veya URL yaz... (Enter ile tüm odaya yansıt)"
-                        className="flex-1 bg-transparent text-xs text-white placeholder-[#80848e] focus:outline-hidden"
-                      />
-                      <button
-                        type="submit"
-                        className="px-2.5 py-0.5 rounded-lg bg-[#4285f4] hover:bg-[#3367d6] text-white text-[11px] font-bold transition-all cursor-pointer shrink-0"
-                      >
-                        Ara
-                      </button>
-                    </form>
+                      <RefreshCw className="w-3.5 h-3.5" />
+                    </button>
+                    <Search className="w-3.5 h-3.5 text-[#949ba4] shrink-0" />
+                    <input
+                      type="text"
+                      value={browserInput}
+                      onChange={(e) => setBrowserInput(e.target.value)}
+                      placeholder="Google'da ara veya URL yaz... (Enter ile tüm odaya yansıt)"
+                      className="flex-1 bg-transparent text-xs text-white placeholder-[#80848e] focus:outline-hidden"
+                    />
+                    <button
+                      type="submit"
+                      className="px-2.5 py-0.5 rounded-lg bg-[#4285f4] hover:bg-[#3367d6] text-white text-[11px] font-bold transition-all cursor-pointer shrink-0"
+                    >
+                      Ara
+                    </button>
+                  </form>
 
-                    {/* Right Controls */}
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        onClick={() => window.open(watchTogetherState.url || 'https://www.google.com', '_blank')}
-                        className="p-1.5 rounded-lg bg-[#2b2d31] hover:bg-[#35373c] text-[#dbdee1] hover:text-white transition-all cursor-pointer"
-                        title="Yeni Sekmede Aç"
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={onOpenWatchTogether}
-                        className="px-3 py-1 rounded-lg bg-[#5865f2] hover:bg-[#4752c4] text-white text-xs font-bold transition-all cursor-pointer"
-                      >
-                        Değiştir
-                      </button>
-                      <button
-                        onClick={onStopWatchTogether}
-                        className="px-3 py-1 rounded-lg bg-[#f23f43]/20 hover:bg-[#f23f43] text-[#f23f43] hover:text-white text-xs font-bold transition-all cursor-pointer"
-                      >
-                        Kapat
-                      </button>
-                    </div>
+                  {/* Right Controls */}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      onClick={() => window.open(watchTogetherState.url || 'https://www.google.com', '_blank')}
+                      className="p-1.5 rounded-lg bg-[#2b2d31] hover:bg-[#35373c] text-[#dbdee1] hover:text-white transition-all cursor-pointer"
+                      title="Yeni Sekmede Aç"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={onOpenWatchTogether}
+                      className="px-3 py-1 rounded-lg bg-[#5865f2] hover:bg-[#4752c4] text-white text-xs font-bold transition-all cursor-pointer"
+                    >
+                      Değiştir
+                    </button>
+                    <button
+                      onClick={onStopWatchTogether}
+                      className="px-3 py-1 rounded-lg bg-[#f23f43]/20 hover:bg-[#f23f43] text-[#f23f43] hover:text-white text-xs font-bold transition-all cursor-pointer"
+                    >
+                      Kapat
+                    </button>
                   </div>
+                </div>
 
-                  {/* Google Web Iframe */}
-                  <iframe
-                    key={iframeKey + (watchTogetherState.url || '')}
-                    src={watchTogetherState.url || 'https://www.google.com/webhp?igu=1'}
-                    title={watchTogetherState.videoTitle || 'Google Birlikte Gezin'}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; geolocation; camera; microphone"
-                    allowFullScreen
-                    className="w-full flex-1 border-0 bg-white"
-                  />
-                </>
-              ) : (
-                <>
-                  {/* YouTube Cinema Header */}
-                  <div className="bg-[#111214]/90 backdrop-blur-md px-4 py-2.5 flex items-center justify-between border-b border-white/10 shrink-0">
-                    <div className="flex items-center gap-2.5 overflow-hidden">
-                      <span className="flex items-center gap-1 text-xs font-black bg-[#ea3323] text-white px-2.5 py-0.5 rounded-full shadow-xs animate-pulse shrink-0">
-                        🍿 BİRLİKTE İZLE
-                      </span>
-                      <span className="text-sm font-bold text-white truncate">
-                        {watchTogetherState.videoTitle || 'YouTube Videosu'}
-                      </span>
-                      <span className="text-xs text-[#949ba4] hidden sm:inline shrink-0">
-                        (Başlatan: {watchTogetherState.startedBy || 'Arkadaşın'})
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        onClick={onOpenWatchTogether}
-                        className="px-3 py-1 rounded-lg bg-[#5865f2] hover:bg-[#4752c4] text-white text-xs font-bold transition-all cursor-pointer"
-                      >
-                        🎬 Video Değiştir
-                      </button>
-                      <button
-                        onClick={onStopWatchTogether}
-                        className="px-3 py-1 rounded-lg bg-[#f23f43]/20 hover:bg-[#f23f43] text-[#f23f43] hover:text-white text-xs font-bold transition-all cursor-pointer"
-                      >
-                        Kapat
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* YouTube Iframe */}
-                  <iframe
-                    src={`https://www.youtube-nocookie.com/embed/${watchTogetherState.videoId}?autoplay=1&enablejsapi=1&playsinline=1`}
-                    title={watchTogetherState.videoTitle || 'Watch Together'}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    className="w-full flex-1 border-0"
-                  />
-                </>
-              )}
-            </div>
+                {/* Google Web Iframe */}
+                <iframe
+                  key={iframeKey + (watchTogetherState.url || '')}
+                  src={watchTogetherState.url || 'https://www.google.com/webhp?igu=1'}
+                  title={watchTogetherState.videoTitle || 'Google Birlikte Gezin'}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; geolocation; camera; microphone"
+                  allowFullScreen
+                  className="w-full flex-1 border-0 bg-white"
+                />
+              </div>
+            ) : (
+              <SharedCinemaPlayer
+                watchTogetherState={watchTogetherState}
+                onAction={onWatchTogetherAction}
+                onOpenModal={onOpenWatchTogether}
+                onClose={onStopWatchTogether}
+                currentUser={currentUser}
+              />
+            )}
 
             {/* Stage members strip */}
             <div className="flex items-center justify-center gap-3 overflow-x-auto py-2">
