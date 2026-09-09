@@ -12,6 +12,7 @@ import RenameChannelModal from './components/RenameChannelModal';
 import ServerInfoModal from './components/ServerInfoModal';
 import DownloadModal from './components/DownloadModal';
 import MusicPlayerModal from './components/MusicPlayerModal';
+import BackgroundMusicPlayer from './components/BackgroundMusicPlayer';
 import DecisionWheelModal from './components/DecisionWheelModal';
 import WatchTogetherModal from './components/WatchTogetherModal';
 import LoginModal from './components/LoginModal';
@@ -91,86 +92,20 @@ export default function App() {
   const [remoteScreenStreams, setRemoteScreenStreams] = useState(new Map());
 
   const audioContainerRef = useRef(null);
-  const bgMusicAudioRef = useRef(null);
-  const bgYtIframeRef = useRef(null);
-  const lastMusicUpdateRef = useRef(0);
-  const lastVideoIdRef = useRef(null);
   const activeMusicState = currentVoiceChannel ? musicStates.get(currentVoiceChannel.id) : null;
   const activeWatchTogether = currentVoiceChannel ? watchTogetherRooms.get(currentVoiceChannel.id) : null;
 
-  // Background playback (YouTube & HTML5 Audio Stream) with seek synchronization
-  useEffect(() => {
-    if (!activeMusicState || !activeMusicState.currentTrack) {
-      if (bgMusicAudioRef.current) bgMusicAudioRef.current.pause();
-      if (bgYtIframeRef.current) {
-        bgYtIframeRef.current.contentWindow?.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
-      }
-      lastVideoIdRef.current = null;
-      return;
-    }
+  // Personal Music Volume (Individual per user - stored locally, not broadcasted)
+  const [userMusicVolume, setUserMusicVolume] = useState(() => {
+    const saved = localStorage.getItem('fivecord_user_music_volume');
+    return saved !== null ? Number(saved) : 80;
+  });
 
-    const elapsed = activeMusicState.isPlaying && activeMusicState.updatedAt
-      ? (Date.now() - activeMusicState.updatedAt) / 1000
-      : 0;
-    const targetTime = Math.max(0, (activeMusicState.currentTime || 0) + elapsed);
-
-    // 1. YouTube playback
-    if (activeMusicState.currentTrack.source === 'youtube') {
-      if (bgMusicAudioRef.current) bgMusicAudioRef.current.pause();
-
-      if (bgYtIframeRef.current) {
-        const videoId = activeMusicState.currentTrack.id;
-        const isNewVideo = lastVideoIdRef.current !== videoId || !bgYtIframeRef.current.src.includes(videoId);
-
-        if (isNewVideo) {
-          lastVideoIdRef.current = videoId;
-          lastMusicUpdateRef.current = activeMusicState.updatedAt || Date.now();
-          const startParam = Math.floor(targetTime) > 0 ? `&start=${Math.floor(targetTime)}` : '';
-          bgYtIframeRef.current.src = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&enablejsapi=1&playsinline=1${startParam}`;
-        } else {
-          // If seeking or state timestamp changed
-          if (activeMusicState.updatedAt !== lastMusicUpdateRef.current) {
-            lastMusicUpdateRef.current = activeMusicState.updatedAt;
-            bgYtIframeRef.current.contentWindow?.postMessage(
-              JSON.stringify({ event: 'command', func: 'seekTo', args: [targetTime, true] }),
-              '*'
-            );
-          }
-          if (activeMusicState.isPlaying) {
-            bgYtIframeRef.current.contentWindow?.postMessage('{"event":"command","func":"playVideo","args":""}', '*');
-          } else {
-            bgYtIframeRef.current.contentWindow?.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
-          }
-        }
-        const vol = activeMusicState.volume ?? 80;
-        bgYtIframeRef.current.contentWindow?.postMessage(`{"event":"command","func":"setVolume","args":[${vol}]}`, '*');
-      }
-    } else if (activeMusicState.currentTrack.url) {
-      // 2. Direct HTML5 audio stream (Radio / MP3)
-      if (bgYtIframeRef.current) {
-        bgYtIframeRef.current.contentWindow?.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
-      }
-      lastVideoIdRef.current = null;
-
-      if (bgMusicAudioRef.current) {
-        if (bgMusicAudioRef.current.src !== activeMusicState.currentTrack.url) {
-          bgMusicAudioRef.current.src = activeMusicState.currentTrack.url;
-        }
-        if (activeMusicState.currentTrack.source !== 'station' && activeMusicState.updatedAt !== lastMusicUpdateRef.current) {
-          lastMusicUpdateRef.current = activeMusicState.updatedAt;
-          if (Math.abs(bgMusicAudioRef.current.currentTime - targetTime) > 1.5) {
-            bgMusicAudioRef.current.currentTime = targetTime;
-          }
-        }
-        bgMusicAudioRef.current.volume = Math.min(Math.max((activeMusicState.volume ?? 80) / 100, 0), 1);
-        if (activeMusicState.isPlaying) {
-          bgMusicAudioRef.current.play().catch(e => console.warn('Music play error:', e));
-        } else {
-          bgMusicAudioRef.current.pause();
-        }
-      }
-    }
-  }, [activeMusicState]);
+  const handleSetUserMusicVolume = (vol) => {
+    const safe = Math.max(0, Math.min(100, Number(vol) || 0));
+    setUserMusicVolume(safe);
+    localStorage.setItem('fivecord_user_music_volume', safe);
+  };
 
 
   const handleLogin = (userData) => {
@@ -209,11 +144,14 @@ export default function App() {
       alert(message || 'Hesabınıza başka bir sekmeden veya cihazdan giriş yapıldı.');
     });
 
-    socket.on('initial-data', ({ channels, stations, watchTogether }) => {
+    socket.on('initial-data', ({ channels, stations, watchTogether, music }) => {
       setChannels(channels);
       if (stations) setMusicStations(stations);
       if (watchTogether) {
         setWatchTogetherRooms(new Map(Object.entries(watchTogether)));
+      }
+      if (music) {
+        setMusicStates(new Map(Object.entries(music)));
       }
       const defaultText = channels.find(c => c.type === 'text');
       if (defaultText && activeView === 'server') {
@@ -562,6 +500,7 @@ export default function App() {
     setCurrentVoiceChannel(channel);
     setCurrentChannel(channel);
     socket.emit('join-voice-channel', { channelId: channel.id });
+    socket.emit('fetch-music-state', channel.id);
     if (stream) {
       voiceRelay.startBroadcasting(channel.id, stream);
     }
@@ -702,8 +641,7 @@ export default function App() {
   };
 
   const handleSetMusicVolume = (volume) => {
-    const chId = currentVoiceChannel?.id || 'voice-genel';
-    socket.emit('music-volume', { channelId: chId, volume });
+    handleSetUserMusicVolume(volume);
   };
 
   const handleSeekMusic = (currentTime) => {
@@ -749,17 +687,10 @@ export default function App() {
           />
         ))}
       </div>
-      <audio ref={bgMusicAudioRef} className="hidden" />
-      {activeMusicState?.currentTrack?.source === 'youtube' && (
-        <div className="fixed -top-96 -left-96 pointer-events-none opacity-0 w-1 h-1 overflow-hidden">
-          <iframe
-            ref={bgYtIframeRef}
-            title="Fivecord YouTube Stream"
-            allow="autoplay; encrypted-media"
-            className="w-full h-full"
-          />
-        </div>
-      )}
+      <BackgroundMusicPlayer 
+        musicState={activeMusicState} 
+        userVolume={userMusicVolume} 
+      />
 
       {/* DISCORD SERVER RAIL (72px) */}
       <ServerRail 
@@ -872,6 +803,8 @@ export default function App() {
             }}
             onStopMusic={handleStopMusic}
             onSeekMusic={handleSeekMusic}
+            userMusicVolume={userMusicVolume}
+            onSetMusicVolume={handleSetUserMusicVolume}
             watchTogetherState={activeWatchTogether}
             onOpenWatchTogether={() => setIsWatchTogetherOpen(true)}
             onStopWatchTogether={handleStopWatchTogether}
@@ -968,7 +901,8 @@ export default function App() {
         onResume={handleResumeMusic}
         onStop={handleStopMusic}
         onSeek={handleSeekMusic}
-        onSetVolume={handleSetMusicVolume}
+        userVolume={userMusicVolume}
+        onSetVolume={handleSetUserMusicVolume}
       />
 
       {/* KARAR ÇARKI (DECISION WHEEL) MODAL */}

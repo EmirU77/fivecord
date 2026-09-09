@@ -27,6 +27,7 @@ export default function MusicPlayerModal({
   onResume,
   onStop,
   onSeek,
+  userVolume = 80,
   onSetVolume
 }) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -38,7 +39,7 @@ export default function MusicPlayerModal({
 
   const isPlaying = musicState?.isPlaying;
   const currentTrack = musicState?.currentTrack;
-  const volume = musicState?.volume ?? 80;
+  const volume = userVolume;
   const durationSec = musicState?.duration || (musicState?.currentTrack?.durationSec) || 0;
   const isLive = !durationSec || durationSec <= 0 || musicState?.currentTrack?.source === 'station';
 
@@ -429,18 +430,18 @@ export default function MusicPlayerModal({
                     </button>
                   </div>
 
-                  {/* Volume Slider */}
-                  <div className="flex items-center gap-2">
-                    <Volume2 className="w-4 h-4 text-[#949ba4]" />
+                  {/* Personal Volume Slider */}
+                  <div className="flex items-center gap-2" title="Kişisel Müzik Ses Seviyen (Sadece sende değişir)">
+                    <Volume2 className="w-4 h-4 text-[#23a55a]" />
                     <input
                       type="range"
                       min="0"
                       max="100"
                       value={volume}
                       onChange={(e) => onSetVolume(parseInt(e.target.value))}
-                      className="w-24 h-1.5 bg-[#383a40] rounded-lg appearance-none cursor-pointer accent-[#5865f2]"
+                      className="w-24 h-1.5 bg-[#383a40] rounded-lg appearance-none cursor-pointer accent-[#23a55a]"
                     />
-                    <span className="text-[11px] font-mono text-[#949ba4] w-7 text-right">{volume}%</span>
+                    <span className="text-[11px] font-mono text-[#23a55a] font-bold w-7 text-right">%{volume}</span>
                   </div>
                 </div>
               </div>

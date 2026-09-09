@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { 
   Monitor, MonitorOff, Video, VideoOff, Mic, MicOff, Headphones, 
-  PhoneOff, Maximize, Sparkles, Volume2, Radio, Check, Disc3, Music, Pause, Play, Tv, Download,
+  PhoneOff, Maximize, Sparkles, Volume2, VolumeX, Radio, Check, Disc3, Music, Pause, Play, Tv, Download,
   RotateCcw, RotateCw
 } from 'lucide-react';
 import { soundEffects } from '../services/soundEffects';
@@ -43,6 +43,8 @@ export default function VoiceRoom({
   onToggleMusicPlay,
   onStopMusic,
   onSeekMusic,
+  userMusicVolume = 80,
+  onSetMusicVolume,
   watchTogetherState,
   onOpenWatchTogether,
   onStopWatchTogether,
@@ -223,6 +225,26 @@ export default function VoiceRoom({
               7/24 Kesintisiz Canlı Yayın
             </div>
           )}
+
+          {/* Personal Music Volume Slider */}
+          <div className="flex items-center gap-1.5 bg-[#232428] px-2.5 py-1 rounded-lg border border-[#383a40] text-[#949ba4] shrink-0" title="Kişisel Müzik Ses Seviyen (Sadece senin için değişir)">
+            <button
+              onClick={() => onSetMusicVolume && onSetMusicVolume(userMusicVolume > 0 ? 0 : 80)}
+              className="hover:text-white transition-colors cursor-pointer"
+              title={userMusicVolume === 0 ? "Sesi Aç" : "Kişisel Sesi Sustur"}
+            >
+              {userMusicVolume === 0 ? <VolumeX className="w-3.5 h-3.5 text-[#f23f43]" /> : <Volume2 className="w-3.5 h-3.5 text-[#23a55a]" />}
+            </button>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={userMusicVolume}
+              onChange={(e) => onSetMusicVolume && onSetMusicVolume(Number(e.target.value))}
+              className="w-14 sm:w-20 h-1.5 bg-[#1e1f22] rounded-lg appearance-none cursor-pointer accent-[#23a55a]"
+            />
+            <span className="text-[10px] font-mono text-[#23a55a] font-bold w-6 text-right">%{userMusicVolume}</span>
+          </div>
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2 shrink-0">

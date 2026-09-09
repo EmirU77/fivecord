@@ -523,7 +523,8 @@ io.on('connection', (socket) => {
   socket.emit('initial-data', {
     channels,
     stations: MUSIC_STATIONS,
-    watchTogether: Object.fromEntries(watchTogetherRooms)
+    watchTogether: Object.fromEntries(watchTogetherRooms),
+    music: Object.fromEntries(channelMusic)
   });
 
   socket.on('user-join', (userData) => {
@@ -1114,6 +1115,12 @@ io.on('connection', (socket) => {
         username: user.username,
         senderSocketId: socket.id
       });
+    }
+
+    // Immediately sync current channel music to the joining user
+    const currentMusic = channelMusic.get(channelId);
+    if (currentMusic) {
+      socket.emit('music-state-updated', { channelId, state: currentMusic });
     }
   });
 
