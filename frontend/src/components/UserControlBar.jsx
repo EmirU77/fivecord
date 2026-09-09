@@ -1720,50 +1720,99 @@ export default function UserControlBar({
                       </div>
                     </div>
 
-                    {/* Krisp Noise Suppression & Enhanced Processing */}
-                    <div className="p-4 rounded-xl bg-[#2b2d31] border border-[#383a40] space-y-3">
-                      <div className="text-xs font-bold uppercase tracking-wider text-[#b5bac1] flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5 text-[#5865f2]" />
-                        <span>Gelişmiş Ses İşleme</span>
+                    {/* Krisp AI Studio 2.0 Noise Suppression & Multi-Stage DSP */}
+                    <div className="p-4 rounded-xl bg-[#2b2d31] border border-[#383a40] space-y-3.5">
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs font-bold uppercase tracking-wider text-[#b5bac1] flex items-center gap-1.5">
+                          <Sparkles className="w-4 h-4 text-[#5865f2]" />
+                          <span>Krisp AI Studio 2.0 Gürültü Engelleme</span>
+                          <span className="text-[9px] px-2 py-0.5 rounded-full bg-[#5865f2] text-white font-extrabold shadow-sm">
+                            PRO DSP
+                          </span>
+                        </div>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full font-mono ${
+                          isKrispEnabled ? 'bg-[#23a55a]/20 text-[#23a55a]' : 'bg-[#4e5058]/30 text-[#949ba4]'
+                        }`}>
+                          {isKrispEnabled ? '● STÜDYO İZOLASYON AKTİF' : '○ KAPALI'}
+                        </span>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {/* Krisp */}
-                        <div 
-                          onClick={handleKrispToggle}
-                          className="p-3 rounded-xl bg-[#1e1f22] border border-[#383a40] hover:border-[#5865f2] flex items-center justify-between cursor-pointer transition-all"
-                        >
-                          <div>
-                            <div className="text-xs font-bold text-white flex items-center gap-1.5">
-                              <span>Krisp Gürültü Engelleme</span>
-                              <span className="text-[9px] px-1.5 py-0.2 rounded bg-[#5865f2] text-white font-black">AI</span>
-                            </div>
-                            <div className="text-[11px] text-[#949ba4] mt-0.5">
-                              Klavye tıkırtılarını ve arka plan gürültülerini filtreler
+                      {/* Main Krisp AI Card */}
+                      <div 
+                        onClick={handleKrispToggle}
+                        className={`p-4 rounded-xl border transition-all cursor-pointer ${
+                          isKrispEnabled 
+                            ? 'bg-gradient-to-r from-[#1e1f22] to-[#232428] border-[#23a55a] shadow-md shadow-[#23a55a]/10' 
+                            : 'bg-[#1e1f22] border-[#383a40] hover:border-[#4e5058]'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-2.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-base">🎙️</span>
+                            <div>
+                              <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                                <span>Akıllı Yapay Zeka Ses İzolasyonu</span>
+                                <span className="text-[9px] px-1.5 py-0.2 rounded bg-gradient-to-r from-[#5865f2] to-[#eb459e] text-white font-black">
+                                  DERİN FİLTRE
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-[#949ba4] mt-0.5">
+                                Mekanik klavye, mouse tıkırtısı, fan sesi ve oda uğultusunu sıfırlar; sadece insan sesini geçirir.
+                              </div>
                             </div>
                           </div>
-                          <div className={`w-10 h-5 rounded-full transition-colors relative flex items-center px-0.5 ${
+                          
+                          <div className={`w-12 h-6 rounded-full transition-colors relative flex items-center px-1 shrink-0 ${
                             isKrispEnabled ? 'bg-[#23a55a]' : 'bg-[#4e5058]'
                           }`}>
-                            <div className={`w-4 h-4 rounded-full bg-white transition-transform ${
-                              isKrispEnabled ? 'translate-x-5' : 'translate-x-0'
+                            <div className={`w-4 h-4 rounded-full bg-white transition-transform shadow-md ${
+                              isKrispEnabled ? 'translate-x-6' : 'translate-x-0'
                             }`} />
                           </div>
                         </div>
 
-                        {/* Echo Cancellation & AGC Status */}
-                        <div className="p-3 rounded-xl bg-[#1e1f22] border border-[#383a40] flex items-center justify-between">
-                          <div>
-                            <div className="text-xs font-bold text-white flex items-center gap-1.5">
-                              <span>Yankı ve Kazanç Kontrolü (AEC/AGC)</span>
-                              <span className="text-[9px] px-1.5 py-0.2 rounded bg-[#23a55a]/20 text-[#23a55a] font-bold">AKTİF</span>
-                            </div>
-                            <div className="text-[11px] text-[#949ba4] mt-0.5">
-                              Hoparlör sesinin mikrofona yankı yapmasını önler
-                            </div>
+                        {/* Feature Badges Strip */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-1 text-[10px]">
+                          <div className={`p-1.5 rounded-lg border flex items-center gap-1.5 font-medium truncate ${
+                            isKrispEnabled ? 'bg-[#2b2d31] border-[#23a55a]/30 text-white' : 'bg-[#2b2d31]/50 border-transparent text-[#949ba4]'
+                          }`}>
+                            <span>⌨️</span>
+                            <span className="truncate">Klavye Filtresi</span>
                           </div>
-                          <Check className="w-5 h-5 text-[#23a55a]" />
+                          <div className={`p-1.5 rounded-lg border flex items-center gap-1.5 font-medium truncate ${
+                            isKrispEnabled ? 'bg-[#2b2d31] border-[#23a55a]/30 text-white' : 'bg-[#2b2d31]/50 border-transparent text-[#949ba4]'
+                          }`}>
+                            <span>💨</span>
+                            <span className="truncate">Fan / Uğultu (85Hz)</span>
+                          </div>
+                          <div className={`p-1.5 rounded-lg border flex items-center gap-1.5 font-medium truncate ${
+                            isKrispEnabled ? 'bg-[#2b2d31] border-[#23a55a]/30 text-white' : 'bg-[#2b2d31]/50 border-transparent text-[#949ba4]'
+                          }`}>
+                            <span>⚡</span>
+                            <span className="truncate">Dip Ses / Vızıltı</span>
+                          </div>
+                          <div className={`p-1.5 rounded-lg border flex items-center gap-1.5 font-medium truncate ${
+                            isKrispEnabled ? 'bg-[#2b2d31] border-[#23a55a]/30 text-white' : 'bg-[#2b2d31]/50 border-transparent text-[#949ba4]'
+                          }`}>
+                            <span>📻</span>
+                            <span className="truncate">Stüdyo Kompresör</span>
+                          </div>
                         </div>
+                      </div>
+
+                      {/* Echo Cancellation & AGC Info Bar */}
+                      <div className="p-3 rounded-xl bg-[#1e1f22] border border-[#383a40] flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm">🛡️</span>
+                          <div>
+                            <span className="font-bold text-white">Akustik Yankı & Otomatik Kazanç (AEC/AGC)</span>
+                            <span className="text-[11px] text-[#949ba4] block">Kulaklıksız kullanımda dahi mikrofon hoparlör döngüsünü keser.</span>
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-bold text-[#23a55a] bg-[#23a55a]/15 px-2.5 py-1 rounded-full flex items-center gap-1 shrink-0">
+                          <Check className="w-3.5 h-3.5" />
+                          <span>DONANIMSAL AKTİF</span>
+                        </span>
                       </div>
                     </div>
 

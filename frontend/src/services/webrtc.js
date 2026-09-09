@@ -1,3 +1,4 @@
+import { voiceRelay } from './voiceRelay';
 import { socket } from './socket';
 
 // High reliability Google + Cloudflare STUN servers (resolve in <10ms, no rate limits, works across LAN/NAT)
@@ -105,9 +106,16 @@ class WebRTCManager {
 
     const savedInputId = typeof localStorage !== 'undefined' ? localStorage.getItem('fivecord_audio_input') : null;
     const audioConstraint = {
-      echoCancellation: true,
-      noiseSuppression: this.isNoiseSuppressionOn,
-      autoGainControl: true,
+      echoCancellation: { ideal: true },
+      noiseSuppression: { ideal: this.isNoiseSuppressionOn },
+      autoGainControl: { ideal: true },
+      // Chromium 120+ / Google Meet Deep Neural Voice Isolation & Typing Filter
+      voiceIsolation: { ideal: this.isNoiseSuppressionOn },
+      googEchoCancellation: { ideal: true },
+      googAutoGainControl: { ideal: true },
+      googNoiseSuppression: { ideal: this.isNoiseSuppressionOn },
+      googHighpassFilter: { ideal: this.isNoiseSuppressionOn },
+      googTypingNoiseDetection: { ideal: this.isNoiseSuppressionOn },
       ...(savedInputId ? { deviceId: { exact: savedInputId } } : {})
     };
 
@@ -231,14 +239,28 @@ class WebRTCManager {
   }
 
   setNoiseSuppression(enabled) {
-    this.isNoiseSuppressionOn = enabled;
+    this.isNoiseSuppressionOn = Boolean(enabled);
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('fivecord_noise_suppressed', enabled ? 'true' : 'false');
+      }
+    } catch (e) {}
+
+    try {
+      voiceRelay.setNoiseSuppression(this.isNoiseSuppressionOn);
+    } catch (e) {}
+
     if (this.localStream) {
       const audioTrack = this.localStream.getAudioTracks()[0];
       if (audioTrack && audioTrack.applyConstraints) {
         audioTrack.applyConstraints({
-          noiseSuppression: this.isNoiseSuppressionOn,
-          echoCancellation: true,
-          autoGainControl: true
+          noiseSuppression: { ideal: this.isNoiseSuppressionOn },
+          echoCancellation: { ideal: true },
+          autoGainControl: { ideal: true },
+          voiceIsolation: { ideal: this.isNoiseSuppressionOn },
+          googNoiseSuppression: { ideal: this.isNoiseSuppressionOn },
+          googHighpassFilter: { ideal: this.isNoiseSuppressionOn },
+          googTypingNoiseDetection: { ideal: this.isNoiseSuppressionOn }
         }).catch(() => {});
       }
     }
@@ -778,9 +800,13 @@ class WebRTCManager {
         const newStream = await navigator.mediaDevices.getUserMedia({
           audio: {
             deviceId: { exact: deviceId },
-            echoCancellation: true,
-            noiseSuppression: this.isNoiseSuppressionOn,
-            autoGainControl: true
+            echoCancellation: { ideal: true },
+            noiseSuppression: { ideal: this.isNoiseSuppressionOn },
+            autoGainControl: { ideal: true },
+            voiceIsolation: { ideal: this.isNoiseSuppressionOn },
+            googNoiseSuppression: { ideal: this.isNoiseSuppressionOn },
+            googHighpassFilter: { ideal: this.isNoiseSuppressionOn },
+            googTypingNoiseDetection: { ideal: this.isNoiseSuppressionOn }
           },
           video: false
         });

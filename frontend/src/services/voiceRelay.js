@@ -16,6 +16,13 @@ class VoiceRelayManager {
     this.sampleRate = 48000;
     this.hangover = 0;
     this.onPeerSpeaking = null; // Callback (senderSocketId, isSpeaking)
+    this.isNoiseSuppressionOn = typeof localStorage !== 'undefined' ? localStorage.getItem('fivecord_noise_suppressed') === 'true' : true;
+    this.currentGateGain = 0.0;
+    this.targetGateGain = 0.0;
+    this.hpFilter = null;
+    this.notchFilter = null;
+    this.lpFilter = null;
+    this.compressor = null;
 
     this.setupSocketListeners();
   }
@@ -69,6 +76,21 @@ class VoiceRelayManager {
     return saved !== null ? Number(saved) : 100;
   }
 
+  setNoiseSuppression(enabled) {
+    this.isNoiseSuppressionOn = Boolean(enabled);
+    if (this.hpFilter && this.lpFilter) {
+      if (this.isNoiseSuppressionOn) {
+        this.hpFilter.frequency.value = 85;
+        this.lpFilter.frequency.value = 10500;
+        if (this.notchFilter) this.notchFilter.frequency.value = 50;
+      } else {
+        this.hpFilter.frequency.value = 10;
+        this.lpFilter.frequency.value = 22000;
+        if (this.notchFilter) this.notchFilter.frequency.value = 10;
+      }
+    }
+  }
+
   setMuted(muted) {
     this.isMuted = muted;
   }
@@ -119,9 +141,45 @@ class VoiceRelayManager {
       this.sampleRate = this.captureContext.sampleRate || 44100;
       this.micSource = this.captureContext.createMediaStreamSource(mediaStream);
 
-      // ScriptProcessor bufferSize 2048 (~42ms at 48kHz, ~46ms at 44.1kHz)
+      // --- KRISP STUDIO AI DSP FILTER CHAIN ---
+      // 1. High-Pass Filter (85Hz) removes desk thumps, mic handling, and fan/AC rumble
+      this.hpFilter = this.captureContext.createBiquadFilter();
+      this.hpFilter.type = 'highpass';
+      this.hpFilter.frequency.value = this.isNoiseSuppressionOn ? 85 : 10;
+      this.hpFilter.Q.value = 0.707;
+
+      // 2. Notch Filter (50Hz) removes AC mains electric buzz
+      this.notchFilter = this.captureContext.createBiquadFilter();
+      this.notchFilter.type = 'notch';
+      this.notchFilter.frequency.value = this.isNoiseSuppressionOn ? 50 : 10;
+      this.notchFilter.Q.value = 4.0;
+
+      // 3. Low-Pass Filter (10.5kHz) cuts off coil whine, harsh electronic hiss
+      this.lpFilter = this.captureContext.createBiquadFilter();
+      this.lpFilter.type = 'lowpass';
+      this.lpFilter.frequency.value = this.isNoiseSuppressionOn ? 10500 : 22000;
+      this.lpFilter.Q.value = 0.707;
+
+      // 4. Dynamics Compressor for broadcast radio vocal clarity
+      this.compressor = this.captureContext.createDynamicsCompressor();
+      this.compressor.threshold.setValueAtTime(-24, this.captureContext.currentTime);
+      this.compressor.knee.setValueAtTime(15, this.captureContext.currentTime);
+      this.compressor.ratio.setValueAtTime(4, this.captureContext.currentTime);
+      this.compressor.attack.setValueAtTime(0.003, this.captureContext.currentTime);
+      this.compressor.release.setValueAtTime(0.15, this.captureContext.currentTime);
+
+      // 5. ScriptProcessor bufferSize 2048 (~42ms at 48kHz, ~46ms at 44.1kHz)
       this.processor = this.captureContext.createScriptProcessor(2048, 1, 1);
       this.hangover = 0;
+      this.currentGateGain = 0.0;
+      this.targetGateGain = 0.0;
+
+      // Connect DSP Chain
+      this.micSource.connect(this.hpFilter);
+      this.hpFilter.connect(this.notchFilter);
+      this.notchFilter.connect(this.lpFilter);
+      this.lpFilter.connect(this.compressor);
+      this.compressor.connect(this.processor);
 
       // Retain references on window to prevent Chromium V8 GC from killing processor
       if (typeof window !== 'undefined') {
@@ -139,36 +197,45 @@ class VoiceRelayManager {
           if (abs > maxVal) maxVal = abs;
         }
 
-        // Sensitive voice activity threshold (~ -56 dBFS)
-        // Picks up quiet laptop mics, built-in headsets, and whispers effortlessly
-        if (maxVal > 0.0015) {
-          this.hangover = 15; // ~600ms hangover to prevent clipping natural word endings
-        }
-
-        if (this.hangover > 0) {
+        // Krisp Studio Gate Threshold:
+        // When Krisp is enabled, filter background keyboard clicks & fan noise
+        const threshold = this.isNoiseSuppressionOn ? 0.0028 : 0.0015;
+        if (maxVal > threshold) {
+          this.hangover = this.isNoiseSuppressionOn ? 12 : 15;
+          this.targetGateGain = 1.0;
+        } else if (this.hangover > 0) {
           this.hangover--;
-
-          // Convert Float32 [-1, 1] to Int16 [-32768, 32767] with mic gain
-          const micGain = this.getMicVolume() / 100;
-          const pcm16 = new Int16Array(input.length);
-          for (let i = 0; i < input.length; i++) {
-            const s = Math.max(-1, Math.min(1, input[i] * micGain));
-            pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-          }
-
-          socket.emit('voice-pcm-chunk', {
-            channelId: this.currentChannelId,
-            sampleRate: this.sampleRate,
-            buffer: pcm16.buffer
-          });
+          this.targetGateGain = 1.0;
+        } else {
+          this.targetGateGain = 0.0;
         }
+
+        // Smooth gate transitions to eliminate pops/clicks
+        this.currentGateGain += (this.targetGateGain - this.currentGateGain) * 0.35;
+        if (this.currentGateGain < 0.005) {
+          this.currentGateGain = 0.0;
+          return; // Dead silent between words, no background noise packets emitted
+        }
+
+        // Convert Float32 [-1, 1] to Int16 [-32768, 32767] with mic gain and noise gate
+        const micGain = (this.getMicVolume() / 100) * this.currentGateGain;
+        const pcm16 = new Int16Array(input.length);
+        for (let i = 0; i < input.length; i++) {
+          const s = Math.max(-1, Math.min(1, input[i] * micGain));
+          pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        }
+
+        socket.emit('voice-pcm-chunk', {
+          channelId: this.currentChannelId,
+          sampleRate: this.sampleRate,
+          buffer: pcm16.buffer
+        });
       };
 
       // Mute local loopback to avoid hearing own voice echo
       this.muteNode = this.captureContext.createGain();
       this.muteNode.gain.value = 0;
 
-      this.micSource.connect(this.processor);
       this.processor.connect(this.muteNode);
       this.muteNode.connect(this.captureContext.destination);
 
@@ -248,6 +315,22 @@ class VoiceRelayManager {
     if (this.micSource) {
       try { this.micSource.disconnect(); } catch (e) {}
       this.micSource = null;
+    }
+    if (this.hpFilter) {
+      try { this.hpFilter.disconnect(); } catch (e) {}
+      this.hpFilter = null;
+    }
+    if (this.notchFilter) {
+      try { this.notchFilter.disconnect(); } catch (e) {}
+      this.notchFilter = null;
+    }
+    if (this.lpFilter) {
+      try { this.lpFilter.disconnect(); } catch (e) {}
+      this.lpFilter = null;
+    }
+    if (this.compressor) {
+      try { this.compressor.disconnect(); } catch (e) {}
+      this.compressor = null;
     }
     if (this.muteNode) {
       try { this.muteNode.disconnect(); } catch (e) {}
