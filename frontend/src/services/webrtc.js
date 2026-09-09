@@ -274,12 +274,18 @@ class WebRTCManager {
       });
     }
 
-    // 4. Ensure transceiver for audio exists with direction sendrecv
+    // 4. Ensure transceivers for audio and video exist with direction sendrecv
     const senders = pc.getSenders();
     const hasAudio = senders.some(s => s.track && s.track.kind === 'audio');
     if (!hasAudio) {
       try {
         pc.addTransceiver('audio', { direction: 'sendrecv' });
+      } catch (e) {}
+    }
+    const hasVideo = senders.some(s => s.track && s.track.kind === 'video');
+    if (!hasVideo) {
+      try {
+        pc.addTransceiver('video', { direction: 'sendrecv' });
       } catch (e) {}
     }
 
@@ -500,7 +506,10 @@ class WebRTCManager {
         }, 400);
         return;
       }
-      const offer = await pc.createOffer();
+      const offer = await pc.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: true
+      });
       await pc.setLocalDescription(offer);
       socket.emit('signal', {
         targetSocketId,

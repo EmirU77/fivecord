@@ -1,8 +1,8 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { 
   Monitor, MonitorOff, Video, VideoOff, Mic, MicOff, Headphones, 
-  PhoneOff, Maximize, Sparkles, Volume2, VolumeX, Radio, Check, Disc3, Music, Pause, Play, Tv, Download,
-  RotateCcw, RotateCw
+  PhoneOff, Maximize, Maximize2, Sparkles, Volume2, VolumeX, Radio, Check, Disc3, Music, Pause, Play, Tv, Download,
+  RotateCcw, RotateCw, LayoutGrid, Loader2, Users
 } from 'lucide-react';
 import { soundEffects } from '../services/soundEffects';
 import { webrtc } from '../services/webrtc';
@@ -18,6 +18,111 @@ function formatTime(seconds) {
     return `${h}:${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
   }
   return `${m}:${s < 10 ? '0' : ''}${s}`;
+}
+
+// Standalone bulletproof Stream Player that guarantees NO black screen
+function StreamPlayer({ streamItem, isFocused = false, onFocus }) {
+  const videoRef = useRef(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !streamItem?.stream) return;
+
+    // Set muted on DOM properties directly before srcObject (bypasses browser autoplay policy)
+    video.muted = true;
+    video.defaultMuted = true;
+    if (video.srcObject !== streamItem.stream) {
+      video.srcObject = streamItem.stream;
+    }
+
+    const tryPlay = () => {
+      video.muted = true;
+      video.play().then(() => {
+        setIsPlaying(true);
+      }).catch(() => {});
+    };
+
+    tryPlay();
+
+    const onLoadedMetadata = () => tryPlay();
+    const onCanPlay = () => tryPlay();
+    const onPlaying = () => setIsPlaying(true);
+
+    video.addEventListener('loadedmetadata', onLoadedMetadata);
+    video.addEventListener('canplay', onCanPlay);
+    video.addEventListener('playing', onPlaying);
+
+    return () => {
+      video.removeEventListener('loadedmetadata', onLoadedMetadata);
+      video.removeEventListener('canplay', onCanPlay);
+      video.removeEventListener('playing', onPlaying);
+    };
+  }, [streamItem?.stream]);
+
+  const toggleFullscreen = () => {
+    if (videoRef.current) {
+      if (document.fullscreenElement) {
+        document.exitFullscreen();
+      } else {
+        videoRef.current.requestFullscreen();
+      }
+    }
+  };
+
+  return (
+    <div className="relative w-full h-full bg-black rounded-2xl overflow-hidden border border-[#3f4147] shadow-xl flex items-center justify-center group select-none">
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        className="w-full h-full object-contain"
+      />
+
+      {/* Top Left: Streamer Badges */}
+      <div className="absolute top-3.5 left-3.5 flex items-center gap-2 z-10">
+        <span className="flex items-center gap-1.5 text-xs font-bold bg-[#f23f43] text-white px-2.5 py-1 rounded-md shadow-md">
+          <Radio className="w-3.5 h-3.5 animate-pulse" />
+          CANLI YAYIN
+        </span>
+        <span className="text-xs font-semibold bg-black/75 backdrop-blur-xs text-white px-2.5 py-1 rounded-md border border-white/10">
+          {streamItem.username} {streamItem.isLocal ? '(Senin Ekranın)' : 'ekranı'}
+        </span>
+        <span className="text-xs font-semibold bg-[#5865f2] text-white px-2.5 py-1 rounded-md">
+          60 FPS HD
+        </span>
+      </div>
+
+      {/* Top Right: Actions */}
+      <div className="absolute top-3.5 right-3.5 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+        {onFocus && (
+          <button
+            onClick={onFocus}
+            className="p-2 rounded-xl bg-black/75 hover:bg-[#5865f2] text-white backdrop-blur-xs transition-colors shadow cursor-pointer"
+            title="Sahneye Büyüt / Odaklan"
+          >
+            <Maximize2 className="w-4 h-4" />
+          </button>
+        )}
+        <button
+          onClick={toggleFullscreen}
+          className="p-2 rounded-xl bg-black/75 hover:bg-black text-white backdrop-blur-xs transition-colors shadow cursor-pointer"
+          title="Tam Ekran"
+        >
+          <Maximize className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Loading overlay if video hasn't rendered first frame */}
+      {!isPlaying && (
+        <div className="absolute inset-0 bg-black/85 flex flex-col items-center justify-center gap-2.5 text-white z-0 pointer-events-none">
+          <Loader2 className="w-8 h-8 text-[#5865f2] animate-spin" />
+          <span className="text-xs font-medium text-[#dbdee1]">Yayın yükleniyor ve senkronize ediliyor...</span>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function VoiceRoom({
@@ -38,6 +143,7 @@ export default function VoiceRoom({
   onOpenScreenModal,
   onStopScreenShare,
   onLeaveVoice,
+  onReconnectVoice,
   musicState,
   onOpenMusicModal,
   onToggleMusicPlay,
@@ -52,16 +158,90 @@ export default function VoiceRoom({
   isAppInstalled,
   onOpenDownload
 }) {
-  const [activeScreenUser, setActiveScreenUser] = useState(null);
-  const [isNoiseSuppressed, setIsNoiseSuppressed] = useState(webrtc.isNoiseSuppressionOn);
   const [sliderVal, setSliderVal] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
-  const mainVideoRef = useRef(null);
+  const [isNoiseSuppressed, setIsNoiseSuppressed] = useState(false);
+  const [selectedStreamId, setSelectedStreamId] = useState(null);
+  const [layoutMode, setLayoutMode] = useState('auto'); // 'auto', 'grid', 'focus'
 
+  const channelMembers = useMemo(() => {
+    return members.filter(m => m.voiceState?.channelId === channel.id);
+  }, [members, channel.id]);
+
+  // Collect ALL active screen streams (both local and all remote streams)
+  const activeScreenStreams = useMemo(() => {
+    const list = [];
+
+    // 1. Remote members who are sharing screen
+    channelMembers.forEach(member => {
+      if (member.id !== currentUser?.id) {
+        const stream = remoteScreenStreams?.get(member.socketId) || remoteStreams?.get(member.socketId);
+        const hasVideo = stream && stream.getVideoTracks().length > 0;
+        if (hasVideo || member.voiceState?.isScreenSharing) {
+          if (stream) {
+            list.push({
+              id: member.socketId,
+              socketId: member.socketId,
+              username: member.username,
+              avatar: member.avatar,
+              stream,
+              isLocal: false
+            });
+          }
+        }
+      }
+    });
+
+    // 2. Any additional remote screen streams
+    if (remoteScreenStreams) {
+      for (const [socketId, stream] of remoteScreenStreams.entries()) {
+        if (!list.some(s => s.socketId === socketId) && stream && stream.getVideoTracks().length > 0) {
+          const peer = members.find(m => m.socketId === socketId);
+          list.push({
+            id: socketId,
+            socketId,
+            username: peer?.username || 'Arkadaşın',
+            avatar: peer?.avatar,
+            stream,
+            isLocal: false
+          });
+        }
+      }
+    }
+
+    // 3. Local screen share
+    if (isScreenSharing && screenStream) {
+      list.push({
+        id: 'local',
+        socketId: 'local',
+        username: currentUser?.username || 'Sen',
+        avatar: currentUser?.avatar,
+        stream: screenStream,
+        isLocal: true
+      });
+    }
+
+    return list;
+  }, [channelMembers, remoteScreenStreams, remoteStreams, isScreenSharing, screenStream, currentUser, members]);
+
+  // Current focused stream (for focus / theater mode)
+  const focusedStream = useMemo(() => {
+    if (activeScreenStreams.length === 0) return null;
+    if (selectedStreamId) {
+      const match = activeScreenStreams.find(s => s.id === selectedStreamId);
+      if (match) return match;
+    }
+    // Default to the first remote stream, or local if only local exists
+    return activeScreenStreams.find(s => !s.isLocal) || activeScreenStreams[0];
+  }, [activeScreenStreams, selectedStreamId]);
+
+  // Effective layout mode: If only 1 stream, focus mode is natural; if >= 2, auto defaults to grid
+  const isGridView = (layoutMode === 'grid') || (layoutMode === 'auto' && activeScreenStreams.length >= 2 && !selectedStreamId);
+
+  // Music slider handling
   const durationSec = musicState?.duration || (musicState?.currentTrack?.durationSec) || 0;
   const isLive = !durationSec || durationSec <= 0 || musicState?.currentTrack?.source === 'station';
 
-  // Synchronized timeline ticker for music bar
   useEffect(() => {
     if (!musicState || !musicState.isPlaying || isDragging || isLive) {
       if (!isDragging && musicState) {
@@ -99,67 +279,25 @@ export default function VoiceRoom({
     setIsNoiseSuppressed(next);
   };
 
-  // Determine if anyone (local or remote) is sharing screen
-  useEffect(() => {
-    if (isScreenSharing && screenStream) {
-      setActiveScreenUser({ isLocal: true, stream: screenStream, username: currentUser?.username });
-    } else {
-      const screenSharingMember = members.find(m => m.voiceState?.isScreenSharing && m.id !== currentUser?.id);
-      if (screenSharingMember) {
-        const stream = remoteScreenStreams?.get(screenSharingMember.socketId) || remoteStreams?.get(screenSharingMember.socketId);
-        if (stream && stream.getVideoTracks().length > 0) {
-          setActiveScreenUser({ isLocal: false, stream, username: screenSharingMember.username, socketId: screenSharingMember.socketId });
-          return;
-        }
-      }
-      if (remoteScreenStreams && remoteScreenStreams.size > 0) {
-        const [peerId, stream] = remoteScreenStreams.entries().next().value;
-        const peer = members.find(m => m.socketId === peerId);
-        setActiveScreenUser({ isLocal: false, stream, username: peer?.username || 'Arkadaşın', socketId: peerId });
-      } else {
-        setActiveScreenUser(null);
-      }
-    }
-  }, [isScreenSharing, screenStream, remoteScreenStreams, remoteStreams, members, currentUser]);
-
-  useEffect(() => {
-    if (mainVideoRef.current && activeScreenUser?.stream) {
-      mainVideoRef.current.srcObject = activeScreenUser.stream;
-      mainVideoRef.current.play().catch(() => {});
-    }
-  }, [activeScreenUser]);
-
-  const channelMembers = members.filter(m => m.voiceState?.channelId === channel.id);
-
-  const toggleFullscreen = () => {
-    if (mainVideoRef.current) {
-      if (document.fullscreenElement) {
-        document.exitFullscreen();
-      } else {
-        mainVideoRef.current.requestFullscreen();
-      }
-    }
-  };
-
   return (
-    <div className="flex-1 bg-[#1e1f22] flex flex-col overflow-hidden relative">
-      {/* Voice Top Header */}
-      <div className="h-12 border-b border-[#2b2d31] px-6 flex items-center justify-between bg-[#2b2d31]/80 shadow-xs">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <Volume2 className="w-5 h-5 text-[#23a55a]" />
-            <span className="text-white font-bold text-base">{channel.name}</span>
-          </div>
-          <span className="text-xs bg-[#23a55a]/15 text-[#23a55a] px-2.5 py-0.5 rounded-full font-semibold border border-[#23a55a]/30 flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-[#23a55a] animate-pulse" />
+    <div className="flex-1 flex flex-col bg-[#1e1f22] overflow-hidden relative select-none">
+      {/* Top channel header */}
+      <div className="h-12 border-b border-[#1f2023] px-6 flex items-center justify-between shrink-0 bg-[#1e1f22]">
+        <div className="flex items-center gap-2 text-white font-bold text-sm">
+          <span>🔊</span>
+          <span>{channel.name}</span>
+          <span className="text-xs font-normal text-[#949ba4] bg-[#2b2d31] px-2 py-0.5 rounded ml-2">
             {channelMembers.length} Kişi Bağlı
           </span>
-          <span className="text-[11px] text-[#949ba4] font-mono hidden md:inline">
-            Opus HQ 60FPS
-          </span>
+          {activeScreenStreams.length > 0 && (
+            <span className="text-xs font-bold text-[#f23f43] bg-[#f23f43]/15 px-2.5 py-0.5 rounded-full border border-[#f23f43]/30 flex items-center gap-1.5 ml-1">
+              <Radio className="w-3 h-3 animate-pulse" />
+              {activeScreenStreams.length} Yayın Canlı
+            </span>
+          )}
         </div>
 
-        {/* Windows Download button (Only on Web) */}
+        {/* Windows App Download Button */}
         {!isAppInstalled && (
           <button
             onClick={onOpenDownload}
@@ -249,7 +387,7 @@ export default function VoiceRoom({
             <button
               onClick={() => onSetMusicVolume && onSetMusicVolume(userMusicVolume > 0 ? 0 : 80)}
               className="hover:text-white transition-colors cursor-pointer"
-              title={userMusicVolume === 0 ? "Sesi Aç" : "Kişisel Sesi Sustur"}
+              title={userMusicVolume === 0 ? "Sesi Aç (%80 yap)" : "Kişisel Sesi Sustur"}
             >
               {userMusicVolume === 0 ? <VolumeX className="w-3.5 h-3.5 text-[#f23f43]" /> : <Volume2 className="w-3.5 h-3.5 text-[#23a55a]" />}
             </button>
@@ -261,7 +399,9 @@ export default function VoiceRoom({
               onChange={(e) => onSetMusicVolume && onSetMusicVolume(Number(e.target.value))}
               className="w-14 sm:w-20 h-1.5 bg-[#1e1f22] rounded-lg appearance-none cursor-pointer accent-[#23a55a]"
             />
-            <span className="text-[10px] font-mono text-[#23a55a] font-bold w-6 text-right">%{userMusicVolume}</span>
+            <span className={`text-[10px] font-mono font-bold w-6 text-right ${userMusicVolume === 0 ? 'text-[#f23f43]' : 'text-[#23a55a]'}`}>
+              %{userMusicVolume}
+            </span>
           </div>
 
           {/* Action Buttons */}
@@ -275,7 +415,7 @@ export default function VoiceRoom({
             </button>
             <button
               onClick={onOpenMusicModal}
-              className="px-3 py-1 rounded-lg bg-[#5865f2] hover:bg-[#4752c4] text-white text-xs font-bold transition-all cursor-pointer"
+              className="px-3 py-1 rounded-lg bg-[#5865f2] hover:bg-[#4752c4] text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
             >
               🔍 Şarkı Ara / Ayar
             </button>
@@ -291,9 +431,9 @@ export default function VoiceRoom({
       )}
 
       {/* Main Grid Stage */}
-      <div className="flex-1 p-6 overflow-y-auto flex flex-col justify-center">
-        {/* WATCH TOGETHER YOUTUBE CINEMA STAGE */}
-        {watchTogetherState?.videoId && !activeScreenUser ? (
+      <div className="flex-1 p-4 md:p-6 overflow-y-auto flex flex-col justify-center">
+        {/* 1. WATCH TOGETHER YOUTUBE CINEMA STAGE */}
+        {watchTogetherState?.videoId && activeScreenStreams.length === 0 ? (
           <div className="space-y-4 max-w-6xl mx-auto w-full">
             <SharedCinemaPlayer
               watchTogetherState={watchTogetherState}
@@ -328,71 +468,139 @@ export default function VoiceRoom({
               })}
             </div>
           </div>
-        ) : activeScreenUser ? (
-          <div className="space-y-4 max-w-6xl mx-auto w-full">
-            <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden border border-[#3f4147] shadow-2xl flex items-center justify-center group">
-              <video
-                ref={(el) => {
-                  mainVideoRef.current = el;
-                  if (el && activeScreenUser?.stream && el.srcObject !== activeScreenUser.stream) {
-                    el.srcObject = activeScreenUser.stream;
-                    el.play().catch(() => {});
-                  }
-                }}
-                autoPlay
-                playsInline
-                muted={activeScreenUser.isLocal}
-                className="w-full h-full object-contain"
-              />
+        ) : activeScreenStreams.length > 0 ? (
+          /* 2. MULTI-STREAM STAGE (DISCORD-STYLE) */
+          <div className="space-y-4 max-w-7xl mx-auto w-full">
+            {/* Stream Switcher Bar & Layout Controls (if multiple streams or focus mode) */}
+            {activeScreenStreams.length > 1 && (
+              <div className="flex items-center justify-between bg-[#2b2d31]/80 backdrop-blur-md px-4 py-2 rounded-xl border border-[#383a40] flex-wrap gap-2">
+                {/* Active streams tabs */}
+                <div className="flex items-center gap-2 overflow-x-auto">
+                  <span className="text-xs font-bold text-[#949ba4] mr-1 flex items-center gap-1.5">
+                    <Radio className="w-3.5 h-3.5 text-[#f23f43] animate-pulse" />
+                    Yayınlar:
+                  </span>
+                  {activeScreenStreams.map(s => {
+                    const isSelected = focusedStream?.id === s.id && !isGridView;
+                    return (
+                      <button
+                        key={s.id}
+                        onClick={() => {
+                          setSelectedStreamId(s.id);
+                          setLayoutMode('focus');
+                        }}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-[#5865f2] text-white shadow'
+                            : 'bg-[#1e1f22] text-[#dbdee1] hover:bg-[#35373c] hover:text-white'
+                        }`}
+                      >
+                        <span>{s.username}</span>
+                        {s.isLocal ? <span className="text-[10px] text-[#949ba4]">(Sen)</span> : null}
+                        <span className="w-2 h-2 rounded-full bg-[#23a55a] animate-ping" />
+                      </button>
+                    );
+                  })}
+                </div>
 
-              <div className="absolute top-4 left-4 flex items-center gap-2">
-                <span className="flex items-center gap-1.5 text-xs font-bold bg-[#f23f43] text-white px-3 py-1 rounded-md shadow-md">
-                  <Radio className="w-3.5 h-3.5 animate-pulse" />
-                  CANLI YAYIN
-                </span>
-                <span className="text-xs font-semibold bg-black/70 backdrop-blur-xs text-white px-3 py-1 rounded-md border border-white/10">
-                  {activeScreenUser.username} ekranı
-                </span>
-                <span className="text-xs font-semibold bg-[#5865f2] text-white px-2.5 py-1 rounded-md">
-                  60 FPS HD
-                </span>
-              </div>
-
-              <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                {/* View Mode Switcher Button */}
                 <button
-                  onClick={toggleFullscreen}
-                  className="p-2.5 rounded-xl bg-black/70 hover:bg-black text-white backdrop-blur-xs transition-all shadow-lg cursor-pointer"
-                  title="Tam Ekran"
+                  onClick={() => {
+                    if (isGridView) {
+                      setLayoutMode('focus');
+                    } else {
+                      setLayoutMode('grid');
+                      setSelectedStreamId(null);
+                    }
+                  }}
+                  className="px-3 py-1 rounded-lg bg-[#383a40] hover:bg-[#4e5058] text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors shrink-0"
                 >
-                  <Maximize className="w-5 h-5" />
+                  <LayoutGrid className="w-3.5 h-3.5 text-[#5865f2]" />
+                  <span>{isGridView ? 'Tek Yayına Odaklan' : 'Yan Yana Göster (Izgara)'}</span>
                 </button>
               </div>
-            </div>
+            )}
 
-            <div className="flex items-center justify-center gap-3 overflow-x-auto py-2">
+            {/* VIDEO CONTAINER: GRID or FOCUS */}
+            {isGridView ? (
+              /* GRID VIEW: All active streams side-by-side */
+              <div className={`grid gap-4 w-full ${
+                activeScreenStreams.length === 1 ? 'grid-cols-1 max-w-5xl mx-auto' :
+                activeScreenStreams.length === 2 ? 'grid-cols-1 md:grid-cols-2' :
+                'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
+              }`}>
+                {activeScreenStreams.map(streamItem => (
+                  <div key={streamItem.id} className="aspect-video w-full">
+                    <StreamPlayer
+                      streamItem={streamItem}
+                      onFocus={() => {
+                        setSelectedStreamId(streamItem.id);
+                        setLayoutMode('focus');
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              /* FOCUS VIEW: Single large stream */
+              focusedStream && (
+                <div className="relative w-full aspect-video max-w-6xl mx-auto">
+                  <StreamPlayer
+                    streamItem={focusedStream}
+                    isFocused={true}
+                  />
+                </div>
+              )
+            )}
+
+            {/* Members Strip below streams */}
+            <div className="flex items-center justify-center gap-2.5 overflow-x-auto py-2">
               {channelMembers.map((member) => {
                 const isSpeaking = member.voiceState?.isSpeaking;
+                const isStreaming = activeScreenStreams.some(s => s.socketId === member.socketId || (s.isLocal && member.id === currentUser?.id));
                 return (
                   <div
                     key={member.socketId}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-xl bg-[#2b2d31] border transition-all ${
+                    onClick={() => {
+                      if (isStreaming) {
+                        const targetStream = activeScreenStreams.find(s => s.socketId === member.socketId || (s.isLocal && member.id === currentUser?.id));
+                        if (targetStream) {
+                          setSelectedStreamId(targetStream.id);
+                          setLayoutMode('focus');
+                        }
+                      }
+                    }}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#2b2d31] border transition-all ${
+                      isStreaming ? 'cursor-pointer hover:border-[#5865f2]' : ''
+                    } ${
                       isSpeaking ? 'border-[#23a55a] shadow-md shadow-[#23a55a]/20 scale-105' : 'border-[#383a40]'
                     }`}
+                    title={isStreaming ? `${member.username} yayınına odaklan` : member.username}
                   >
-                    <img
-                      src={member.avatar}
-                      alt={member.username}
-                      onError={(e) => {
-                        e.currentTarget.onerror = null;
-                        e.currentTarget.src = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(member.username || 'user')}`;
-                      }}
-                      className={`w-7 h-7 rounded-full object-cover border-2 ${
-                        isSpeaking ? 'border-[#23a55a]' : 'border-transparent'
-                      }`}
-                    />
+                    <div className="relative">
+                      <img
+                        src={member.avatar}
+                        alt={member.username}
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(member.username || 'user')}`;
+                        }}
+                        className={`w-7 h-7 rounded-full object-cover border-2 ${
+                          isSpeaking ? 'border-[#23a55a]' : 'border-transparent'
+                        }`}
+                      />
+                      {isStreaming && (
+                        <span className="absolute -bottom-1 -right-1 w-3 h-3 rounded-full bg-[#f23f43] border-2 border-[#2b2d31] animate-pulse" />
+                      )}
+                    </div>
                     <span className="text-xs font-medium text-white truncate max-w-[100px]">
                       {member.username}
                     </span>
+                    {isStreaming && (
+                      <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-[#f23f43] text-white">
+                        CANLI
+                      </span>
+                    )}
                     {member.voiceState?.isMuted && <MicOff className="w-3 h-3 text-[#f23f43]" />}
                   </div>
                 );
@@ -400,7 +608,7 @@ export default function VoiceRoom({
             </div>
           </div>
         ) : (
-          /* DISCORD USER TILES GRID */
+          /* 3. DISCORD USER TILES GRID (When no screens are sharing) */
           <div className="max-w-5xl mx-auto w-full">
             <div className={`grid gap-4 ${
               channelMembers.length === 1 ? 'grid-cols-1 max-w-md mx-auto' :
@@ -410,7 +618,6 @@ export default function VoiceRoom({
               {channelMembers.map((member) => {
                 const isLocal = member.id === currentUser?.id;
                 const isSpeaking = member.voiceState?.isSpeaking;
-                const hasScreen = member.voiceState?.isScreenSharing;
                 const hasCamera = member.voiceState?.isCameraOn;
 
                 return (
@@ -428,109 +635,56 @@ export default function VoiceRoom({
                         <div className="relative">
                           {musicState?.currentTrack?.thumbnail ? (
                             <div className={`w-24 h-24 rounded-full p-1 bg-[#1e1f22] border-2 border-[#5865f2] shadow-2xl overflow-hidden flex items-center justify-center ${
-                              member.voiceState?.isSpeaking ? 'animate-spin' : ''
+                              musicState.isPlaying ? 'animate-[spin_12s_linear_infinite]' : ''
                             }`}>
-                              <img 
-                                src={musicState.currentTrack.thumbnail} 
-                                alt={musicState.currentTrack.title || 'Müzik'} 
-                                className="w-full h-full object-cover rounded-full" 
+                              <img
+                                src={musicState.currentTrack.thumbnail}
+                                alt="Albüm Kapağı"
+                                className="w-full h-full rounded-full object-cover"
                               />
                             </div>
                           ) : (
-                            <div className={`w-24 h-24 rounded-full bg-gradient-to-tr from-[#5865f2] to-[#eb459e] flex items-center justify-center text-white shadow-2xl ${
-                              member.voiceState?.isSpeaking ? 'animate-spin' : ''
-                            }`}>
-                              <Disc3 className="w-14 h-14" />
+                            <div className="w-24 h-24 rounded-full bg-gradient-to-tr from-[#5865f2] to-[#eb459e] flex items-center justify-center shadow-2xl">
+                              <Music className="w-10 h-10 text-white animate-bounce" />
                             </div>
                           )}
-                          <div className="absolute bottom-0 right-0 w-6 h-6 rounded-full bg-[#23a55a] border-2 border-[#2b2d31] flex items-center justify-center text-white text-[10px] font-bold shadow">
-                            ✓
+                          <div className="absolute -bottom-1 -right-1 p-1 rounded-full bg-[#5865f2] text-white shadow-md">
+                            <Radio className="w-3.5 h-3.5 animate-pulse" />
                           </div>
                         </div>
 
-                        <div className="text-center w-full overflow-hidden">
-                          <h4 className="text-xs font-black text-white truncate px-2">
-                            {musicState?.currentTrack ? (musicState.currentTrack.title || musicState.currentTrack.name) : 'Fivecord DJ'}
-                          </h4>
-                          <p className="text-[11px] text-[#949ba4] truncate mt-0.5">
-                            {musicState?.currentTrack ? (musicState.currentTrack.artist || musicState.currentTrack.genre || 'YouTube Müzik') : 'Müzik Botu'}
+                        <div className="text-center w-full max-w-[180px]">
+                          <p className="text-xs font-black text-white truncate">
+                            {musicState?.currentTrack?.title || 'Fivecord DJ'}
                           </p>
-                          <div className="mt-1 flex items-center justify-center gap-1.5">
-                            <span className="text-[9px] px-2 py-0.5 rounded-full bg-[#5865f2]/20 text-[#5865f2] font-black tracking-wider uppercase">
-                              {member.voiceState?.isSpeaking ? '🎵 ÇALIYOR' : 'HAZIR'}
-                            </span>
-                            {musicState?.currentTrack?.duration && (
-                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#1e1f22] text-[#dbdee1] font-mono">
-                                {musicState.currentTrack.duration}
-                              </span>
-                            )}
-                          </div>
+                          <p className="text-[10px] text-[#949ba4] truncate mt-0.5">
+                            {musicState?.currentTrack?.artist || '7/24 Kesintisiz Müzik'}
+                          </p>
                         </div>
                       </div>
                     ) : hasCamera ? (
-                      <div className="absolute inset-0 w-full h-full bg-black">
-                        {isLocal ? (
-                          <video
-                            ref={(el) => {
-                              if (el && webrtc.cameraStream) {
-                                el.srcObject = webrtc.cameraStream;
-                              }
-                            }}
-                            autoPlay
-                            playsInline
-                            muted
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <video
-                            ref={(el) => {
-                              const stream = remoteStreams?.get(member.socketId);
-                              if (el && stream) {
-                                el.srcObject = stream;
-                              }
-                            }}
-                            autoPlay
-                            playsInline
-                            className="w-full h-full object-cover"
-                          />
-                        )}
-                      </div>
-                    ) : hasScreen ? (
-                      /* SCREEN SHARE TILE PREVIEW */
-                      <div
-                        className="absolute inset-0 w-full h-full bg-black flex items-center justify-center cursor-pointer group/screen"
-                        onClick={() => {
+                      /* Live Camera Video */
+                      <video
+                        ref={(el) => {
                           const stream = isLocal 
-                            ? screenStream 
-                            : (remoteScreenStreams?.get(member.socketId) || remoteStreams?.get(member.socketId));
-                          if (stream) {
-                            setActiveScreenUser({ isLocal, stream, username: member.username, socketId: member.socketId });
+                            ? localStream 
+                            : remoteStreams?.get(member.socketId);
+                          if (el) {
+                            el.muted = true;
+                            el.defaultMuted = true;
+                            if (stream && el.srcObject !== stream) {
+                              el.srcObject = stream;
+                            }
+                            el.play().catch(() => {});
                           }
                         }}
-                      >
-                        <video
-                          ref={(el) => {
-                            const stream = isLocal 
-                              ? screenStream 
-                              : (remoteScreenStreams?.get(member.socketId) || remoteStreams?.get(member.socketId));
-                            if (el && stream && el.srcObject !== stream) {
-                              el.srcObject = stream;
-                              el.play().catch(() => {});
-                            }
-                          }}
-                          autoPlay
-                          playsInline
-                          muted={isLocal}
-                          className="w-full h-full object-contain"
-                        />
-                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/screen:opacity-100 transition-opacity flex items-center justify-center gap-2 pointer-events-none">
-                          <span className="px-3 py-1.5 rounded-xl bg-[#5865f2] text-white text-xs font-bold shadow-lg flex items-center gap-1.5">
-                            <Maximize className="w-3.5 h-3.5" /> Yayını Büyüt
-                          </span>
-                        </div>
-                      </div>
+                        autoPlay
+                        playsInline
+                        muted
+                        className="w-full h-full object-cover"
+                      />
                     ) : (
-                      /* Centered Large Avatar (If Camera and Screen are OFF) */
+                      /* Centered Large Avatar */
                       <div className="relative mb-2">
                         <img
                           src={member.avatar}
@@ -568,31 +722,9 @@ export default function VoiceRoom({
                         <Video className="w-3.5 h-3.5 text-[#23a55a] shrink-0" />
                       )}
                     </div>
-
-                    {/* Top right badges */}
-                    <div className="absolute top-3 right-3 flex items-center gap-1.5 z-10">
-                      {hasScreen && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const stream = isLocal 
-                              ? screenStream 
-                              : (remoteScreenStreams?.get(member.socketId) || remoteStreams?.get(member.socketId));
-                            if (stream) {
-                              setActiveScreenUser({ isLocal, stream, username: member.username, socketId: member.socketId });
-                            }
-                          }}
-                          className="flex items-center gap-1 text-[10px] font-bold bg-[#f23f43] hover:bg-[#da373a] text-white px-2 py-0.5 rounded shadow cursor-pointer transition-colors"
-                          title="Yayını Sahneye Al"
-                        >
-                          <Monitor className="w-3 h-3" /> CANLI
-                        </button>
-                      )}
-                    </div>
                   </div>
                 );
               })}
-
             </div>
           </div>
         )}
@@ -617,7 +749,7 @@ export default function VoiceRoom({
               {isCameraOn ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
             </button>
 
-            {/* Screen Share Button */}
+            {/* Screen Share Button - ALWAYS AVAILABLE (Multi-stream supported!) */}
             <button
               onClick={isScreenSharing ? onStopScreenShare : onOpenScreenModal}
               className={`w-11 h-11 rounded-full flex items-center justify-center transition-all duration-150 cursor-pointer shrink-0 hover:scale-105 ${
