@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Music, Play, Pause, Square, Volume2, Sparkles, 
+  Music, Play, Pause, Square, Volume2, VolumeX, Sparkles, 
   X, Check, ExternalLink, Disc3, Search, Loader2, Clock, User,
   Globe, Radio, RotateCcw, RotateCw
 } from 'lucide-react';
@@ -338,6 +338,22 @@ export default function MusicPlayerModal({
                   </div>
                 </div>
 
+                {/* Warning Banner if volume is 0% while music is playing */}
+                {volume === 0 && isPlaying && (
+                  <div 
+                    onClick={() => onSetVolume && onSetVolume(80)}
+                    className="cursor-pointer p-2.5 rounded-xl bg-[#f23f43]/15 border border-[#f23f43]/40 text-xs text-[#f23f43] flex items-center justify-between hover:bg-[#f23f43]/25 transition-all shadow-sm"
+                  >
+                    <div className="flex items-center gap-2 font-medium">
+                      <VolumeX className="w-4 h-4 shrink-0 animate-bounce" />
+                      <span>Müziğin sesi şu an sizde kapalı (<strong>%0</strong>)! Müziği duymak için tıklayın.</span>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-lg bg-[#f23f43] text-white text-[11px] font-bold shadow-xs shrink-0">
+                      Sesi Aç (%80)
+                    </span>
+                  </div>
+                )}
+
                 {/* TIMELINE SCRUBBER SLIDER */}
                 {!isLive ? (
                   <div className="space-y-1 pt-1">
@@ -432,16 +448,25 @@ export default function MusicPlayerModal({
 
                   {/* Personal Volume Slider */}
                   <div className="flex items-center gap-2" title="Kişisel Müzik Ses Seviyen (Sadece sende değişir)">
-                    <Volume2 className="w-4 h-4 text-[#23a55a]" />
+                    <button
+                      type="button"
+                      onClick={() => onSetVolume && onSetVolume(volume > 0 ? 0 : 80)}
+                      className="hover:text-white transition-colors cursor-pointer p-1 rounded hover:bg-[#383a40]"
+                      title={volume === 0 ? "Sesi Aç (%80 yap)" : "Sesi Kapat"}
+                    >
+                      {volume === 0 ? <VolumeX className="w-4 h-4 text-[#f23f43]" /> : <Volume2 className="w-4 h-4 text-[#23a55a]" />}
+                    </button>
                     <input
                       type="range"
                       min="0"
                       max="100"
                       value={volume}
-                      onChange={(e) => onSetVolume(parseInt(e.target.value))}
+                      onChange={(e) => onSetVolume && onSetVolume(parseInt(e.target.value))}
                       className="w-24 h-1.5 bg-[#383a40] rounded-lg appearance-none cursor-pointer accent-[#23a55a]"
                     />
-                    <span className="text-[11px] font-mono text-[#23a55a] font-bold w-7 text-right">%{volume}</span>
+                    <span className={`text-[11px] font-mono font-bold w-8 text-right ${volume === 0 ? 'text-[#f23f43]' : 'text-[#23a55a]'}`}>
+                      %{volume}
+                    </span>
                   </div>
                 </div>
               </div>

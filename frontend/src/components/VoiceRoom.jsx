@@ -238,7 +238,14 @@ export default function VoiceRoom({
           )}
 
           {/* Personal Music Volume Slider */}
-          <div className="flex items-center gap-1.5 bg-[#232428] px-2.5 py-1 rounded-lg border border-[#383a40] text-[#949ba4] shrink-0" title="Kişisel Müzik Ses Seviyen (Sadece senin için değişir)">
+          <div 
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[#949ba4] shrink-0 transition-colors ${
+              userMusicVolume === 0 && musicState.isPlaying
+                ? 'bg-[#f23f43]/20 border-[#f23f43]/60 animate-pulse'
+                : 'bg-[#232428] border-[#383a40]'
+            }`} 
+            title="Kişisel Müzik Ses Seviyen (Sadece senin için değişir)"
+          >
             <button
               onClick={() => onSetMusicVolume && onSetMusicVolume(userMusicVolume > 0 ? 0 : 80)}
               className="hover:text-white transition-colors cursor-pointer"

@@ -12,7 +12,7 @@ import RenameChannelModal from './components/RenameChannelModal';
 import ServerInfoModal from './components/ServerInfoModal';
 import DownloadModal from './components/DownloadModal';
 import MusicPlayerModal from './components/MusicPlayerModal';
-import BackgroundMusicPlayer from './components/BackgroundMusicPlayer';
+import BackgroundMusicPlayer, { loadYouTubeApi } from './components/BackgroundMusicPlayer';
 import DecisionWheelModal from './components/DecisionWheelModal';
 import WatchTogetherModal from './components/WatchTogetherModal';
 import LoginModal from './components/LoginModal';
@@ -94,6 +94,11 @@ export default function App() {
   const audioContainerRef = useRef(null);
   const activeMusicState = currentVoiceChannel ? musicStates.get(currentVoiceChannel.id) : null;
   const activeWatchTogether = currentVoiceChannel ? watchTogetherRooms.get(currentVoiceChannel.id) : null;
+
+  // Preload YouTube API globally so music starts instantly without delay
+  useEffect(() => {
+    loadYouTubeApi().catch(() => {});
+  }, []);
 
   // Personal Music Volume (Individual per user - stored locally, not broadcasted)
   const [userMusicVolume, setUserMusicVolume] = useState(() => {

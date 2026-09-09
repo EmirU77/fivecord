@@ -1,25 +1,47 @@
 import React, { useEffect, useRef } from 'react';
 
-function loadYouTubeApi() {
-  return new Promise((resolve) => {
-    if (window.YT && window.YT.Player) {
-      resolve(window.YT);
-      return;
-    }
-    const existing = document.getElementById('yt-iframe-api-script');
-    if (!existing) {
-      const tag = document.createElement('script');
+// Singleton YouTube Iframe API Loader with Promise caching
+let ytApiPromise = null;
+
+export function loadYouTubeApi() {
+  if (typeof window === 'undefined') return Promise.reject(new Error('No window'));
+  if (window.YT && window.YT.Player) {
+    return Promise.resolve(window.YT);
+  }
+  if (ytApiPromise) {
+    return ytApiPromise;
+  }
+
+  ytApiPromise = new Promise((resolve) => {
+    let tag = document.getElementById('yt-iframe-api-script');
+    if (!tag) {
+      tag = document.createElement('script');
       tag.id = 'yt-iframe-api-script';
       tag.src = 'https://www.youtube.com/iframe_api';
       const firstScriptTag = document.getElementsByTagName('script')[0];
-      firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+      if (firstScriptTag && firstScriptTag.parentNode) {
+        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+      } else {
+        document.head.appendChild(tag);
+      }
     }
+
     const previousOnReady = window.onYouTubeIframeAPIReady;
     window.onYouTubeIframeAPIReady = () => {
       if (typeof previousOnReady === 'function') previousOnReady();
       resolve(window.YT);
     };
+
+    // Polling fallback in case onYouTubeIframeAPIReady fired earlier
+    const checkInterval = setInterval(() => {
+      if (window.YT && window.YT.Player) {
+        clearInterval(checkInterval);
+        resolve(window.YT);
+      }
+    }, 100);
   });
+
+  return ytApiPromise;
 }
 
 export default function BackgroundMusicPlayer({
@@ -28,6 +50,7 @@ export default function BackgroundMusicPlayer({
 }) {
   const containerRef = useRef(null);
   const ytPlayerRef = useRef(null);
+  const isPlayerReadyRef = useRef(false);
   const audioRef = useRef(null);
   const isSeekingRef = useRef(false);
   const musicStateRef = useRef(musicState);
@@ -41,9 +64,14 @@ export default function BackgroundMusicPlayer({
   // Apply personal volume immediately whenever user changes it
   useEffect(() => {
     userVolumeRef.current = userVolume;
-    if (ytPlayerRef.current && typeof ytPlayerRef.current.setVolume === 'function') {
+    if (ytPlayerRef.current && isPlayerReadyRef.current && typeof ytPlayerRef.current.setVolume === 'function') {
       try {
         ytPlayerRef.current.setVolume(userVolume);
+        if (userVolume > 0 && typeof ytPlayerRef.current.unMute === 'function') {
+          ytPlayerRef.current.unMute();
+        } else if (userVolume === 0 && typeof ytPlayerRef.current.mute === 'function') {
+          ytPlayerRef.current.mute();
+        }
       } catch (e) {}
     }
     if (audioRef.current) {
@@ -55,54 +83,54 @@ export default function BackgroundMusicPlayer({
   const isYouTube = currentTrack?.source === 'youtube';
   const videoId = isYouTube ? currentTrack.id : null;
 
-  // 1. YouTube Player Instance Management
+  // Global browser interaction autoplay unlocker
   useEffect(() => {
-    if (!videoId) {
-      if (ytPlayerRef.current && typeof ytPlayerRef.current.destroy === 'function') {
-        try { ytPlayerRef.current.destroy(); } catch (e) {}
-        ytPlayerRef.current = null;
-      }
-      currentVideoIdRef.current = null;
-      return;
-    }
+    const unlockAutoplay = () => {
+      const curr = musicStateRef.current;
+      if (!curr?.isPlaying) return;
 
+      if (curr.currentTrack?.source === 'youtube' && ytPlayerRef.current && isPlayerReadyRef.current) {
+        try {
+          const st = ytPlayerRef.current.getPlayerState();
+          if (st !== 1 && st !== 3) {
+            ytPlayerRef.current.playVideo();
+          }
+          if (userVolumeRef.current > 0 && typeof ytPlayerRef.current.unMute === 'function') {
+            ytPlayerRef.current.unMute();
+          }
+        } catch (e) {}
+      }
+
+      if (curr.currentTrack?.source !== 'youtube' && audioRef.current && audioRef.current.paused) {
+        audioRef.current.play().catch(() => {});
+      }
+    };
+
+    window.addEventListener('click', unlockAutoplay, { passive: true });
+    window.addEventListener('pointerdown', unlockAutoplay, { passive: true });
+    window.addEventListener('keydown', unlockAutoplay, { passive: true });
+
+    return () => {
+      window.removeEventListener('click', unlockAutoplay);
+      window.removeEventListener('pointerdown', unlockAutoplay);
+      window.removeEventListener('keydown', unlockAutoplay);
+    };
+  }, []);
+
+  // 1. YouTube Player Instance Initialization (Keep warm in background, do not destroy)
+  useEffect(() => {
     let isSubscribed = true;
 
     loadYouTubeApi().then((YT) => {
       if (!isSubscribed) return;
-
-      const curr = musicStateRef.current;
-      const elapsed = curr?.isPlaying && curr?.updatedAt
-        ? (Date.now() - curr.updatedAt) / 1000
-        : 0;
-      const initialTargetTime = Math.max(0, (curr?.currentTime || 0) + elapsed);
-
-      // If player already exists and we just change the video ID:
-      if (ytPlayerRef.current && typeof ytPlayerRef.current.loadVideoById === 'function') {
-        if (currentVideoIdRef.current !== videoId) {
-          currentVideoIdRef.current = videoId;
-          isSeekingRef.current = true;
-          ytPlayerRef.current.loadVideoById({
-            videoId,
-            startSeconds: initialTargetTime
-          });
-          try { ytPlayerRef.current.setVolume(userVolumeRef.current); } catch (e) {}
-          if (!curr?.isPlaying) {
-            ytPlayerRef.current.pauseVideo();
-          }
-          setTimeout(() => { isSeekingRef.current = false; }, 1200);
-        }
-        return;
-      }
-
-      currentVideoIdRef.current = videoId;
+      if (ytPlayerRef.current) return; // Player already created
       if (!containerRef.current) return;
+
       containerRef.current.innerHTML = '<div id="fivecord-bg-yt-player"></div>';
 
       ytPlayerRef.current = new YT.Player('fivecord-bg-yt-player', {
-        videoId,
-        width: '200',
-        height: '200',
+        width: '240',
+        height: '240',
         playerVars: {
           autoplay: 1,
           controls: 0,
@@ -111,30 +139,44 @@ export default function BackgroundMusicPlayer({
           modestbranding: 1,
           playsinline: 1,
           enablejsapi: 1,
-          start: Math.floor(initialTargetTime),
           origin: window.location.origin
         },
         events: {
           onReady: (e) => {
             if (!isSubscribed) return;
+            isPlayerReadyRef.current = true;
             const p = e.target;
-            try { p.setVolume(userVolumeRef.current); } catch (err) {}
+            try {
+              p.setVolume(userVolumeRef.current);
+              if (userVolumeRef.current > 0) p.unMute();
+            } catch (err) {}
 
-            // Re-calculate target time accurately upon player ready
-            const latest = musicStateRef.current;
-            const el = latest?.isPlaying && latest?.updatedAt
-              ? (Date.now() - latest.updatedAt) / 1000
-              : 0;
-            const targetTime = Math.max(0, (latest?.currentTime || 0) + el);
+            // If a track was queued before onReady fired:
+            const curr = musicStateRef.current;
+            if (curr?.currentTrack?.source === 'youtube' && curr.currentTrack.id) {
+              const elapsed = curr.isPlaying && curr.updatedAt
+                ? (Date.now() - curr.updatedAt) / 1000
+                : 0;
+              // If song just started (within 5 seconds), start from 0:00 (zero delay!)
+              const startSeconds = (curr.currentTime < 5 && elapsed < 6)
+                ? 0
+                : Math.max(0, (curr.currentTime || 0) + elapsed);
 
-            isSeekingRef.current = true;
-            p.seekTo(targetTime, true);
-            if (latest?.isPlaying) {
-              p.playVideo();
-            } else {
-              p.pauseVideo();
+              currentVideoIdRef.current = curr.currentTrack.id;
+              p.loadVideoById({
+                videoId: curr.currentTrack.id,
+                startSeconds: Math.floor(startSeconds)
+              });
+
+              if (!curr.isPlaying) {
+                p.pauseVideo();
+              }
             }
-            setTimeout(() => { isSeekingRef.current = false; }, 1200);
+          },
+          onStateChange: (e) => {
+            if (e.data === 1 && userVolumeRef.current > 0) {
+              try { e.target.unMute(); } catch (err) {}
+            }
           }
         }
       });
@@ -143,52 +185,121 @@ export default function BackgroundMusicPlayer({
     return () => {
       isSubscribed = false;
     };
-  }, [videoId]);
+  }, []);
 
-  // 2. Play / Pause / Seek Remote State Reactions
+  // 2. Play / Pause / Track Change Reactions
   useEffect(() => {
-    if (!musicState) return;
-
     const curr = musicState;
+
+    if (!curr || !curr.currentTrack) {
+      if (ytPlayerRef.current && isPlayerReadyRef.current && typeof ytPlayerRef.current.pauseVideo === 'function') {
+        try { ytPlayerRef.current.pauseVideo(); } catch (e) {}
+      }
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = '';
+      }
+      currentVideoIdRef.current = null;
+      return;
+    }
+
     const elapsed = curr.isPlaying && curr.updatedAt
       ? (Date.now() - curr.updatedAt) / 1000
       : 0;
-    const targetTime = Math.max(0, (curr.currentTime || 0) + elapsed);
 
-    // YouTube playback control
-    if (isYouTube && ytPlayerRef.current && typeof ytPlayerRef.current.getPlayerState === 'function') {
-      const p = ytPlayerRef.current;
-      isSeekingRef.current = true;
-      p.seekTo(targetTime, true);
-      if (curr.isPlaying) {
-        p.playVideo();
-      } else {
-        p.pauseVideo();
-      }
-      setTimeout(() => { isSeekingRef.current = false; }, 600);
-    }
+    // Zero-delay: If track was just started, start directly at 0 without skipping initial seconds
+    const isNewTrackStart = (curr.currentTime || 0) < 5 && elapsed < 6;
+    const targetTime = isNewTrackStart ? 0 : Math.max(0, (curr.currentTime || 0) + elapsed);
 
-    // Direct HTML5 Audio playback control (Radio / MP3)
-    if (!isYouTube && audioRef.current && curr.currentTrack?.url) {
-      const audio = audioRef.current;
-      if (audio.src !== curr.currentTrack.url) {
-        audio.src = curr.currentTrack.url;
+    // --- YOUTUBE SOURCE ---
+    if (isYouTube && videoId) {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = '';
       }
-      if (curr.currentTrack.source !== 'station') {
-        if (Math.abs(audio.currentTime - targetTime) > 0.4) {
-          audio.currentTime = targetTime;
+
+      if (ytPlayerRef.current && isPlayerReadyRef.current) {
+        const p = ytPlayerRef.current;
+
+        if (currentVideoIdRef.current !== videoId) {
+          // New YouTube track requested
+          currentVideoIdRef.current = videoId;
+          isSeekingRef.current = true;
+          p.loadVideoById({
+            videoId,
+            startSeconds: Math.floor(targetTime)
+          });
+          try {
+            p.setVolume(userVolumeRef.current);
+            if (userVolumeRef.current > 0) p.unMute();
+          } catch (e) {}
+
+          if (!curr.isPlaying) {
+            p.pauseVideo();
+          }
+          setTimeout(() => { isSeekingRef.current = false; }, 1200);
+        } else {
+          // Same track: sync play/pause or explicit seek
+          try {
+            const st = p.getPlayerState();
+            if (curr.isPlaying) {
+              if (st !== 1 && st !== 3) {
+                p.playVideo();
+              }
+            } else {
+              if (st === 1 || st === 3) {
+                p.pauseVideo();
+              }
+            }
+
+            // Only seek if drift/jump is large (> 2.5s) to avoid buffer-killing micro jumps
+            const localTime = p.getCurrentTime() || 0;
+            if (Math.abs(localTime - targetTime) > 2.5 && (st === 1 || st === 2)) {
+              isSeekingRef.current = true;
+              p.seekTo(targetTime, true);
+              setTimeout(() => { isSeekingRef.current = false; }, 800);
+            }
+          } catch (e) {}
         }
       }
-      audio.volume = Math.min(Math.max(userVolumeRef.current / 100, 0), 1);
-      if (curr.isPlaying) {
-        audio.play().catch(() => {});
-      } else {
-        audio.pause();
+    }
+
+    // --- DIRECT AUDIO / RADIO SOURCE ---
+    if (!isYouTube && curr.currentTrack?.url) {
+      if (ytPlayerRef.current && isPlayerReadyRef.current) {
+        try { ytPlayerRef.current.pauseVideo(); } catch (e) {}
+      }
+      currentVideoIdRef.current = null;
+
+      const audio = audioRef.current;
+      if (audio) {
+        if (audio.src !== curr.currentTrack.url) {
+          audio.src = curr.currentTrack.url;
+        }
+        if (curr.currentTrack.source !== 'station') {
+          if (Math.abs(audio.currentTime - targetTime) > 2.0) {
+            audio.currentTime = targetTime;
+          }
+        }
+        audio.volume = Math.min(Math.max(userVolumeRef.current / 100, 0), 1);
+        if (curr.isPlaying) {
+          audio.play().catch(() => {});
+        } else {
+          audio.pause();
+        }
       }
     }
-  }, [musicState?.isPlaying, musicState?.updatedAt, musicState?.currentTime, isYouTube]);
+  }, [
+    musicState?.currentTrack?.id, 
+    musicState?.currentTrack?.url, 
+    musicState?.isPlaying, 
+    musicState?.updatedAt, 
+    musicState?.currentTime, 
+    isYouTube, 
+    videoId
+  ]);
 
-  // 3. Continuous Sub-Second Precision Monitor (Keeps all listeners within 0.4s of each other)
+  // 3. Smooth Drift Monitoring (Keeps users synchronized without resetting buffers)
   useEffect(() => {
     if (!musicState?.isPlaying) return;
 
@@ -201,19 +312,22 @@ export default function BackgroundMusicPlayer({
       const targetTime = (curr.currentTime || 0) + elapsed;
 
       // Check YouTube drift
-      if (curr.currentTrack?.source === 'youtube' && ytPlayerRef.current && typeof ytPlayerRef.current.getCurrentTime === 'function') {
+      if (curr.currentTrack?.source === 'youtube' && ytPlayerRef.current && isPlayerReadyRef.current) {
         try {
-          const localTime = ytPlayerRef.current.getCurrentTime() || 0;
-          const drift = Math.abs(localTime - targetTime);
-
-          // Sub-second precision threshold (0.4s)
-          if (drift > 0.4) {
-            isSeekingRef.current = true;
-            ytPlayerRef.current.seekTo(targetTime, true);
-            setTimeout(() => { isSeekingRef.current = false; }, 300);
-          }
           const st = ytPlayerRef.current.getPlayerState();
-          if (st !== 1 && st !== 3) { // Not PLAYING (1) or BUFFERING (3)
+          // CRITICAL: NEVER seek while YouTube is buffering (3) or unstarted (-1)!
+          if (st === 1) { // Only when actively playing
+            const localTime = ytPlayerRef.current.getCurrentTime() || 0;
+            const drift = Math.abs(localTime - targetTime);
+
+            // Synchronize if drift exceeds 1.8 seconds
+            if (drift > 1.8) {
+              isSeekingRef.current = true;
+              ytPlayerRef.current.seekTo(targetTime, true);
+              setTimeout(() => { isSeekingRef.current = false; }, 800);
+            }
+          } else if (st === 2 || st === 5 || st === -1) {
+            // Player is paused or cued when it should be playing -> resume
             ytPlayerRef.current.playVideo();
           }
         } catch (e) {}
@@ -224,7 +338,7 @@ export default function BackgroundMusicPlayer({
         try {
           const localTime = audioRef.current.currentTime || 0;
           const drift = Math.abs(localTime - targetTime);
-          if (drift > 0.4) {
+          if (drift > 2.0) {
             audioRef.current.currentTime = targetTime;
           }
           if (audioRef.current.paused) {
@@ -232,13 +346,24 @@ export default function BackgroundMusicPlayer({
           }
         } catch (e) {}
       }
-    }, 1200);
+    }, 1500);
 
     return () => clearInterval(driftInterval);
   }, [musicState?.isPlaying]);
 
   return (
-    <div style={{ position: 'fixed', top: -9999, left: -9999, width: 1, height: 1, opacity: 0.001, pointerEvents: 'none' }}>
+    <div 
+      style={{ 
+        position: 'fixed', 
+        bottom: 0, 
+        right: 0, 
+        width: 240, 
+        height: 240, 
+        opacity: 0.002, 
+        pointerEvents: 'none', 
+        zIndex: -9999 
+      }}
+    >
       <div ref={containerRef} />
       <audio ref={audioRef} playsInline />
     </div>
