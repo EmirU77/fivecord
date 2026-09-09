@@ -536,13 +536,16 @@ io.on('connection', (socket) => {
     }
   });
 
-  // --- WATCH TOGETHER (Birlikte İzle / Sinema Sahnesi) ---
-  socket.on('watch-together-start', ({ channelId, videoId, videoTitle }) => {
+  // --- WATCH TOGETHER (Birlikte İzle / Sinema & Birlikte Gezinme Sahnesi) ---
+  socket.on('watch-together-start', ({ channelId, videoId, videoTitle, type, url }) => {
     const sender = users.get(socket.id);
+    const mediaType = type || (videoId ? 'youtube' : 'google');
     const state = {
       channelId,
-      videoId,
-      videoTitle: videoTitle || 'YouTube Videosu',
+      videoId: videoId || null,
+      videoTitle: videoTitle || (mediaType === 'google' ? 'Google Arama' : 'YouTube Videosu'),
+      type: mediaType,
+      url: url || (mediaType === 'google' ? 'https://www.google.com/webhp?igu=1' : null),
       isPlaying: true,
       currentTime: 0,
       startedBy: sender ? sender.username : 'Bir arkadaş',
@@ -550,7 +553,17 @@ io.on('connection', (socket) => {
     };
     watchTogetherRooms.set(channelId, state);
     io.emit('watch-together-updated', { channelId, state });
-    console.log(`[WatchTogether Started] ${videoId} in ${channelId}`);
+    console.log(`[WatchTogether Started] ${mediaType}: ${videoTitle || videoId || url} in ${channelId}`);
+  });
+
+  socket.on('watch-together-navigate', ({ channelId, url, title }) => {
+    const current = watchTogetherRooms.get(channelId);
+    if (!current) return;
+    current.url = url;
+    if (title) current.videoTitle = title;
+    current.updatedAt = Date.now();
+    io.emit('watch-together-updated', { channelId, state: current });
+    console.log(`[WatchTogether Navigate] ${url} in ${channelId}`);
   });
 
   socket.on('watch-together-action', ({ channelId, action, currentTime }) => {

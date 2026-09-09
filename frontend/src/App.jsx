@@ -558,18 +558,29 @@ export default function App() {
   };
 
   // Watch Together (Birlikte İzle) Handlers
-  const handleStartWatchTogether = (videoId, videoTitle) => {
+  const handleStartWatchTogether = (videoId, videoTitle, type = 'youtube', url = null) => {
     const targetChannelId = currentVoiceChannel?.id || 'voice-sinema';
     socket.emit('watch-together-start', {
       channelId: targetChannelId,
       videoId,
-      videoTitle
+      videoTitle,
+      type,
+      url
     });
   };
 
   const handleStopWatchTogether = () => {
     const targetChannelId = currentVoiceChannel?.id || 'voice-sinema';
     socket.emit('watch-together-close', targetChannelId);
+  };
+
+  const handleNavigateWatchTogether = (newUrl, newTitle) => {
+    const targetChannelId = currentVoiceChannel?.id || 'voice-sinema';
+    socket.emit('watch-together-navigate', {
+      channelId: targetChannelId,
+      url: newUrl,
+      title: newTitle
+    });
   };
 
   // Karar Çarkı Share Handler
@@ -782,6 +793,7 @@ export default function App() {
           watchTogetherState={activeWatchTogether}
           onOpenWatchTogether={() => setIsWatchTogetherOpen(true)}
           onStopWatchTogether={handleStopWatchTogether}
+          onNavigateWatchTogether={handleNavigateWatchTogether}
           isAppInstalled={isAppInstalled}
           onOpenDownload={() => setIsDownloadModalOpen(true)}
         />
