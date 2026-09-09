@@ -16,6 +16,7 @@ import DecisionWheelModal from './components/DecisionWheelModal';
 import WatchTogetherModal from './components/WatchTogetherModal';
 import { socket } from './services/socket';
 import { webrtc } from './services/webrtc';
+import { voiceRelay } from './services/voiceRelay';
 import { soundEffects } from './services/soundEffects';
 
 const DEFAULT_USER = {
@@ -306,7 +307,10 @@ export default function App() {
           audioEl.srcObject = stream;
         }
 
-        audioEl.muted = false;
+        // Screen audio stays unmuted for game/video stream audio.
+        // Microphone audio is handled with 100% reliability via voiceRelay WebSocket
+        // (mute here to prevent duplicate echo if WebRTC direct audio connects).
+        audioEl.muted = !isScreen;
         audioEl.volume = 1.0;
 
         const playPromise = audioEl.play();
@@ -337,9 +341,15 @@ export default function App() {
         return next;
       });
       const el = document.getElementById(`audio-${socketId}`);
-      if (el) el.remove();
+      if (el) {
+        el.srcObject = null;
+        el.pause();
+      }
       const screenEl = document.getElementById(`audio-screen-${socketId}`);
-      if (screenEl) screenEl.remove();
+      if (screenEl) {
+        screenEl.srcObject = null;
+        screenEl.pause();
+      }
     };
 
     webrtc.onSpeakingChanged = (speaking) => {
@@ -373,15 +383,18 @@ export default function App() {
 
   useEffect(() => {
     webrtc.setMicrophoneMuted(isMuted);
+    voiceRelay.setMuted(isMuted);
   }, [isMuted]);
 
   useEffect(() => {
     webrtc.setDeafened(isDeafened);
+    voiceRelay.setDeafened(isDeafened);
   }, [isDeafened]);
 
   // Global unlock for browser media autoplay policy on any user gesture
   useEffect(() => {
     const unlockAllMedia = () => {
+      voiceRelay.ensurePlaybackContext();
       document.querySelectorAll('audio').forEach(el => {
         if (el.srcObject && el.paused) {
           el.play().catch(() => {});
@@ -399,10 +412,14 @@ export default function App() {
   const handleReconnectVoice = async () => {
     if (!currentVoiceChannel) return;
     console.log('[Voice] Reconnecting voice channel:', currentVoiceChannel.name);
+    voiceRelay.stop();
     webrtc.leaveVoice();
     soundEffects.playJoin();
-    await webrtc.initLocalAudio();
+    const stream = await webrtc.initLocalAudio();
     socket.emit('join-voice-channel', { channelId: currentVoiceChannel.id });
+    if (stream) {
+      voiceRelay.startBroadcasting(currentVoiceChannel.id, stream);
+    }
   };
 
   // --- CHANNEL & DM ACTIONS ---
@@ -445,14 +462,18 @@ export default function App() {
 
   const handleJoinVoice = async (channel) => {
     soundEffects.playJoin();
-    await webrtc.initLocalAudio();
+    const stream = await webrtc.initLocalAudio();
     setCurrentVoiceChannel(channel);
     setCurrentChannel(channel);
     socket.emit('join-voice-channel', { channelId: channel.id });
+    if (stream) {
+      voiceRelay.startBroadcasting(channel.id, stream);
+    }
   };
 
   const handleLeaveVoice = () => {
     soundEffects.playLeave();
+    voiceRelay.stop();
     webrtc.leaveVoice();
     setIsScreenSharing(false);
     setScreenStream(null);

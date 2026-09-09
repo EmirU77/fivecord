@@ -929,6 +929,19 @@ io.on('connection', (socket) => {
     });
   });
 
+  // Real-time Voice Relay via WebSocket (Guaranteed audio delivery across CGNAT / Firewalls)
+  socket.on('voice-pcm-chunk', ({ channelId, sampleRate, buffer }) => {
+    const user = users.get(socket.id);
+    if (!user || user.voiceState?.isMuted) return;
+    socket.to(`voice-${channelId}`).emit('voice-pcm-chunk', {
+      senderSocketId: socket.id,
+      userId: user.id,
+      username: user.username,
+      sampleRate,
+      buffer
+    });
+  });
+
   socket.on('update-voice-state', (newVoiceState) => {
     const user = users.get(socket.id);
     if (!user) return;

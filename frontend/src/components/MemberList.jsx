@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Crown, Gamepad2, Volume2, MicOff, Monitor, Sparkles, MessageCircle, Zap } from 'lucide-react';
 import { AvatarDecorationRenderer, StatusDotRenderer, getNameEffectStyle } from './UserControlBar';
+import { voiceRelay } from '../services/voiceRelay';
 
 const DEFAULT_VIP_ROLES = [
   { role: '👑 KURUCU', color: '#f0b232', bg: 'rgba(240,178,50,0.15)', border: 'rgba(240,178,50,0.3)' },
@@ -19,6 +20,7 @@ export default function MemberList({ members, currentUser, onOpenDM }) {
 
   const handleVolumeChange = (socketId, vol) => {
     setUserVolumes(prev => ({ ...prev, [socketId]: vol }));
+    voiceRelay.setUserVolume(socketId, vol);
     const safeVol = Math.min(1.0, Math.max(0, vol > 1 ? 1.0 : vol));
     const audioEl = document.getElementById(`audio-${socketId}`);
     if (audioEl) {

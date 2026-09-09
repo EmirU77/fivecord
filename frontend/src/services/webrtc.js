@@ -639,11 +639,6 @@ class WebRTCManager {
     this.remoteStreams.delete(socketId);
     this.remoteScreenStreams.delete(socketId);
 
-    const audioEl = document.getElementById(`audio-${socketId}`);
-    if (audioEl) audioEl.remove();
-    const screenAudioEl = document.getElementById(`audio-screen-${socketId}`);
-    if (screenAudioEl) screenAudioEl.remove();
-
     if (this.onRemoteStreamRemoved) {
       this.onRemoteStreamRemoved(socketId);
     }
