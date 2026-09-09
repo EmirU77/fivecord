@@ -566,19 +566,42 @@ io.on('connection', (socket) => {
     const sender = users.get(socket.id);
     const username = senderName || (sender ? sender.username : 'Bir arkadaş');
 
-    if (action === 'play') current.isPlaying = true;
-    if (action === 'pause') current.isPlaying = false;
-    if (typeof currentTime === 'number') current.currentTime = currentTime;
+    // Calculate true elapsed room timestamp
+    const elapsed = current.isPlaying && current.updatedAt 
+      ? (Date.now() - current.updatedAt) / 1000 
+      : 0;
+    const currentRoomTime = (current.currentTime || 0) + elapsed;
+
+    if (action === 'play') {
+      current.isPlaying = true;
+      // Prevent spurious client 0s from rewinding an already playing video
+      if (typeof currentTime === 'number' && (currentTime > 0 || currentRoomTime < 2.0)) {
+        current.currentTime = currentTime;
+      } else {
+        current.currentTime = currentRoomTime;
+      }
+    } else if (action === 'pause') {
+      current.isPlaying = false;
+      if (typeof currentTime === 'number' && (currentTime > 0 || currentRoomTime < 2.0)) {
+        current.currentTime = currentTime;
+      } else {
+        current.currentTime = currentRoomTime;
+      }
+    } else if (action === 'seek') {
+      if (typeof currentTime === 'number') {
+        current.currentTime = Math.max(0, currentTime);
+      }
+    }
 
     current.lastAction = {
       type: action,
       by: username,
-      time: currentTime,
+      time: current.currentTime,
       timestamp: Date.now()
     };
     current.updatedAt = Date.now();
     io.emit('watch-together-updated', { channelId, state: current });
-    console.log(`[WatchTogether 0-Delay Action] ${username} -> ${action} (${currentTime}s) in ${channelId}`);
+    console.log(`[WatchTogether 0-Delay Action] ${username} -> ${action} (${Math.round(current.currentTime)}s) in ${channelId}`);
   });
 
   socket.on('watch-together-close', (channelId) => {

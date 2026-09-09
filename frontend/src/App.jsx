@@ -630,7 +630,7 @@ export default function App() {
     socket.emit('music-volume', { channelId: chId, volume });
   };
 
-  const isViewingVoice = currentChannel?.type === 'voice';
+  const isViewingVoice = Boolean(currentVoiceChannel && currentChannel?.id === currentVoiceChannel.id);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#1e1f22]">
@@ -761,42 +761,46 @@ export default function App() {
       )}
 
       {/* CENTER MAIN AREA */}
-      {isViewingVoice && currentVoiceChannel ? (
-        <VoiceRoom
-          channel={currentVoiceChannel}
-          members={members}
-          currentUser={currentUser}
-          localStream={webrtc.localStream}
-          screenStream={screenStream}
-          remoteStreams={remoteStreams}
-          remoteScreenStreams={remoteScreenStreams}
-          isMuted={isMuted}
-          setIsMuted={setIsMuted}
-          isDeafened={isDeafened}
-          setIsDeafened={setIsDeafened}
-          isCameraOn={isCameraOn}
-          onToggleCamera={handleToggleCamera}
-          isScreenSharing={isScreenSharing}
-          onOpenScreenModal={() => setIsScreenModalOpen(true)}
-          onStopScreenShare={handleStopScreenShare}
-          onLeaveVoice={handleLeaveVoice}
-          onReconnectVoice={handleReconnectVoice}
-          musicState={currentVoiceChannel ? musicStates.get(currentVoiceChannel.id) : null}
-          onOpenMusicModal={() => setIsMusicModalOpen(true)}
-          onToggleMusicPlay={() => {
-            const s = currentVoiceChannel ? musicStates.get(currentVoiceChannel.id) : null;
-            if (s?.isPlaying) handlePauseMusic();
-            else handleResumeMusic();
-          }}
-          onStopMusic={handleStopMusic}
-          watchTogetherState={activeWatchTogether}
-          onOpenWatchTogether={() => setIsWatchTogetherOpen(true)}
-          onStopWatchTogether={handleStopWatchTogether}
-          onWatchTogetherAction={handleWatchTogetherAction}
-          isAppInstalled={isAppInstalled}
-          onOpenDownload={() => setIsDownloadModalOpen(true)}
-        />
-      ) : currentChannel ? (
+      {currentVoiceChannel && (
+        <div className={`flex-1 flex-col h-full ${isViewingVoice ? 'flex' : 'hidden'}`}>
+          <VoiceRoom
+            channel={currentVoiceChannel}
+            members={members}
+            currentUser={currentUser}
+            localStream={webrtc.localStream}
+            screenStream={screenStream}
+            remoteStreams={remoteStreams}
+            remoteScreenStreams={remoteScreenStreams}
+            isMuted={isMuted}
+            setIsMuted={setIsMuted}
+            isDeafened={isDeafened}
+            setIsDeafened={setIsDeafened}
+            isCameraOn={isCameraOn}
+            onToggleCamera={handleToggleCamera}
+            isScreenSharing={isScreenSharing}
+            onOpenScreenModal={() => setIsScreenModalOpen(true)}
+            onStopScreenShare={handleStopScreenShare}
+            onLeaveVoice={handleLeaveVoice}
+            onReconnectVoice={handleReconnectVoice}
+            musicState={currentVoiceChannel ? musicStates.get(currentVoiceChannel.id) : null}
+            onOpenMusicModal={() => setIsMusicModalOpen(true)}
+            onToggleMusicPlay={() => {
+              const s = currentVoiceChannel ? musicStates.get(currentVoiceChannel.id) : null;
+              if (s?.isPlaying) handlePauseMusic();
+              else handleResumeMusic();
+            }}
+            onStopMusic={handleStopMusic}
+            watchTogetherState={activeWatchTogether}
+            onOpenWatchTogether={() => setIsWatchTogetherOpen(true)}
+            onStopWatchTogether={handleStopWatchTogether}
+            onWatchTogetherAction={handleWatchTogetherAction}
+            isAppInstalled={isAppInstalled}
+            onOpenDownload={() => setIsDownloadModalOpen(true)}
+          />
+        </div>
+      )}
+
+      {!isViewingVoice && (currentChannel ? (
         <ChatArea
           channel={currentChannel}
           currentUser={currentUser}
@@ -821,7 +825,7 @@ export default function App() {
         <div className="flex-1 flex items-center justify-center text-[#949ba4]">
           Bir kanal veya arkadaş seçin
         </div>
-      )}
+      ))}
 
       {/* RIGHT MEMBER LIST (Only in server view) */}
       {activeView === 'server' && (

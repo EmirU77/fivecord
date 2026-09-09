@@ -43,7 +43,13 @@ export default function SharedCinemaPlayer({
   const containerRef = useRef(null);
   const playerRef = useRef(null);
   const isRemoteSyncRef = useRef(false);
+  const isInitialSyncRef = useRef(true);
   const lastEmittedActionTimeRef = useRef(0);
+  const watchTogetherStateRef = useRef(watchTogetherState);
+
+  useEffect(() => {
+    watchTogetherStateRef.current = watchTogetherState;
+  }, [watchTogetherState]);
 
   const [isReady, setIsReady] = useState(false);
   const [duration, setDuration] = useState(0);
@@ -65,28 +71,36 @@ export default function SharedCinemaPlayer({
     loadYouTubeApi().then((YT) => {
       if (!isSubscribed) return;
 
+      const curr = watchTogetherStateRef.current;
+      const elapsed = curr?.isPlaying && curr?.updatedAt 
+        ? (Date.now() - curr.updatedAt) / 1000 
+        : 0;
+      const initialTargetTime = Math.max(0, (curr?.currentTime || 0) + elapsed);
+
       // If player already exists and we just need to change video ID:
       if (playerRef.current && typeof playerRef.current.loadVideoById === 'function') {
-        const elapsed = watchTogetherState.isPlaying && watchTogetherState.updatedAt 
-          ? (Date.now() - watchTogetherState.updatedAt) / 1000 
-          : 0;
-        const startTime = Math.max(0, (watchTogetherState.currentTime || 0) + elapsed);
-
         isRemoteSyncRef.current = true;
+        isInitialSyncRef.current = true;
         playerRef.current.loadVideoById({
           videoId,
-          startSeconds: startTime
+          startSeconds: initialTargetTime
         });
-        if (!watchTogetherState.isPlaying) {
+        if (!curr?.isPlaying) {
           playerRef.current.pauseVideo();
         }
-        setTimeout(() => { isRemoteSyncRef.current = false; }, 150);
+        setTimeout(() => { 
+          isRemoteSyncRef.current = false;
+          isInitialSyncRef.current = false;
+        }, 1200);
         return;
       }
 
       // Fresh container injection to avoid React DOM unmount conflict with YouTube's iframe replacement
       if (!containerRef.current) return;
       containerRef.current.innerHTML = '<div id="shared-yt-player-elem" style="width:100%;height:100%;"></div>';
+
+      isInitialSyncRef.current = true;
+      isRemoteSyncRef.current = true;
 
       playerRef.current = new YT.Player('shared-yt-player-elem', {
         videoId,
@@ -100,6 +114,7 @@ export default function SharedCinemaPlayer({
           playsinline: 1,
           enablejsapi: 1,
           iv_load_policy: 3,
+          start: Math.floor(initialTargetTime),
           origin: window.location.origin
         },
         events: {
@@ -110,18 +125,20 @@ export default function SharedCinemaPlayer({
             const d = p.getDuration() || 0;
             setDuration(d);
 
-            // Instant initial synchronization
-            const elapsed = watchTogetherState.isPlaying && watchTogetherState.updatedAt 
-              ? (Date.now() - watchTogetherState.updatedAt) / 1000 
+            // Re-calculate accurate target time upon player ready
+            const latestState = watchTogetherStateRef.current;
+            const el = latestState?.isPlaying && latestState?.updatedAt 
+              ? (Date.now() - latestState.updatedAt) / 1000 
               : 0;
-            const targetTime = Math.max(0, (watchTogetherState.currentTime || 0) + elapsed);
+            const targetTime = Math.max(0, (latestState?.currentTime || 0) + el);
 
             isRemoteSyncRef.current = true;
+            isInitialSyncRef.current = true;
             p.seekTo(targetTime, true);
 
-            if (watchTogetherState.isPlaying) {
+            if (latestState?.isPlaying) {
               p.playVideo();
-              // Check if browser blocked autoplay
+              // Check if browser blocked unmuted autoplay
               setTimeout(() => {
                 try {
                   const state = p.getPlayerState();
@@ -134,22 +151,30 @@ export default function SharedCinemaPlayer({
               p.pauseVideo();
             }
 
-            setTimeout(() => { isRemoteSyncRef.current = false; }, 150);
+            // Keep initial sync guard active so buffer transitions don't emit play/pause actions
+            setTimeout(() => { 
+              isRemoteSyncRef.current = false; 
+              isInitialSyncRef.current = false;
+            }, 1200);
           },
           onStateChange: (event) => {
-            if (isRemoteSyncRef.current) return;
+            // NEVER emit actions during remote updates or initial player loading/seeking!
+            if (isRemoteSyncRef.current || isInitialSyncRef.current) return;
             const p = event.target;
             const time = p.getCurrentTime() || 0;
 
-            // Prevent spamming identical actions within 100ms
             const now = Date.now();
-            if (now - lastEmittedActionTimeRef.current < 100) return;
+            if (now - lastEmittedActionTimeRef.current < 200) return;
 
-            if (event.data === YT.PlayerState.PLAYING) {
+            const currentRoomState = watchTogetherStateRef.current;
+            // ONLY emit 'play' if the room was currently paused!
+            if (event.data === YT.PlayerState.PLAYING && currentRoomState && !currentRoomState.isPlaying) {
               lastEmittedActionTimeRef.current = now;
               setAutoplayBlocked(false);
               onAction && onAction('play', time);
-            } else if (event.data === YT.PlayerState.PAUSED) {
+            } 
+            // ONLY emit 'pause' if the room was currently playing!
+            else if (event.data === YT.PlayerState.PAUSED && currentRoomState && currentRoomState.isPlaying) {
               lastEmittedActionTimeRef.current = now;
               onAction && onAction('pause', time);
             }
@@ -235,7 +260,7 @@ export default function SharedCinemaPlayer({
 
     const syncInterval = setInterval(() => {
       const p = playerRef.current;
-      if (!p || typeof p.getCurrentTime !== 'function' || isRemoteSyncRef.current || isDraggingSlider) return;
+      if (!p || typeof p.getCurrentTime !== 'function' || isRemoteSyncRef.current || isInitialSyncRef.current || isDraggingSlider) return;
 
       try {
         const elapsed = (Date.now() - watchTogetherState.updatedAt) / 1000;
@@ -288,7 +313,9 @@ export default function SharedCinemaPlayer({
 
   // Actions
   const handleTogglePlay = useCallback(() => {
-    const nextState = !watchTogetherState.isPlaying;
+    const curr = watchTogetherStateRef.current;
+    if (!curr) return;
+    const nextState = !curr.isPlaying;
     const p = playerRef.current;
     if (p && typeof p.getCurrentTime === 'function') {
       const t = p.getCurrentTime() || 0;
@@ -303,7 +330,7 @@ export default function SharedCinemaPlayer({
       }
       setTimeout(() => { isRemoteSyncRef.current = false; }, 120);
     }
-  }, [watchTogetherState.isPlaying, onAction]);
+  }, [onAction]);
 
   const handleSkip = useCallback((secondsDelta) => {
     const p = playerRef.current;
@@ -323,14 +350,15 @@ export default function SharedCinemaPlayer({
   const handleForceSync = useCallback(() => {
     const p = playerRef.current;
     if (p && typeof p.seekTo === 'function') {
-      const elapsed = watchTogetherState.isPlaying && watchTogetherState.updatedAt 
-        ? (Date.now() - watchTogetherState.updatedAt) / 1000 
+      const curr = watchTogetherStateRef.current;
+      const elapsed = curr?.isPlaying && curr?.updatedAt 
+        ? (Date.now() - curr.updatedAt) / 1000 
         : 0;
-      const targetTime = Math.max(0, (watchTogetherState.currentTime || 0) + elapsed);
+      const targetTime = Math.max(0, (curr?.currentTime || 0) + elapsed);
 
       isRemoteSyncRef.current = true;
       p.seekTo(targetTime, true);
-      if (watchTogetherState.isPlaying) {
+      if (curr?.isPlaying) {
         p.playVideo();
         setAutoplayBlocked(false);
       } else {
@@ -340,7 +368,7 @@ export default function SharedCinemaPlayer({
       setJustSyncedToast(true);
       setTimeout(() => setJustSyncedToast(false), 2000);
     }
-  }, [watchTogetherState.isPlaying, watchTogetherState.currentTime, watchTogetherState.updatedAt]);
+  }, []);
 
   const handleSliderChange = (e) => {
     const val = parseFloat(e.target.value);
