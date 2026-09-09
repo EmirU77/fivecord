@@ -536,34 +536,28 @@ io.on('connection', (socket) => {
     }
   });
 
-  // --- WATCH TOGETHER (Birlikte İzle / Sinema & Birlikte Gezinme Sahnesi) ---
-  socket.on('watch-together-start', ({ channelId, videoId, videoTitle, type, url }) => {
+  // --- WATCH TOGETHER (Birlikte YouTube İzle - 0 Delay Senkronizasyon) ---
+  socket.on('watch-together-start', ({ channelId, videoId, videoTitle }) => {
     const sender = users.get(socket.id);
-    const mediaType = type || (videoId ? 'youtube' : 'google');
     const state = {
       channelId,
       videoId: videoId || null,
-      videoTitle: videoTitle || (mediaType === 'google' ? 'Google Arama' : 'YouTube Videosu'),
-      type: mediaType,
-      url: url || (mediaType === 'google' ? 'https://www.google.com/webhp?igu=1' : null),
+      videoTitle: videoTitle || 'YouTube Videosu',
+      type: 'youtube',
       isPlaying: true,
       currentTime: 0,
       startedBy: sender ? sender.username : 'Bir arkadaş',
-      updatedAt: Date.now()
+      updatedAt: Date.now(),
+      lastAction: {
+        type: 'play',
+        by: sender ? sender.username : 'Bir arkadaş',
+        time: 0,
+        timestamp: Date.now()
+      }
     };
     watchTogetherRooms.set(channelId, state);
     io.emit('watch-together-updated', { channelId, state });
-    console.log(`[WatchTogether Started] ${mediaType}: ${videoTitle || videoId || url} in ${channelId}`);
-  });
-
-  socket.on('watch-together-navigate', ({ channelId, url, title }) => {
-    const current = watchTogetherRooms.get(channelId);
-    if (!current) return;
-    current.url = url;
-    if (title) current.videoTitle = title;
-    current.updatedAt = Date.now();
-    io.emit('watch-together-updated', { channelId, state: current });
-    console.log(`[WatchTogether Navigate] ${url} in ${channelId}`);
+    console.log(`[WatchTogether Started] YouTube: ${videoTitle || videoId} in ${channelId}`);
   });
 
   socket.on('watch-together-action', ({ channelId, action, currentTime, senderName }) => {
@@ -584,7 +578,7 @@ io.on('connection', (socket) => {
     };
     current.updatedAt = Date.now();
     io.emit('watch-together-updated', { channelId, state: current });
-    console.log(`[WatchTogether Action] ${username} -> ${action} (${currentTime}s) in ${channelId}`);
+    console.log(`[WatchTogether 0-Delay Action] ${username} -> ${action} (${currentTime}s) in ${channelId}`);
   });
 
   socket.on('watch-together-close', (channelId) => {

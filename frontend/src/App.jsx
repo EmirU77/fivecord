@@ -558,29 +558,18 @@ export default function App() {
   };
 
   // Watch Together (Birlikte İzle) Handlers
-  const handleStartWatchTogether = (videoId, videoTitle, type = 'youtube', url = null) => {
+  const handleStartWatchTogether = (videoId, videoTitle) => {
     const targetChannelId = currentVoiceChannel?.id || 'voice-sinema';
     socket.emit('watch-together-start', {
       channelId: targetChannelId,
       videoId,
-      videoTitle,
-      type,
-      url
+      videoTitle: videoTitle || 'YouTube Videosu'
     });
   };
 
   const handleStopWatchTogether = () => {
     const targetChannelId = currentVoiceChannel?.id || 'voice-sinema';
     socket.emit('watch-together-close', targetChannelId);
-  };
-
-  const handleNavigateWatchTogether = (newUrl, newTitle) => {
-    const targetChannelId = currentVoiceChannel?.id || 'voice-sinema';
-    socket.emit('watch-together-navigate', {
-      channelId: targetChannelId,
-      url: newUrl,
-      title: newTitle
-    });
   };
 
   const handleWatchTogetherAction = (action, currentTime) => {
@@ -803,7 +792,6 @@ export default function App() {
           watchTogetherState={activeWatchTogether}
           onOpenWatchTogether={() => setIsWatchTogetherOpen(true)}
           onStopWatchTogether={handleStopWatchTogether}
-          onNavigateWatchTogether={handleNavigateWatchTogether}
           onWatchTogetherAction={handleWatchTogetherAction}
           isAppInstalled={isAppInstalled}
           onOpenDownload={() => setIsDownloadModalOpen(true)}

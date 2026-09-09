@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { 
-  Play, Pause, RotateCcw, RotateCw, RefreshCw, Volume2, VolumeX, 
-  ExternalLink, X, Film, Check, Sparkles
+  Play, Pause, RotateCcw, RotateCw, RefreshCw, 
+  ExternalLink, X, Film, Check, Sparkles, AlertCircle, Volume2
 } from 'lucide-react';
 
 function loadYouTubeApi() {
@@ -40,50 +40,55 @@ export default function SharedCinemaPlayer({
   onClose,
   currentUser
 }) {
+  const containerRef = useRef(null);
   const playerRef = useRef(null);
-  const videoRef = useRef(null);
   const isRemoteSyncRef = useRef(false);
+  const lastEmittedActionTimeRef = useRef(0);
+
   const [isReady, setIsReady] = useState(false);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [syncToast, setSyncToast] = useState(null);
   const [justSyncedToast, setJustSyncedToast] = useState(false);
+  const [autoplayBlocked, setAutoplayBlocked] = useState(false);
+  const [isDraggingSlider, setIsDraggingSlider] = useState(false);
+  const [sliderTime, setSliderTime] = useState(0);
 
-  const isDirectVideo = watchTogetherState?.url && (
-    watchTogetherState.url.endsWith('.mp4') || 
-    watchTogetherState.url.endsWith('.webm') || 
-    watchTogetherState.url.endsWith('.ogg')
-  );
+  const videoId = watchTogetherState?.videoId;
 
-  // 1. YouTube Player Setup
+  // 1. YouTube Player Instance Lifecycle
   useEffect(() => {
-    if (isDirectVideo || !watchTogetherState?.videoId) return;
+    if (!videoId) return;
 
     let isSubscribed = true;
-    const videoId = watchTogetherState.videoId;
 
     loadYouTubeApi().then((YT) => {
       if (!isSubscribed) return;
 
+      // If player already exists and we just need to change video ID:
       if (playerRef.current && typeof playerRef.current.loadVideoById === 'function') {
         const elapsed = watchTogetherState.isPlaying && watchTogetherState.updatedAt 
           ? (Date.now() - watchTogetherState.updatedAt) / 1000 
           : 0;
-        const startTime = (watchTogetherState.currentTime || 0) + elapsed;
+        const startTime = Math.max(0, (watchTogetherState.currentTime || 0) + elapsed);
+
+        isRemoteSyncRef.current = true;
         playerRef.current.loadVideoById({
           videoId,
-          startSeconds: Math.max(0, startTime)
+          startSeconds: startTime
         });
         if (!watchTogetherState.isPlaying) {
           playerRef.current.pauseVideo();
         }
+        setTimeout(() => { isRemoteSyncRef.current = false; }, 150);
         return;
       }
 
-      const container = document.getElementById('shared-youtube-iframe');
-      if (!container) return;
+      // Fresh container injection to avoid React DOM unmount conflict with YouTube's iframe replacement
+      if (!containerRef.current) return;
+      containerRef.current.innerHTML = '<div id="shared-yt-player-elem" style="width:100%;height:100%;"></div>';
 
-      playerRef.current = new YT.Player('shared-youtube-iframe', {
+      playerRef.current = new YT.Player('shared-yt-player-elem', {
         videoId,
         width: '100%',
         height: '100%',
@@ -94,6 +99,7 @@ export default function SharedCinemaPlayer({
           rel: 0,
           playsinline: 1,
           enablejsapi: 1,
+          iv_load_policy: 3,
           origin: window.location.origin
         },
         events: {
@@ -104,28 +110,47 @@ export default function SharedCinemaPlayer({
             const d = p.getDuration() || 0;
             setDuration(d);
 
+            // Instant initial synchronization
             const elapsed = watchTogetherState.isPlaying && watchTogetherState.updatedAt 
               ? (Date.now() - watchTogetherState.updatedAt) / 1000 
               : 0;
-            const targetTime = (watchTogetherState.currentTime || 0) + elapsed;
-            
+            const targetTime = Math.max(0, (watchTogetherState.currentTime || 0) + elapsed);
+
             isRemoteSyncRef.current = true;
             p.seekTo(targetTime, true);
+
             if (watchTogetherState.isPlaying) {
               p.playVideo();
+              // Check if browser blocked autoplay
+              setTimeout(() => {
+                try {
+                  const state = p.getPlayerState();
+                  if (state !== YT.PlayerState.PLAYING && state !== YT.PlayerState.BUFFERING) {
+                    setAutoplayBlocked(true);
+                  }
+                } catch (e) {}
+              }, 1000);
             } else {
               p.pauseVideo();
             }
-            setTimeout(() => { isRemoteSyncRef.current = false; }, 600);
+
+            setTimeout(() => { isRemoteSyncRef.current = false; }, 150);
           },
           onStateChange: (event) => {
             if (isRemoteSyncRef.current) return;
             const p = event.target;
             const time = p.getCurrentTime() || 0;
 
+            // Prevent spamming identical actions within 100ms
+            const now = Date.now();
+            if (now - lastEmittedActionTimeRef.current < 100) return;
+
             if (event.data === YT.PlayerState.PLAYING) {
+              lastEmittedActionTimeRef.current = now;
+              setAutoplayBlocked(false);
               onAction && onAction('play', time);
             } else if (event.data === YT.PlayerState.PAUSED) {
+              lastEmittedActionTimeRef.current = now;
               onAction && onAction('pause', time);
             }
           }
@@ -140,68 +165,113 @@ export default function SharedCinemaPlayer({
         playerRef.current = null;
       }
     };
-  }, [watchTogetherState?.videoId, isDirectVideo]);
+  }, [videoId]);
 
-  // 2. Incoming Remote State Synchronization (Play/Pause & Seek Drift)
+  // 2. Incoming Socket State Updates (Zero-Delay Execution)
   useEffect(() => {
-    if (!watchTogetherState) return;
+    if (!watchTogetherState || !playerRef.current) return;
+    const p = playerRef.current;
+    if (typeof p.getPlayerState !== 'function') return;
 
-    if (isDirectVideo && videoRef.current) {
-      const v = videoRef.current;
-      const elapsed = watchTogetherState.isPlaying && watchTogetherState.updatedAt 
-        ? (Date.now() - watchTogetherState.updatedAt) / 1000 
-        : 0;
-      const targetTime = (watchTogetherState.currentTime || 0) + elapsed;
-      
-      isRemoteSyncRef.current = true;
-      if (Math.abs(v.currentTime - targetTime) > 1.2) {
-        v.currentTime = targetTime;
-      }
-      if (watchTogetherState.isPlaying && v.paused) {
-        v.play().catch(() => {});
-      } else if (!watchTogetherState.isPlaying && !v.paused) {
-        v.pause();
-      }
-      setTimeout(() => { isRemoteSyncRef.current = false; }, 500);
+    // If local user initiated this action, skip remote seek to prevent stutter
+    if (
+      watchTogetherState.lastAction?.by && 
+      watchTogetherState.lastAction.by === currentUser?.username &&
+      Date.now() - (watchTogetherState.lastAction?.timestamp || 0) < 1500
+    ) {
       return;
     }
 
-    const p = playerRef.current;
-    if (!p || typeof p.getPlayerState !== 'function') return;
-
+    const actionType = watchTogetherState.lastAction?.type;
     const elapsed = watchTogetherState.isPlaying && watchTogetherState.updatedAt 
       ? (Date.now() - watchTogetherState.updatedAt) / 1000 
       : 0;
-    const targetTime = watchTogetherState.isPlaying 
-      ? (watchTogetherState.currentTime + elapsed) 
-      : watchTogetherState.currentTime;
+    const targetTime = Math.max(0, (watchTogetherState.currentTime || 0) + elapsed);
 
     isRemoteSyncRef.current = true;
 
-    const localTime = p.getCurrentTime() || 0;
-    const drift = Math.abs(localTime - targetTime);
-    if (drift > 1.4) {
-      p.seekTo(targetTime, true);
-    }
-
-    const state = p.getPlayerState();
-    if (watchTogetherState.isPlaying && state !== window.YT.PlayerState.PLAYING) {
-      p.playVideo();
-    } else if (!watchTogetherState.isPlaying && state !== window.YT.PlayerState.PAUSED) {
+    if (actionType === 'pause' || !watchTogetherState.isPlaying) {
       p.pauseVideo();
+      p.seekTo(watchTogetherState.currentTime, true);
+    } else if (actionType === 'play') {
+      p.seekTo(targetTime, true);
+      p.playVideo();
+      setAutoplayBlocked(false);
+    } else if (actionType === 'seek') {
+      p.seekTo(targetTime, true);
+      if (watchTogetherState.isPlaying) {
+        p.playVideo();
+      } else {
+        p.pauseVideo();
+      }
+    } else {
+      // General state sync: snap if drift > 0.3s
+      const localTime = p.getCurrentTime() || 0;
+      if (Math.abs(localTime - targetTime) > 0.3) {
+        p.seekTo(targetTime, true);
+      }
+      const st = p.getPlayerState();
+      if (watchTogetherState.isPlaying && st !== window.YT.PlayerState.PLAYING) {
+        p.playVideo();
+      } else if (!watchTogetherState.isPlaying && st !== window.YT.PlayerState.PAUSED) {
+        p.pauseVideo();
+      }
     }
 
     setTimeout(() => {
       isRemoteSyncRef.current = false;
-    }, 600);
+    }, 120);
   }, [
     watchTogetherState?.isPlaying, 
     watchTogetherState?.currentTime, 
-    watchTogetherState?.updatedAt, 
-    isDirectVideo
+    watchTogetherState?.updatedAt,
+    watchTogetherState?.lastAction?.timestamp,
+    currentUser?.username
   ]);
 
-  // 3. Last Action Toast Banner
+  // 3. Continuous Sub-Second Precision Monitor (Keep all computers 100% in sync)
+  useEffect(() => {
+    if (!watchTogetherState?.isPlaying) return;
+
+    const syncInterval = setInterval(() => {
+      const p = playerRef.current;
+      if (!p || typeof p.getCurrentTime !== 'function' || isRemoteSyncRef.current || isDraggingSlider) return;
+
+      try {
+        const elapsed = (Date.now() - watchTogetherState.updatedAt) / 1000;
+        const targetTime = (watchTogetherState.currentTime || 0) + elapsed;
+        const localTime = p.getCurrentTime() || 0;
+        const drift = Math.abs(localTime - targetTime);
+
+        // Sub-second precision threshold (350ms)
+        if (drift > 0.35) {
+          isRemoteSyncRef.current = true;
+          p.seekTo(targetTime, true);
+          setTimeout(() => { isRemoteSyncRef.current = false; }, 100);
+        }
+      } catch (err) {}
+    }, 1500);
+
+    return () => clearInterval(syncInterval);
+  }, [watchTogetherState?.isPlaying, watchTogetherState?.currentTime, watchTogetherState?.updatedAt, isDraggingSlider]);
+
+  // 4. Progress bar polling (100ms for smooth 60fps tracking)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const p = playerRef.current;
+      if (p && typeof p.getCurrentTime === 'function' && !isDraggingSlider) {
+        try {
+          const t = p.getCurrentTime();
+          const d = p.getDuration();
+          if (typeof t === 'number') setCurrentTime(t);
+          if (typeof d === 'number' && d > 0) setDuration(d);
+        } catch (e) {}
+      }
+    }, 100);
+    return () => clearInterval(interval);
+  }, [isDraggingSlider]);
+
+  // 5. Toast notification on action
   useEffect(() => {
     if (watchTogetherState?.lastAction) {
       const act = watchTogetherState.lastAction;
@@ -211,109 +281,111 @@ export default function SharedCinemaPlayer({
       else if (act.type === 'seek') text = `${act.by} videoyu ${formatTime(act.time)} konumuna sardı ⏩`;
 
       setSyncToast(text);
-      const timer = setTimeout(() => setSyncToast(null), 3500);
+      const timer = setTimeout(() => setSyncToast(null), 3000);
       return () => clearTimeout(timer);
     }
   }, [watchTogetherState?.lastAction?.timestamp]);
 
-  // 4. Progress bar polling
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (isDirectVideo && videoRef.current) {
-        setCurrentTime(videoRef.current.currentTime);
-        if (videoRef.current.duration) setDuration(videoRef.current.duration);
-      } else if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function') {
-        try {
-          const t = playerRef.current.getCurrentTime();
-          const d = playerRef.current.getDuration();
-          if (typeof t === 'number') setCurrentTime(t);
-          if (typeof d === 'number' && d > 0) setDuration(d);
-        } catch (e) {}
-      }
-    }, 250);
-    return () => clearInterval(interval);
-  }, [isDirectVideo]);
-
-  // User Actions (Broadcasted to whole room)
-  const handleTogglePlay = () => {
+  // Actions
+  const handleTogglePlay = useCallback(() => {
     const nextState = !watchTogetherState.isPlaying;
-    if (isDirectVideo && videoRef.current) {
-      const t = videoRef.current.currentTime;
+    const p = playerRef.current;
+    if (p && typeof p.getCurrentTime === 'function') {
+      const t = p.getCurrentTime() || 0;
+      isRemoteSyncRef.current = true;
       if (nextState) {
-        videoRef.current.play().catch(() => {});
+        p.playVideo();
+        setAutoplayBlocked(false);
         onAction && onAction('play', t);
       } else {
-        videoRef.current.pause();
+        p.pauseVideo();
         onAction && onAction('pause', t);
       }
-    } else if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function') {
-      const t = playerRef.current.getCurrentTime();
-      if (nextState) {
-        playerRef.current.playVideo();
-        onAction && onAction('play', t);
+      setTimeout(() => { isRemoteSyncRef.current = false; }, 120);
+    }
+  }, [watchTogetherState.isPlaying, onAction]);
+
+  const handleSkip = useCallback((secondsDelta) => {
+    const p = playerRef.current;
+    if (p && typeof p.getCurrentTime === 'function') {
+      const current = p.getCurrentTime() || 0;
+      let newTime = Math.max(0, current + secondsDelta);
+      if (duration > 0) newTime = Math.min(duration, newTime);
+
+      isRemoteSyncRef.current = true;
+      p.seekTo(newTime, true);
+      setCurrentTime(newTime);
+      onAction && onAction('seek', newTime);
+      setTimeout(() => { isRemoteSyncRef.current = false; }, 120);
+    }
+  }, [duration, onAction]);
+
+  const handleForceSync = useCallback(() => {
+    const p = playerRef.current;
+    if (p && typeof p.seekTo === 'function') {
+      const elapsed = watchTogetherState.isPlaying && watchTogetherState.updatedAt 
+        ? (Date.now() - watchTogetherState.updatedAt) / 1000 
+        : 0;
+      const targetTime = Math.max(0, (watchTogetherState.currentTime || 0) + elapsed);
+
+      isRemoteSyncRef.current = true;
+      p.seekTo(targetTime, true);
+      if (watchTogetherState.isPlaying) {
+        p.playVideo();
+        setAutoplayBlocked(false);
       } else {
-        playerRef.current.pauseVideo();
-        onAction && onAction('pause', t);
+        p.pauseVideo();
       }
+      setTimeout(() => { isRemoteSyncRef.current = false; }, 100);
+      setJustSyncedToast(true);
+      setTimeout(() => setJustSyncedToast(false), 2000);
+    }
+  }, [watchTogetherState.isPlaying, watchTogetherState.currentTime, watchTogetherState.updatedAt]);
+
+  const handleSliderChange = (e) => {
+    const val = parseFloat(e.target.value);
+    setSliderTime(val);
+    setCurrentTime(val);
+  };
+
+  const handleSliderCommit = (e) => {
+    const val = parseFloat(e.target.value);
+    setIsDraggingSlider(false);
+    const p = playerRef.current;
+    if (p && typeof p.seekTo === 'function') {
+      isRemoteSyncRef.current = true;
+      p.seekTo(val, true);
+      setCurrentTime(val);
+      onAction && onAction('seek', val);
+      setTimeout(() => { isRemoteSyncRef.current = false; }, 120);
     }
   };
 
-  const handleSkip = (secondsDelta) => {
-    let newTime = Math.max(0, currentTime + secondsDelta);
-    if (duration > 0) newTime = Math.min(duration, newTime);
-
-    if (isDirectVideo && videoRef.current) {
-      videoRef.current.currentTime = newTime;
-      onAction && onAction('seek', newTime);
-    } else if (playerRef.current && typeof playerRef.current.seekTo === 'function') {
-      playerRef.current.seekTo(newTime, true);
-      onAction && onAction('seek', newTime);
-    }
-  };
-
-  const handleSeekSlider = (e) => {
-    const target = parseFloat(e.target.value);
-    setCurrentTime(target);
-    if (isDirectVideo && videoRef.current) {
-      videoRef.current.currentTime = target;
-      onAction && onAction('seek', target);
-    } else if (playerRef.current && typeof playerRef.current.seekTo === 'function') {
-      playerRef.current.seekTo(target, true);
-      onAction && onAction('seek', target);
-    }
-  };
-
-  const handleForceSync = () => {
-    const elapsed = watchTogetherState.isPlaying && watchTogetherState.updatedAt 
-      ? (Date.now() - watchTogetherState.updatedAt) / 1000 
-      : 0;
-    const targetTime = (watchTogetherState.currentTime || 0) + elapsed;
-
-    if (isDirectVideo && videoRef.current) {
-      videoRef.current.currentTime = targetTime;
-      if (watchTogetherState.isPlaying) videoRef.current.play().catch(() => {});
-      else videoRef.current.pause();
-    } else if (playerRef.current && typeof playerRef.current.seekTo === 'function') {
-      playerRef.current.seekTo(targetTime, true);
-      if (watchTogetherState.isPlaying) playerRef.current.playVideo();
-      else playerRef.current.pauseVideo();
-    }
-    setJustSyncedToast(true);
-    setTimeout(() => setJustSyncedToast(false), 2000);
-  };
+  // Keyboard Spacebar Shortcut
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.code === 'Space' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        handleTogglePlay();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleTogglePlay]);
 
   return (
     <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden border border-[#3f4147] shadow-2xl flex flex-col group select-none">
       {/* Top Bar */}
       <div className="bg-[#111214]/90 backdrop-blur-md px-4 py-2 flex items-center justify-between border-b border-white/10 shrink-0 z-20">
         <div className="flex items-center gap-2.5 overflow-hidden">
-          <span className="flex items-center gap-1 text-xs font-black bg-[#ea3323] text-white px-2.5 py-0.5 rounded-full shadow-xs animate-pulse shrink-0">
-            🍿 BİRLİKTE İZLE
+          <span className="flex items-center gap-1.5 text-xs font-black bg-[#ea3323] text-white px-2.5 py-0.5 rounded-full shadow-xs animate-pulse shrink-0">
+            <Film className="w-3.5 h-3.5 fill-current" />
+            BİRLİKTE İZLE
           </span>
-          <span className="text-sm font-bold text-white truncate">
-            {watchTogetherState.videoTitle || 'Ortak Video'}
+          <span className="text-sm font-bold text-white truncate max-w-sm sm:max-w-md">
+            {watchTogetherState.videoTitle || 'YouTube Sineması'}
           </span>
-          <span className="text-xs text-[#949ba4] hidden sm:inline shrink-0">
+          <span className="text-xs text-[#949ba4] hidden md:inline shrink-0">
             (Başlatan: {watchTogetherState.startedBy || 'Arkadaşın'})
           </span>
         </div>
@@ -333,7 +405,7 @@ export default function SharedCinemaPlayer({
             onClick={onOpenModal}
             className="px-3 py-1 rounded-lg bg-[#5865f2] hover:bg-[#4752c4] text-white text-xs font-bold transition-all cursor-pointer"
           >
-            🎬 Değiştir
+            🎬 Video Değiştir
           </button>
           <button
             onClick={onClose}
@@ -346,21 +418,25 @@ export default function SharedCinemaPlayer({
 
       {/* Main Video Viewport */}
       <div className="relative flex-1 bg-black flex items-center justify-center overflow-hidden">
-        {isDirectVideo ? (
-          <video
-            ref={videoRef}
-            src={watchTogetherState.url}
-            className="w-full h-full object-contain"
-            autoPlay
-            playsInline
-          />
-        ) : (
-          <div className="w-full h-full">
-            <div id="shared-youtube-iframe" className="w-full h-full pointer-events-auto" />
+        <div ref={containerRef} className="w-full h-full" />
+
+        {/* Autoplay blocked overlay (Browser gesture required) */}
+        {autoplayBlocked && (
+          <div 
+            onClick={handleForceSync}
+            className="absolute inset-0 bg-black/80 backdrop-blur-xs flex flex-col items-center justify-center gap-3 cursor-pointer z-30 animate-in fade-in duration-200"
+          >
+            <div className="w-16 h-16 rounded-full bg-[#ea3323] text-white flex items-center justify-center shadow-2xl hover:scale-110 transition-transform">
+              <Play className="w-8 h-8 fill-current translate-x-0.5" />
+            </div>
+            <div className="text-center">
+              <div className="text-white font-black text-base">Odaya Senkronize Ol & Başlat</div>
+              <div className="text-[#949ba4] text-xs mt-1">Tarayıcı ses izni için tıklayın (0 delay ile anında eşleşir)</div>
+            </div>
           </div>
         )}
 
-        {/* Sync notification toast */}
+        {/* Action toast banner */}
         {syncToast && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/85 backdrop-blur-md border border-[#5865f2] text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-2xl flex items-center gap-2 animate-in fade-in zoom-in-95 duration-200 z-30">
             <Sparkles className="w-3.5 h-3.5 text-[#5865f2] animate-spin" />
@@ -368,21 +444,22 @@ export default function SharedCinemaPlayer({
           </div>
         )}
 
+        {/* Force sync success toast */}
         {justSyncedToast && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-[#23a55a]/90 backdrop-blur-md text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-2xl flex items-center gap-2 animate-in fade-in duration-150 z-30">
             <Check className="w-3.5 h-3.5 stroke-[3]" />
-            <span>Oda ile kusursuz senkronize edildi!</span>
+            <span>Oda ile 0 gecikmeyle eşitlendi!</span>
           </div>
         )}
       </div>
 
-      {/* SHARED CONTROLS BAR (BROADCASTS ACTIONS ACROSS ROOM) */}
+      {/* SHARED CONTROLS BAR (ZERO-DELAY BROADCASTS) */}
       <div className="bg-[#111214]/95 backdrop-blur-md px-4 py-2.5 border-t border-white/10 shrink-0 flex flex-col gap-2 z-20">
         
         {/* Scrubber Timeline Slider */}
         <div className="flex items-center gap-3">
           <span className="text-xs font-mono text-[#949ba4] min-w-12 text-right select-none">
-            {formatTime(currentTime)}
+            {formatTime(isDraggingSlider ? sliderTime : currentTime)}
           </span>
 
           <div className="relative flex-1 flex items-center">
@@ -390,11 +467,15 @@ export default function SharedCinemaPlayer({
               type="range"
               min="0"
               max={duration || 100}
-              step="0.5"
-              value={currentTime}
-              onChange={handleSeekSlider}
+              step="0.1"
+              value={isDraggingSlider ? sliderTime : currentTime}
+              onMouseDown={() => { setIsDraggingSlider(true); setSliderTime(currentTime); }}
+              onTouchStart={() => { setIsDraggingSlider(true); setSliderTime(currentTime); }}
+              onChange={handleSliderChange}
+              onMouseUp={handleSliderCommit}
+              onTouchEnd={handleSliderCommit}
               className="w-full h-1.5 bg-[#383a40] hover:bg-[#4e5058] rounded-lg appearance-none cursor-pointer accent-[#ea3323] transition-all"
-              title="Videoyu Sar (Tüm odayla senkronize olur)"
+              title="Videoyu Sar (Tüm odadaki bilgisayarlar aynı anda sarılır)"
             />
           </div>
 
@@ -450,13 +531,13 @@ export default function SharedCinemaPlayer({
           <div className="flex items-center gap-2.5 text-xs">
             <div className="flex items-center gap-1.5 text-[#23a55a] font-bold bg-[#23a55a]/10 px-2.5 py-1 rounded-lg border border-[#23a55a]/20">
               <span className="w-2 h-2 rounded-full bg-[#23a55a] animate-pulse" />
-              <span>Canlı Senkronize</span>
+              <span>0 Delay Canlı Senkron</span>
             </div>
 
             <button
               onClick={handleForceSync}
               className="px-3 py-1 rounded-lg bg-[#2b2d31] hover:bg-[#35373c] text-[#949ba4] hover:text-white font-bold transition-all flex items-center gap-1.5 cursor-pointer"
-              title="Herhangi bir kayma varsa videoyu odanın tam saniyesine eşitle"
+              title="Herhangi bir kayma varsa anında odaya eşitle"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Eşitle</span>
