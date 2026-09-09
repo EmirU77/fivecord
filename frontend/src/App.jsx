@@ -33,7 +33,12 @@ export default function App() {
     const saved = localStorage.getItem('fivecord_user');
     return saved ? JSON.parse(saved) : null;
   });
-  const [isLoginModalOpen, setIsLoginModalOpen] = useState(!currentUser);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(() => {
+    const remember = localStorage.getItem('fivecord_remember_me');
+    const saved = localStorage.getItem('fivecord_user');
+    // If user has not explicitly checked "remember me", show login modal on start!
+    return !(remember === 'true' && saved);
+  });
 
   // Views: 'server' (Fivecord VIP) | 'dm' (Direct Messages / Özel Mesajlar)
   const [activeView, setActiveView] = useState('server');
@@ -933,7 +938,8 @@ export default function App() {
       <LoginModal
         isOpen={isLoginModalOpen || !currentUser}
         onLogin={handleLogin}
-        currentUsername={currentUser?.username || ''}
+        onClose={() => setIsLoginModalOpen(false)}
+        currentUser={currentUser}
       />
     </div>
   );

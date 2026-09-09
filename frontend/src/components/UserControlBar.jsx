@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
-  Mic, MicOff, Headphones, Settings, LogOut, X, Check, Smile, 
+  Mic, MicOff, Headphones, Settings, LogOut, LogIn, X, Check, Smile, 
   Upload, Link2, Sparkles, Palette, Image as ImageIcon, Loader2,
   Crown, Zap, Shield, Flame, User, Info, Hash, Circle, Volume2, Play,
   Gamepad2, RefreshCw
@@ -251,7 +251,8 @@ export default function UserControlBar({
   setIsMuted, 
   isDeafened, 
   setIsDeafened,
-  onLogout
+  onLogout,
+  onOpenLogin
 }) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('avatar'); // avatar, banner, status, badges, entrance
@@ -521,13 +522,13 @@ export default function UserControlBar({
             <Settings className="w-4 h-4" />
           </button>
 
-          {onLogout && (
+          {(onOpenLogin || onLogout) && (
             <button
-              onClick={onLogout}
-              title="Hesap Değiştir / Çıkış Yap"
-              className="p-1.5 rounded hover:bg-[#f23f43]/20 text-[#949ba4] hover:text-[#f23f43] transition-colors cursor-pointer"
+              onClick={onOpenLogin || onLogout}
+              title="Hesap Değiştir / Giriş Yap"
+              className="p-1.5 rounded hover:bg-[#5865f2]/20 text-[#949ba4] hover:text-[#5865f2] transition-colors cursor-pointer"
             >
-              <LogOut className="w-4 h-4" />
+              <LogIn className="w-4 h-4" />
             </button>
           )}
         </div>
@@ -1474,7 +1475,7 @@ export default function UserControlBar({
                     type="button"
                     onClick={() => {
                       setIsSettingsOpen(false);
-                      onLogout();
+                      if (onOpenLogin) onOpenLogin(); else if (onLogout) onLogout();
                     }}
                     className="px-3 py-1.5 rounded-lg bg-[#f23f43]/15 hover:bg-[#f23f43] text-[#f23f43] hover:text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
                   >

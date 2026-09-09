@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Sparkles, Check, ArrowRight, Dices, Shield, LogIn } from 'lucide-react';
+import { User, Sparkles, Check, ArrowRight, Dices, Shield, LogIn, X, Clock } from 'lucide-react';
 
 const PRESET_COLORS = [
   '#5865f2', // Discord Blurple
@@ -12,11 +12,13 @@ const PRESET_COLORS = [
   '#e67e22'  // Orange
 ];
 
-export default function LoginModal({ isOpen, onLogin, currentUsername = '' }) {
-  const [username, setUsername] = useState(currentUsername || '');
-  const [selectedColor, setSelectedColor] = useState('#5865f2');
-  const [avatarSeed, setAvatarSeed] = useState(() => currentUsername || 'gamer-' + Math.floor(Math.random() * 9000));
+export default function LoginModal({ isOpen, onLogin, onClose, currentUser = null }) {
+  const lastUsername = currentUser?.username || '';
+  const [username, setUsername] = useState(lastUsername || '');
+  const [selectedColor, setSelectedColor] = useState(currentUser?.color || '#5865f2');
+  const [avatarSeed, setAvatarSeed] = useState(() => lastUsername || 'gamer-' + Math.floor(Math.random() * 9000));
   const [avatarType, setAvatarType] = useState('bottts');
+  const [rememberMe, setRememberMe] = useState(() => localStorage.getItem('fivecord_remember_me') === 'true');
   const [savedAccounts, setSavedAccounts] = useState([]);
   const [isLoadingAccounts, setIsLoadingAccounts] = useState(true);
 
@@ -28,6 +30,14 @@ export default function LoginModal({ isOpen, onLogin, currentUsername = '' }) {
       .then(data => {
         if (data && Array.isArray(data.accounts)) {
           setSavedAccounts(data.accounts);
+          // If no username typed yet and there are accounts, prefill with first or current
+          if (!username && data.accounts.length > 0) {
+            const match = data.accounts.find(a => a.username.toLowerCase() === lastUsername.toLowerCase()) || data.accounts[0];
+            if (match) {
+              setUsername(match.username);
+              setSelectedColor(match.color || '#5865f2');
+            }
+          }
         }
       })
       .catch(() => {})
@@ -41,9 +51,7 @@ export default function LoginModal({ isOpen, onLogin, currentUsername = '' }) {
   const handleSelectAccount = (acc) => {
     setUsername(acc.username);
     setSelectedColor(acc.color || '#5865f2');
-    if (acc.avatar) {
-      setAvatarSeed(acc.username);
-    }
+    setAvatarSeed(acc.username);
   };
 
   const handleRandomizeAvatar = () => {
@@ -54,35 +62,35 @@ export default function LoginModal({ isOpen, onLogin, currentUsername = '' }) {
     setAvatarSeed(randomSeed);
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    const clean = username.trim();
-    if (!clean) return;
-
+  const doLogin = (cleanName, avatarUrl, color) => {
+    localStorage.setItem('fivecord_remember_me', rememberMe ? 'true' : 'false');
     const user = {
-      id: 'user-' + clean.toLowerCase().replace(/[^a-z0-9_-]/g, ''),
-      username: clean,
-      avatar: currentAvatarUrl,
-      color: selectedColor,
+      id: 'user-' + cleanName.toLowerCase().replace(/[^a-z0-9_-]/g, ''),
+      username: cleanName,
+      avatar: avatarUrl || currentAvatarUrl,
+      color: color || selectedColor,
       customStatus: 'Fivecord kullanıyor',
       entranceSound: 'mvp'
     };
-
     onLogin(user);
+  };
+
+  const handleSubmit = (e) => {
+    e?.preventDefault();
+    const clean = username.trim();
+    if (!clean) return;
+    doLogin(clean, currentAvatarUrl, selectedColor);
+  };
+
+  const handleQuickContinue = () => {
+    if (!lastUsername) return;
+    doLogin(lastUsername, currentUser?.avatar || currentAvatarUrl, currentUser?.color || selectedColor);
   };
 
   const handleGuestLogin = () => {
     const randomNum = Math.floor(1000 + Math.random() * 9000);
     const guestName = `Gamer-${randomNum}`;
-    const user = {
-      id: 'user-' + guestName.toLowerCase(),
-      username: guestName,
-      avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${guestName}`,
-      color: '#5865f2',
-      customStatus: 'Fivecord kullanıyor',
-      entranceSound: 'mvp'
-    };
-    onLogin(user);
+    doLogin(guestName, `https://api.dicebear.com/7.x/bottts/svg?seed=${guestName}`, '#5865f2');
   };
 
   return (
@@ -95,23 +103,64 @@ export default function LoginModal({ isOpen, onLogin, currentUsername = '' }) {
         style={{ backgroundColor: '#313338', boxShadow: '0 24px 70px rgba(0, 0, 0, 0.75)' }}
       >
         {/* Header */}
-        <div className="p-6 border-b border-[#232428] text-center" style={{ backgroundColor: '#2b2d31' }}>
+        <div className="p-6 border-b border-[#232428] relative text-center" style={{ backgroundColor: '#2b2d31' }}>
+          {currentUser && onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="absolute top-4 right-4 p-1.5 rounded-lg text-[#949ba4] hover:text-white hover:bg-[#35373c] transition-colors cursor-pointer"
+              title="Kapat"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
+
           <div className="w-14 h-14 mx-auto rounded-2xl bg-[#5865f2]/15 border border-[#5865f2]/30 flex items-center justify-center text-[#5865f2] mb-3 shadow-inner">
             <LogIn className="w-7 h-7" />
           </div>
-          <h2 className="text-xl font-black text-white tracking-tight">Fivecord'a Giriş Yap</h2>
+          <h2 className="text-xl font-black text-white tracking-tight">Fivecord VIP Giriş</h2>
           <p className="text-xs text-[#949ba4] mt-1">
-            Farklı bir yerden (Google Chrome, sekme vb.) girdin. Profilini seç veya adını yazarak bağlan!
+            Profilini seç veya kullanıcı adını yazarak tek tıkla bağlan!
           </p>
         </div>
 
         <div className="p-6 space-y-5 overflow-y-auto max-h-[75vh]">
-          {/* Quick Click Existing Accounts */}
+          {/* Quick Continue with Previous Profile Card */}
+          {lastUsername && (
+            <div className="p-3.5 rounded-xl bg-gradient-to-r from-[#5865f2]/20 to-[#5865f2]/5 border border-[#5865f2]/40 flex items-center justify-between gap-3 shadow-md">
+              <div className="flex items-center gap-3 overflow-hidden">
+                <img 
+                  src={currentUser?.avatar || currentAvatarUrl}
+                  alt={lastUsername}
+                  className="w-10 h-10 rounded-full bg-[#1e1f22] object-cover border-2 border-[#5865f2] shrink-0"
+                />
+                <div className="min-w-0">
+                  <span className="text-[10px] text-[#5865f2] font-black uppercase tracking-wider block">
+                    Son Oturum
+                  </span>
+                  <span className="text-sm font-black text-white truncate block">
+                    {lastUsername}
+                  </span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleQuickContinue}
+                className="px-4 py-2 rounded-xl bg-[#5865f2] hover:bg-[#4752c4] text-white text-xs font-bold transition-all shadow-md cursor-pointer hover:scale-105 shrink-0 flex items-center gap-1.5"
+              >
+                <span>Hızlı Devam Et</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* Quick Click Existing Registered Accounts */}
           {savedAccounts.length > 0 && (
             <div>
               <div className="text-[11px] font-bold uppercase tracking-wider text-[#b5bac1] mb-2 flex items-center justify-between">
-                <span>Kayıtlı Profillerden Seç (Tek Tıkla Giriş)</span>
-                <span className="text-[10px] text-[#23a55a] font-mono font-bold">HIZLI</span>
+                <span>Kayıtlı Profillerden Seç</span>
+                <span className="text-[10px] text-[#23a55a] font-mono font-bold">TEK TIKLA GİR</span>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {savedAccounts.slice(0, 6).map((acc) => {
@@ -120,11 +169,13 @@ export default function LoginModal({ isOpen, onLogin, currentUsername = '' }) {
                     <div
                       key={acc.id || acc.username}
                       onClick={() => handleSelectAccount(acc)}
+                      onDoubleClick={() => doLogin(acc.username, acc.avatar, acc.color)}
                       className={`p-2 rounded-xl border flex items-center gap-2.5 cursor-pointer transition-all ${
                         isSelected 
                           ? 'bg-[#5865f2]/20 border-[#5865f2] text-white shadow-md' 
                           : 'bg-[#2b2d31] border-[#383a40] hover:bg-[#35373c] text-[#dbdee1]'
                       }`}
+                      title="Tıkla: Seç | Çift tıkla: Hemen Gir"
                     >
                       <img 
                         src={acc.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${acc.username}`}
@@ -133,7 +184,7 @@ export default function LoginModal({ isOpen, onLogin, currentUsername = '' }) {
                       />
                       <div className="min-w-0 flex-1">
                         <div className="text-xs font-bold truncate">{acc.username}</div>
-                        <div className="text-[10px] text-[#949ba4] truncate">Tek tıkla bağlan</div>
+                        <div className="text-[10px] text-[#949ba4] truncate">Seçmek için tıkla</div>
                       </div>
                       {isSelected && <Check className="w-4 h-4 text-[#5865f2] shrink-0" />}
                     </div>
@@ -210,11 +261,24 @@ export default function LoginModal({ isOpen, onLogin, currentUsername = '' }) {
               </div>
             </div>
 
+            {/* Remember Me Toggle */}
+            <div className="flex items-center justify-between py-1">
+              <label className="flex items-center gap-2 cursor-pointer text-xs text-[#b5bac1] hover:text-white transition-colors select-none">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="w-4 h-4 rounded accent-[#5865f2] cursor-pointer"
+                />
+                <span>Bu cihazda beni hatırla (Doğrudan aç)</span>
+              </label>
+            </div>
+
             {/* Info pill about single slot (+1 yer kaplamaz) */}
-            <div className="p-3 rounded-xl bg-[#23a55a]/10 border border-[#23a55a]/20 flex items-start gap-2.5">
+            <div className="p-2.5 rounded-xl bg-[#23a55a]/10 border border-[#23a55a]/20 flex items-start gap-2">
               <Shield className="w-4 h-4 text-[#23a55a] shrink-0 mt-0.5" />
               <p className="text-[11px] text-[#23a55a] leading-relaxed font-medium">
-                <strong>+1 Yer Kaplamaz:</strong> Aynı isimle başka sekmede veya cihazda açıksa eski oturum temizlenir, sunucuda fazladan yer kaplamazsınız.
+                <strong>Tek Oturum Güvencesi:</strong> Aynı isimle başka sekmede açıksa eskisini devralır, sunucuda fazladan yer kaplamaz.
               </p>
             </div>
 
@@ -224,7 +288,7 @@ export default function LoginModal({ isOpen, onLogin, currentUsername = '' }) {
               disabled={!username.trim()}
               className="w-full py-3 rounded-xl bg-[#5865f2] hover:bg-[#4752c4] disabled:opacity-40 text-white text-sm font-bold shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer hover:scale-[1.01]"
             >
-              <span>Giriş Yap ve Sunucuya Katıl</span>
+              <span>{username ? `${username} Olarak Giriş Yap` : 'Giriş Yap'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>

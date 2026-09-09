@@ -18,6 +18,7 @@ export default function Sidebar({
   currentUser,
   onUpdateProfile,
   onLogout,
+  onOpenLogin,
   isMuted,
   setIsMuted,
   isDeafened,
@@ -141,6 +142,18 @@ export default function Sidebar({
             >
               <span>Sunucu Bilgileri</span>
               <Info className="w-4 h-4 text-[#949ba4] group-hover:text-white" />
+            </button>
+
+            <div className="h-[1px] bg-[#232428] my-1" />
+            <button
+              onClick={() => {
+                setIsServerMenuOpen(false);
+                onOpenLogin?.();
+              }}
+              className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg hover:bg-[#5865f2] hover:text-white transition-colors cursor-pointer text-[#5865f2] font-semibold"
+            >
+              <span>Hesap Değiştir / Giriş Yap</span>
+              <LogIn className="w-4 h-4" />
             </button>
 
             {!isAppInstalled && (
@@ -476,6 +489,7 @@ export default function Sidebar({
         isDeafened={isDeafened}
         setIsDeafened={setIsDeafened}
         onLogout={onLogout}
+        onOpenLogin={onOpenLogin}
       />
     </div>
   );
