@@ -693,7 +693,16 @@ export default function App() {
       </div>
       <BackgroundMusicPlayer 
         musicState={activeMusicState} 
-        userVolume={userMusicVolume} 
+        userVolume={userMusicVolume}
+        onTrackEnd={(trackId) => {
+          if (currentVoiceChannel) {
+            console.log('[App] Track ended, notifying server to stop music in channel:', currentVoiceChannel.id);
+            socket.emit('music-ended', { 
+              channelId: currentVoiceChannel.id, 
+              trackId 
+            });
+          }
+        }}
       />
 
       {/* DISCORD SERVER RAIL (72px) */}

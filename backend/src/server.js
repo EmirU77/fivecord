@@ -489,6 +489,57 @@ function setVoiceChannelMusic(targetVoiceChannelId, track, senderUsername = 'Kul
   io.emit('members-updated', getAllMembers());
   return state;
 }
+function stopVoiceChannelMusic(targetVoiceChannelId, reason = 'stop') {
+  const existing = channelMusic.get(targetVoiceChannelId);
+  if (!existing || (!existing.isPlaying && !existing.currentTrack)) {
+    return;
+  }
+
+  const trackTitle = existing.currentTrack?.title || existing.currentTrack?.name;
+  console.log(`[Music Stopped] Channel: ${targetVoiceChannelId}, Reason: ${reason}, Track: ${trackTitle || 'None'}`);
+
+  const state = {
+    isPlaying: false,
+    currentTrack: null,
+    duration: 0,
+    currentTime: 0,
+    volume: 80,
+    startedAt: 0,
+    updatedAt: Date.now()
+  };
+  channelMusic.set(targetVoiceChannelId, state);
+
+  DJ_BOT_USER.voiceState.channelId = null;
+  DJ_BOT_USER.voiceState.isSpeaking = false;
+  DJ_BOT_USER.customStatus = '🎵 7/24 Müzik Botu';
+  DJ_BOT_USER.activity = 'Fivecord DJ';
+
+  if (voiceChannels.has(targetVoiceChannelId)) {
+    voiceChannels.get(targetVoiceChannelId).delete(DJ_BOT_USER.id);
+  }
+
+  io.emit('music-state-updated', { channelId: targetVoiceChannelId, state });
+  io.emit('members-updated', getAllMembers());
+  return state;
+}
+
+// Global server-side music duration watchdog (guarantees music closes when song finishes)
+setInterval(() => {
+  for (const [channelId, state] of channelMusic.entries()) {
+    if (state && state.isPlaying && state.currentTrack && state.currentTrack.source !== 'station') {
+      const maxDur = state.duration || state.currentTrack.durationSec || 0;
+      if (maxDur > 0) {
+        const elapsed = (Date.now() - (state.updatedAt || state.startedAt || Date.now())) / 1000;
+        const totalPlayed = (state.currentTime || 0) + elapsed;
+        if (totalPlayed >= maxDur + 1.5) {
+          console.log(`[Music Auto-Ended by Watchdog] ${state.currentTrack.title || state.currentTrack.name} finished in ${channelId}`);
+          stopVoiceChannelMusic(channelId, 'duration-completed');
+        }
+      }
+    }
+  }
+}, 1000);
+
 
 app.get('/api/accounts', (req, res) => {
   res.json({ accounts: loadAccounts() });
@@ -878,21 +929,7 @@ io.on('connection', (socket) => {
         });
 
       } else if (cmd === '!stop') {
-        const state = { isPlaying: false, currentTrack: null, volume: 80, startedAt: 0 };
-        channelMusic.set(targetVoiceChannelId, state);
-
-        DJ_BOT_USER.voiceState.channelId = null;
-        DJ_BOT_USER.voiceState.isSpeaking = false;
-        DJ_BOT_USER.customStatus = '🎵 7/24 Müzik Botu';
-        DJ_BOT_USER.activity = 'Fivecord DJ';
-
-        if (voiceChannels.has(targetVoiceChannelId)) {
-          voiceChannels.get(targetVoiceChannelId).delete(DJ_BOT_USER.id);
-        }
-
-        io.emit('music-state-updated', { channelId: targetVoiceChannelId, state });
-        io.emit('members-updated', getAllMembers());
-
+        stopVoiceChannelMusic(targetVoiceChannelId, 'chat-stop');
         sendBotChatMessage(channelId, `⏹️ **Fivecord DJ**: Müzik durduruldu ve ses odasından ayrıldı.`);
       } else if (cmd === '!pause') {
         const state = channelMusic.get(targetVoiceChannelId);
@@ -1136,6 +1173,10 @@ io.on('connection', (socket) => {
     const channelUsers = voiceChannels.get(channelId);
     if (channelUsers) {
       channelUsers.delete(socket.id);
+      const humanMembers = Array.from(channelUsers).filter(id => id !== DJ_BOT_USER.id);
+      if (humanMembers.length === 0 && channelMusic.has(channelId)) {
+        stopVoiceChannelMusic(channelId, 'empty-room-leave');
+      }
     }
     socket.leave(`voice-${channelId}`);
 
@@ -1262,19 +1303,16 @@ io.on('connection', (socket) => {
   });
 
   socket.on('music-stop', ({ channelId }) => {
-    const state = { isPlaying: false, currentTrack: null, volume: 80, startedAt: 0 };
-    channelMusic.set(channelId, state);
+    stopVoiceChannelMusic(channelId, 'user-stop');
+  });
 
-    DJ_BOT_USER.voiceState.channelId = null;
-    DJ_BOT_USER.voiceState.isSpeaking = false;
-    DJ_BOT_USER.customStatus = '🎵 7/24 Müzik Botu';
+  socket.on('music-ended', ({ channelId, trackId }) => {
+    const state = channelMusic.get(channelId);
+    if (!state || !state.currentTrack) return;
+    if (state.currentTrack.source === 'station') return;
+    if (trackId && state.currentTrack.id !== trackId) return;
 
-    if (voiceChannels.has(channelId)) {
-      voiceChannels.get(channelId).delete(DJ_BOT_USER.id);
-    }
-
-    io.emit('music-state-updated', { channelId, state });
-    io.emit('members-updated', getAllMembers());
+    stopVoiceChannelMusic(channelId, 'track-ended');
   });
 
   socket.on('music-volume', ({ channelId, volume }) => {
@@ -1289,9 +1327,16 @@ io.on('connection', (socket) => {
     const user = users.get(socket.id);
     if (user) {
       if (user.voiceState.channelId) {
-        const ch = voiceChannels.get(user.voiceState.channelId);
-        if (ch) ch.delete(socket.id);
-        socket.to(`voice-${user.voiceState.channelId}`).emit('user-left-voice', {
+        const vChId = user.voiceState.channelId;
+        const ch = voiceChannels.get(vChId);
+        if (ch) {
+          ch.delete(socket.id);
+          const humanMembers = Array.from(ch).filter(id => id !== DJ_BOT_USER.id);
+          if (humanMembers.length === 0 && channelMusic.has(vChId)) {
+            stopVoiceChannelMusic(vChId, 'empty-room-disconnect');
+          }
+        }
+        socket.to(`voice-${vChId}`).emit('user-left-voice', {
           socketId: socket.id,
           user
         });

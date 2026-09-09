@@ -42,6 +42,30 @@ export default function MusicPlayerModal({
   const volume = userVolume;
   const durationSec = musicState?.duration || (musicState?.currentTrack?.durationSec) || 0;
   const isLive = !durationSec || durationSec <= 0 || musicState?.currentTrack?.source === 'station';
+  const wasPlayingRef = useRef(false);
+
+  useEffect(() => {
+    if (musicState?.currentTrack && musicState?.isPlaying) {
+      wasPlayingRef.current = true;
+    }
+  }, [musicState?.currentTrack, musicState?.isPlaying]);
+
+  // When track finishes and stops, auto-close modal if user isn't actively searching
+  useEffect(() => {
+    if (isOpen && wasPlayingRef.current && !musicState?.currentTrack && !searchQuery.trim() && searchResults.length === 0) {
+      wasPlayingRef.current = false;
+      const t = setTimeout(() => {
+        if (typeof onClose === 'function') onClose();
+      }, 500);
+      return () => clearTimeout(t);
+    }
+  }, [isOpen, musicState?.currentTrack, searchQuery, searchResults.length, onClose]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      wasPlayingRef.current = false;
+    }
+  }, [isOpen]);
 
   // Sync ticker when playing
   useEffect(() => {

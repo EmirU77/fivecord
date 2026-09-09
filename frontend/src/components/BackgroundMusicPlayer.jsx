@@ -46,7 +46,8 @@ export function loadYouTubeApi() {
 
 export default function BackgroundMusicPlayer({
   musicState,
-  userVolume = 80
+  userVolume = 80,
+  onTrackEnd
 }) {
   const containerRef = useRef(null);
   const ytPlayerRef = useRef(null);
@@ -56,6 +57,11 @@ export default function BackgroundMusicPlayer({
   const musicStateRef = useRef(musicState);
   const currentVideoIdRef = useRef(null);
   const userVolumeRef = useRef(userVolume);
+  const onTrackEndRef = useRef(onTrackEnd);
+
+  useEffect(() => {
+    onTrackEndRef.current = onTrackEnd;
+  }, [onTrackEnd]);
 
   useEffect(() => {
     musicStateRef.current = musicState;
@@ -92,7 +98,7 @@ export default function BackgroundMusicPlayer({
       if (curr.currentTrack?.source === 'youtube' && ytPlayerRef.current && isPlayerReadyRef.current) {
         try {
           const st = ytPlayerRef.current.getPlayerState();
-          if (st !== 1 && st !== 3) {
+          if (st !== 1 && st !== 3 && st !== 0) {
             ytPlayerRef.current.playVideo();
           }
           if (userVolumeRef.current > 0 && typeof ytPlayerRef.current.unMute === 'function') {
@@ -157,7 +163,6 @@ export default function BackgroundMusicPlayer({
               const elapsed = curr.isPlaying && curr.updatedAt
                 ? (Date.now() - curr.updatedAt) / 1000
                 : 0;
-              // If song just started (within 5 seconds), start from 0:00 (zero delay!)
               const startSeconds = (curr.currentTime < 5 && elapsed < 6)
                 ? 0
                 : Math.max(0, (curr.currentTime || 0) + elapsed);
@@ -177,6 +182,13 @@ export default function BackgroundMusicPlayer({
             if (e.data === 1 && userVolumeRef.current > 0) {
               try { e.target.unMute(); } catch (err) {}
             }
+            // 0 === YT.PlayerState.ENDED -> Song has finished!
+            if (e.data === 0) {
+              console.log('[BackgroundMusicPlayer] YouTube video reached ENDED state');
+              if (onTrackEndRef.current && currentVideoIdRef.current) {
+                onTrackEndRef.current(currentVideoIdRef.current);
+              }
+            }
           }
         }
       });
@@ -191,7 +203,7 @@ export default function BackgroundMusicPlayer({
   useEffect(() => {
     const curr = musicState;
 
-    if (!curr || !curr.currentTrack) {
+    if (!curr || !curr.currentTrack || !curr.isPlaying) {
       if (ytPlayerRef.current && isPlayerReadyRef.current && typeof ytPlayerRef.current.pauseVideo === 'function') {
         try { ytPlayerRef.current.pauseVideo(); } catch (e) {}
       }
@@ -199,7 +211,9 @@ export default function BackgroundMusicPlayer({
         audioRef.current.pause();
         audioRef.current.src = '';
       }
-      currentVideoIdRef.current = null;
+      if (!curr?.currentTrack) {
+        currentVideoIdRef.current = null;
+      }
       return;
     }
 
@@ -207,7 +221,6 @@ export default function BackgroundMusicPlayer({
       ? (Date.now() - curr.updatedAt) / 1000
       : 0;
 
-    // Zero-delay: If track was just started, start directly at 0 without skipping initial seconds
     const isNewTrackStart = (curr.currentTime || 0) < 5 && elapsed < 6;
     const targetTime = isNewTrackStart ? 0 : Math.max(0, (curr.currentTime || 0) + elapsed);
 
@@ -239,11 +252,10 @@ export default function BackgroundMusicPlayer({
           }
           setTimeout(() => { isSeekingRef.current = false; }, 1200);
         } else {
-          // Same track: sync play/pause or explicit seek
           try {
             const st = p.getPlayerState();
             if (curr.isPlaying) {
-              if (st !== 1 && st !== 3) {
+              if (st !== 1 && st !== 3 && st !== 0) {
                 p.playVideo();
               }
             } else {
@@ -252,7 +264,6 @@ export default function BackgroundMusicPlayer({
               }
             }
 
-            // Only seek if drift/jump is large (> 2.5s) to avoid buffer-killing micro jumps
             const localTime = p.getCurrentTime() || 0;
             if (Math.abs(localTime - targetTime) > 2.5 && (st === 1 || st === 2)) {
               isSeekingRef.current = true;
@@ -299,7 +310,7 @@ export default function BackgroundMusicPlayer({
     videoId
   ]);
 
-  // 3. Smooth Drift Monitoring (Keeps users synchronized without resetting buffers)
+  // 3. Smooth Drift & End-of-Track Monitoring
   useEffect(() => {
     if (!musicState?.isPlaying) return;
 
@@ -311,31 +322,44 @@ export default function BackgroundMusicPlayer({
       const elapsed = (Date.now() - (curr.updatedAt || curr.startedAt || Date.now())) / 1000;
       const targetTime = (curr.currentTime || 0) + elapsed;
 
-      // Check YouTube drift
+      // Check YouTube drift & auto-end
       if (curr.currentTrack?.source === 'youtube' && ytPlayerRef.current && isPlayerReadyRef.current) {
         try {
           const st = ytPlayerRef.current.getPlayerState();
-          // CRITICAL: NEVER seek while YouTube is buffering (3) or unstarted (-1)!
-          if (st === 1) { // Only when actively playing
-            const localTime = ytPlayerRef.current.getCurrentTime() || 0;
-            const drift = Math.abs(localTime - targetTime);
+          const localTime = ytPlayerRef.current.getCurrentTime() || 0;
+          const maxDur = curr.currentTrack.durationSec || 0;
 
-            // Synchronize if drift exceeds 1.8 seconds
+          // Track finished (State 0 or reached end of duration)
+          if (st === 0 || (maxDur > 0 && localTime >= maxDur - 0.6)) {
+            console.log('[BackgroundMusicPlayer] Track completion detected in drift monitor');
+            if (onTrackEndRef.current && currentVideoIdRef.current) {
+              onTrackEndRef.current(currentVideoIdRef.current);
+            }
+            return; // Never call playVideo() when ended
+          }
+
+          if (st === 1) {
+            const drift = Math.abs(localTime - targetTime);
             if (drift > 1.8) {
               isSeekingRef.current = true;
               ytPlayerRef.current.seekTo(targetTime, true);
               setTimeout(() => { isSeekingRef.current = false; }, 800);
             }
           } else if (st === 2 || st === 5 || st === -1) {
-            // Player is paused or cued when it should be playing -> resume
             ytPlayerRef.current.playVideo();
           }
         } catch (e) {}
       }
 
-      // Check HTML5 Audio drift
+      // Check HTML5 Audio drift & auto-end
       if (curr.currentTrack?.source !== 'youtube' && curr.currentTrack?.source !== 'station' && audioRef.current) {
         try {
+          if (audioRef.current.ended || (audioRef.current.duration > 0 && audioRef.current.currentTime >= audioRef.current.duration - 0.6)) {
+            if (onTrackEndRef.current && curr.currentTrack?.id) {
+              onTrackEndRef.current(curr.currentTrack.id);
+            }
+            return;
+          }
           const localTime = audioRef.current.currentTime || 0;
           const drift = Math.abs(localTime - targetTime);
           if (drift > 2.0) {
@@ -346,7 +370,7 @@ export default function BackgroundMusicPlayer({
           }
         } catch (e) {}
       }
-    }, 1500);
+    }, 1200);
 
     return () => clearInterval(driftInterval);
   }, [musicState?.isPlaying]);
@@ -365,7 +389,16 @@ export default function BackgroundMusicPlayer({
       }}
     >
       <div ref={containerRef} />
-      <audio ref={audioRef} playsInline />
+      <audio 
+        ref={audioRef} 
+        playsInline 
+        onEnded={() => {
+          console.log('[BackgroundMusicPlayer] HTML5 audio onEnded fired');
+          if (onTrackEndRef.current && currentTrack?.id) {
+            onTrackEndRef.current(currentTrack.id);
+          }
+        }}
+      />
     </div>
   );
 }
