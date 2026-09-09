@@ -300,9 +300,8 @@ export default function App() {
 
       if (isScreen) {
         setRemoteScreenStreams(prev => new Map(prev).set(socketId, stream));
-      } else {
-        setRemoteStreams(prev => new Map(prev).set(socketId, stream));
       }
+      setRemoteStreams(prev => new Map(prev).set(socketId, stream));
 
       // If stream has audio tracks, ensure it is played actively and unmuted
       const audioTracks = stream.getAudioTracks();

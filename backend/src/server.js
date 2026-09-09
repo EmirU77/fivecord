@@ -155,6 +155,9 @@ function saveAccount(userData) {
       id: userData.id || ('user-' + cleanName.toLowerCase().replace(/[^a-z0-9_-]/g, '')),
       username: cleanName,
       avatar: userData.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanName}`,
+      avatarDecoration: userData.avatarDecoration || 'none',
+      banner: userData.banner || null,
+      bio: userData.bio || '',
       color: userData.color || '#5865F2',
       customStatus: userData.customStatus || 'Fivecord kullanıyor',
       entranceSound: userData.entranceSound || 'mvp',
@@ -784,6 +787,7 @@ io.on('connection', (socket) => {
     if (!user) return;
     Object.assign(user, updated);
     users.set(socket.id, user);
+    saveAccount(user);
     io.emit('members-updated', getAllMembers());
   });
 
@@ -1148,11 +1152,12 @@ io.on('connection', (socket) => {
     io.emit('members-updated', getAllMembers());
   });
 
-  socket.on('signal', ({ targetSocketId, signal, streamType }) => {
+  socket.on('signal', ({ targetSocketId, signal, streamType, screenStreamId }) => {
     io.to(targetSocketId).emit('signal', {
       senderSocketId: socket.id,
       signal,
-      streamType: streamType || 'user'
+      streamType: streamType || 'user',
+      screenStreamId: screenStreamId || null
     });
   });
 

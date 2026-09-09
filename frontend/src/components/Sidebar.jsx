@@ -314,6 +314,10 @@ export default function Sidebar({
                                 <img 
                                   src={m.avatar} 
                                   alt={m.username}
+                                  onError={(e) => {
+                                    e.currentTarget.onerror = null;
+                                    e.currentTarget.src = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(m.username || 'user')}`;
+                                  }}
                                   className={`w-5 h-5 rounded-full object-cover border ${
                                     m.voiceState?.isSpeaking 
                                       ? 'speaking-indicator border-[#23a55a]' 

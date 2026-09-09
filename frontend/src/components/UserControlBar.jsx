@@ -29,6 +29,46 @@ const POPULAR_GAMES = [
   { name: 'Visual Studio Code', icon: '💻', detail: 'Fivecord Geliştiriyor' }
 ];
 
+// Client-side image compression to base64 WebP/JPEG data URL
+export function processImageToDataUrl(file, maxWidth = 256, maxHeight = 256, quality = 0.88) {
+  return new Promise((resolve, reject) => {
+    if (!file || !file.type.startsWith('image/')) {
+      return reject(new Error('Lütfen geçerli bir resim dosyası seçin (PNG, JPG, WebP)'));
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+        if (width > maxWidth || height > maxHeight) {
+          if (width > height) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          } else {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        let dataUrl = canvas.toDataURL('image/webp', quality);
+        if (!dataUrl.startsWith('data:image/webp')) {
+          dataUrl = canvas.toDataURL('image/jpeg', quality);
+        }
+        resolve(dataUrl);
+      };
+      img.onerror = () => reject(new Error('Resim işlenemedi'));
+      img.src = event.target.result;
+    };
+    reader.onerror = () => reject(new Error('Dosya okunamadı'));
+    reader.readAsDataURL(file);
+  });
+}
+
 // --- PRESET DATA ---
 const COLOR_PRESETS = [
   { name: 'Discord Blurple', hex: '#5865f2' },
@@ -380,24 +420,15 @@ export default function UserControlBar({
     );
   };
 
-  // Upload local avatar
+  // Upload local avatar (Processed in browser to robust 100% persistent Base64 Data URL)
   const handleAvatarFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
     setIsUploadingAvatar(true);
-    const formData = new FormData();
-    formData.append('file', file);
-
     try {
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData
-      });
-      const data = await res.json();
-      if (data.url) {
-        setTempAvatar(data.url);
-      }
+      const dataUrl = await processImageToDataUrl(file, 256, 256, 0.88);
+      setTempAvatar(dataUrl);
     } catch (err) {
       alert('Fotoğraf yüklenemedi: ' + err.message);
     } finally {
@@ -406,24 +437,15 @@ export default function UserControlBar({
     }
   };
 
-  // Upload local banner
+  // Upload local banner (Processed in browser to robust Base64 Data URL)
   const handleBannerFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
     setIsUploadingBanner(true);
-    const formData = new FormData();
-    formData.append('file', file);
-
     try {
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData
-      });
-      const data = await res.json();
-      if (data.url) {
-        setTempBanner(data.url);
-      }
+      const dataUrl = await processImageToDataUrl(file, 640, 240, 0.85);
+      setTempBanner(dataUrl);
     } catch (err) {
       alert('Banner yüklenemedi: ' + err.message);
     } finally {
@@ -460,6 +482,10 @@ export default function UserControlBar({
             <img 
               src={currentUser?.avatar || 'https://api.dicebear.com/7.x/bottts/svg?seed=user'} 
               alt={currentUser?.username}
+              onError={(e) => {
+                e.currentTarget.onerror = null;
+                e.currentTarget.src = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(currentUser?.username || 'user')}`;
+              }}
               className="w-8 h-8 rounded-full bg-[#2b2d31] object-cover border border-[#383a40]"
             />
             {/* Live decoration */}
@@ -1354,6 +1380,10 @@ export default function UserControlBar({
                           <img 
                             src={tempAvatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${tempName}`} 
                             alt="Preview"
+                            onError={(e) => {
+                              e.currentTarget.onerror = null;
+                              e.currentTarget.src = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(tempName || 'user')}`;
+                            }}
                             className="w-20 h-20 rounded-full bg-[#1e1f22] border-4 border-[#232428] object-cover shadow-xl" 
                           />
                           {/* Active Decoration */}

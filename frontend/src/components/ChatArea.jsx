@@ -365,6 +365,10 @@ export default function ChatArea({
               <img
                 src={channel.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${channel.name}`}
                 alt={channel.name}
+                onError={(e) => {
+                  e.currentTarget.onerror = null;
+                  e.currentTarget.src = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(channel.name || 'chat')}`;
+                }}
                 className="w-20 h-20 rounded-full bg-[#1e1f22] object-cover border-4 border-[#313338] shadow-lg"
               />
               <div className="absolute bottom-1 right-1 w-5 h-5 rounded-full bg-[#23a55a] border-3 border-[#313338]" />
@@ -408,6 +412,10 @@ export default function ChatArea({
                 <img 
                   src={msg.sender.avatar} 
                   alt={msg.sender.username}
+                  onError={(e) => {
+                    e.currentTarget.onerror = null;
+                    e.currentTarget.src = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(msg.sender?.username || 'user')}`;
+                  }}
                   className="w-10 h-10 rounded-full bg-[#1e1f22] object-cover shadow-md border border-transparent group-hover:border-[#3f4147] transition-all" 
                 />
                 <AvatarDecorationRenderer decoration={msg.sender.avatarDecoration} size="sm" />
@@ -618,7 +626,15 @@ export default function ChatArea({
                 <div key={pin.id} className="p-3 rounded-xl bg-[#232428] border border-[#383a40] space-y-2 group/pin">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <img src={pin.sender?.avatar} alt="" className="w-5 h-5 rounded-full object-cover" />
+                      <img 
+                        src={pin.sender?.avatar} 
+                        alt="" 
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(pin.sender?.username || 'user')}`;
+                        }}
+                        className="w-5 h-5 rounded-full object-cover" 
+                      />
                       <span className="text-xs font-bold text-white">{pin.sender?.username}</span>
                     </div>
                     <button

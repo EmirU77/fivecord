@@ -61,6 +61,10 @@ export default function MemberList({ members, currentUser, onOpenDM }) {
                   <img
                     src={member.avatar}
                     alt={member.username}
+                    onError={(e) => {
+                      e.currentTarget.onerror = null;
+                      e.currentTarget.src = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(member.username || 'user')}`;
+                    }}
                     className={`w-9 h-9 rounded-full bg-[#1e1f22] object-cover border-2 transition-all ${
                       isSpeaking ? 'speaking-indicator border-[#23a55a] scale-105' : 'border-[#383a40]'
                     }`}
@@ -240,6 +244,10 @@ export default function MemberList({ members, currentUser, onOpenDM }) {
                   <img
                     src={bot.avatar}
                     alt={bot.username}
+                    onError={(e) => {
+                      e.currentTarget.onerror = null;
+                      e.currentTarget.src = `https://api.dicebear.com/7.x/bottts/svg?seed=Fivecord-DJ`;
+                    }}
                     className={`w-9 h-9 rounded-full object-cover border-2 transition-all ${
                       bot.voiceState?.isSpeaking ? 'speaking-indicator border-[#5865f2] animate-pulse' : 'border-[#383a40]'
                     }`}

@@ -93,6 +93,10 @@ export default function DMSidebar({
                         <img
                           src={member.avatar}
                           alt={member.username}
+                          onError={(e) => {
+                            e.currentTarget.onerror = null;
+                            e.currentTarget.src = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(member.username || 'user')}`;
+                          }}
                           className="w-8 h-8 rounded-full bg-[#1e1f22] object-cover border border-[#383a40]"
                         />
                         <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-[#23a55a] border-2 border-[#2b2d31]" />

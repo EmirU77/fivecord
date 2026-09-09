@@ -132,6 +132,10 @@ export default function LoginModal({ isOpen, onLogin, onClose, currentUser = nul
                 <img 
                   src={currentUser?.avatar || currentAvatarUrl}
                   alt={lastUsername}
+                  onError={(e) => {
+                    e.currentTarget.onerror = null;
+                    e.currentTarget.src = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(lastUsername || 'user')}`;
+                  }}
                   className="w-10 h-10 rounded-full bg-[#1e1f22] object-cover border-2 border-[#5865f2] shrink-0"
                 />
                 <div className="min-w-0">
@@ -180,6 +184,10 @@ export default function LoginModal({ isOpen, onLogin, onClose, currentUser = nul
                       <img 
                         src={acc.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${acc.username}`}
                         alt={acc.username}
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(acc.username || 'user')}`;
+                        }}
                         className="w-8 h-8 rounded-full bg-[#1e1f22] object-cover shrink-0"
                       />
                       <div className="min-w-0 flex-1">
@@ -202,6 +210,10 @@ export default function LoginModal({ isOpen, onLogin, onClose, currentUser = nul
                 <img 
                   src={currentAvatarUrl} 
                   alt="Avatar Preview" 
+                  onError={(e) => {
+                    e.currentTarget.onerror = null;
+                    e.currentTarget.src = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(username || 'gamer')}`;
+                  }}
                   className="w-14 h-14 rounded-full bg-[#1e1f22] object-cover border-2 shadow-md"
                   style={{ borderColor: selectedColor }}
                 />

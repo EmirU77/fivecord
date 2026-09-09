@@ -103,18 +103,29 @@ export default function VoiceRoom({
   useEffect(() => {
     if (isScreenSharing && screenStream) {
       setActiveScreenUser({ isLocal: true, stream: screenStream, username: currentUser?.username });
-    } else if (remoteScreenStreams && remoteScreenStreams.size > 0) {
-      const [peerId, stream] = remoteScreenStreams.entries().next().value;
-      const peer = members.find(m => m.socketId === peerId);
-      setActiveScreenUser({ isLocal: false, stream, username: peer?.username || 'Arkadaşın' });
     } else {
-      setActiveScreenUser(null);
+      const screenSharingMember = members.find(m => m.voiceState?.isScreenSharing && m.id !== currentUser?.id);
+      if (screenSharingMember) {
+        const stream = remoteScreenStreams?.get(screenSharingMember.socketId) || remoteStreams?.get(screenSharingMember.socketId);
+        if (stream && stream.getVideoTracks().length > 0) {
+          setActiveScreenUser({ isLocal: false, stream, username: screenSharingMember.username, socketId: screenSharingMember.socketId });
+          return;
+        }
+      }
+      if (remoteScreenStreams && remoteScreenStreams.size > 0) {
+        const [peerId, stream] = remoteScreenStreams.entries().next().value;
+        const peer = members.find(m => m.socketId === peerId);
+        setActiveScreenUser({ isLocal: false, stream, username: peer?.username || 'Arkadaşın', socketId: peerId });
+      } else {
+        setActiveScreenUser(null);
+      }
     }
-  }, [isScreenSharing, screenStream, remoteScreenStreams, members, currentUser]);
+  }, [isScreenSharing, screenStream, remoteScreenStreams, remoteStreams, members, currentUser]);
 
   useEffect(() => {
     if (mainVideoRef.current && activeScreenUser?.stream) {
       mainVideoRef.current.srcObject = activeScreenUser.stream;
+      mainVideoRef.current.play().catch(() => {});
     }
   }, [activeScreenUser]);
 
@@ -298,6 +309,10 @@ export default function VoiceRoom({
                     <img
                       src={member.avatar}
                       alt={member.username}
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(member.username || 'user')}`;
+                      }}
                       className="w-6 h-6 rounded-full object-cover"
                     />
                     <span className="text-xs font-bold text-white">{member.username}</span>
@@ -310,7 +325,13 @@ export default function VoiceRoom({
           <div className="space-y-4 max-w-6xl mx-auto w-full">
             <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden border border-[#3f4147] shadow-2xl flex items-center justify-center group">
               <video
-                ref={mainVideoRef}
+                ref={(el) => {
+                  mainVideoRef.current = el;
+                  if (el && activeScreenUser?.stream && el.srcObject !== activeScreenUser.stream) {
+                    el.srcObject = activeScreenUser.stream;
+                    el.play().catch(() => {});
+                  }
+                }}
                 autoPlay
                 playsInline
                 muted={activeScreenUser.isLocal}
@@ -333,7 +354,7 @@ export default function VoiceRoom({
               <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button
                   onClick={toggleFullscreen}
-                  className="p-2.5 rounded-xl bg-black/70 hover:bg-black text-white backdrop-blur-xs transition-all shadow-lg"
+                  className="p-2.5 rounded-xl bg-black/70 hover:bg-black text-white backdrop-blur-xs transition-all shadow-lg cursor-pointer"
                   title="Tam Ekran"
                 >
                   <Maximize className="w-5 h-5" />
@@ -354,6 +375,10 @@ export default function VoiceRoom({
                     <img
                       src={member.avatar}
                       alt={member.username}
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(member.username || 'user')}`;
+                      }}
                       className={`w-7 h-7 rounded-full object-cover border-2 ${
                         isSpeaking ? 'border-[#23a55a]' : 'border-transparent'
                       }`}
@@ -463,12 +488,50 @@ export default function VoiceRoom({
                           />
                         )}
                       </div>
+                    ) : hasScreen ? (
+                      /* SCREEN SHARE TILE PREVIEW */
+                      <div
+                        className="absolute inset-0 w-full h-full bg-black flex items-center justify-center cursor-pointer group/screen"
+                        onClick={() => {
+                          const stream = isLocal 
+                            ? screenStream 
+                            : (remoteScreenStreams?.get(member.socketId) || remoteStreams?.get(member.socketId));
+                          if (stream) {
+                            setActiveScreenUser({ isLocal, stream, username: member.username, socketId: member.socketId });
+                          }
+                        }}
+                      >
+                        <video
+                          ref={(el) => {
+                            const stream = isLocal 
+                              ? screenStream 
+                              : (remoteScreenStreams?.get(member.socketId) || remoteStreams?.get(member.socketId));
+                            if (el && stream && el.srcObject !== stream) {
+                              el.srcObject = stream;
+                              el.play().catch(() => {});
+                            }
+                          }}
+                          autoPlay
+                          playsInline
+                          muted={isLocal}
+                          className="w-full h-full object-contain"
+                        />
+                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/screen:opacity-100 transition-opacity flex items-center justify-center gap-2 pointer-events-none">
+                          <span className="px-3 py-1.5 rounded-xl bg-[#5865f2] text-white text-xs font-bold shadow-lg flex items-center gap-1.5">
+                            <Maximize className="w-3.5 h-3.5" /> Yayını Büyüt
+                          </span>
+                        </div>
+                      </div>
                     ) : (
-                      /* Centered Large Avatar (If Camera is OFF) */
+                      /* Centered Large Avatar (If Camera and Screen are OFF) */
                       <div className="relative mb-2">
                         <img
                           src={member.avatar}
                           alt={member.username}
+                          onError={(e) => {
+                            e.currentTarget.onerror = null;
+                            e.currentTarget.src = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(member.username || 'user')}`;
+                          }}
                           className={`w-28 h-28 rounded-full object-cover bg-[#1e1f22] border-4 transition-all duration-150 ${
                             isSpeaking 
                               ? 'border-[#23a55a] scale-105 shadow-2xl' 
@@ -502,9 +565,21 @@ export default function VoiceRoom({
                     {/* Top right badges */}
                     <div className="absolute top-3 right-3 flex items-center gap-1.5 z-10">
                       {hasScreen && (
-                        <span className="flex items-center gap-1 text-[10px] font-bold bg-[#5865f2] text-white px-2 py-0.5 rounded shadow">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const stream = isLocal 
+                              ? screenStream 
+                              : (remoteScreenStreams?.get(member.socketId) || remoteStreams?.get(member.socketId));
+                            if (stream) {
+                              setActiveScreenUser({ isLocal, stream, username: member.username, socketId: member.socketId });
+                            }
+                          }}
+                          className="flex items-center gap-1 text-[10px] font-bold bg-[#f23f43] hover:bg-[#da373a] text-white px-2 py-0.5 rounded shadow cursor-pointer transition-colors"
+                          title="Yayını Sahneye Al"
+                        >
                           <Monitor className="w-3 h-3" /> CANLI
-                        </span>
+                        </button>
                       )}
                     </div>
                   </div>
