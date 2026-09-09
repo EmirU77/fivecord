@@ -423,6 +423,27 @@ class WebRTCManager {
           this.pendingCandidates.set(senderSocketId, []);
         }
 
+        // Check for incoming remote screen video tracks from transceivers (guarantees detection even if ontrack didn't fire during renegotiation)
+        if (streamType === 'screen' || screenStreamId) {
+          const vTransceivers = pc.getTransceivers().filter(t => t.receiver?.track?.kind === 'video');
+          for (const vt of vTransceivers) {
+            const vTrack = vt.receiver.track;
+            if (vTrack && vTrack.readyState === 'live') {
+              let screenStream = this.remoteScreenStreams.get(senderSocketId);
+              if (!screenStream || !screenStream.getVideoTracks().includes(vTrack)) {
+                screenStream = new MediaStream([vTrack]);
+                this.remoteScreenStreams.set(senderSocketId, screenStream);
+              }
+              if (this.onScreenStreamAdded) {
+                this.onScreenStreamAdded(senderSocketId, screenStream);
+              }
+              if (this.onRemoteStreamAdded) {
+                this.onRemoteStreamAdded(senderSocketId, screenStream, true, vTrack);
+              }
+            }
+          }
+        }
+
         // If screen share stopped
         if (streamType === 'user' && !screenStreamId) {
           if (this.remoteScreenStreams.has(senderSocketId)) {

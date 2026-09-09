@@ -19,6 +19,7 @@ import LoginModal from './components/LoginModal';
 import { socket } from './services/socket';
 import { webrtc } from './services/webrtc';
 import { voiceRelay } from './services/voiceRelay';
+import { screenRelay } from './services/screenRelay';
 import { soundEffects } from './services/soundEffects';
 
 const DEFAULT_USER = {
@@ -562,6 +563,7 @@ export default function App() {
   const handleLeaveVoice = () => {
     soundEffects.playLeave();
     voiceRelay.stop();
+    screenRelay.stopAll();
     webrtc.leaveVoice();
     setIsScreenSharing(false);
     setScreenStream(null);
@@ -583,6 +585,7 @@ export default function App() {
       setScreenStream(res.stream);
       if (currentVoiceChannel) {
         setCurrentChannel(currentVoiceChannel);
+        screenRelay.startBroadcasting(currentVoiceChannel.id, res.stream);
       }
     } else {
       alert('Ekran paylaşımı başlatılamadı: ' + (res.error || 'İzin verilmedi'));
@@ -591,6 +594,9 @@ export default function App() {
 
   const handleStopScreenShare = () => {
     webrtc.stopScreenShare();
+    if (currentVoiceChannel) {
+      screenRelay.stopBroadcasting(currentVoiceChannel.id);
+    }
     setIsScreenSharing(false);
     setScreenStream(null);
   };

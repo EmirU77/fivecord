@@ -1191,6 +1191,20 @@ io.on('connection', (socket) => {
     });
   });
 
+  // Real-time Screen Relay via WebSocket (Guaranteed video delivery across CGNAT / Firewalls)
+  socket.on('screen-relay-frame', ({ channelId, frame }) => {
+    socket.to(`voice-${channelId}`).emit('screen-relay-frame', {
+      senderSocketId: socket.id,
+      frame
+    });
+  });
+
+  socket.on('screen-relay-stopped', ({ channelId }) => {
+    socket.to(`voice-${channelId}`).emit('screen-relay-stopped', {
+      senderSocketId: socket.id
+    });
+  });
+
   socket.on('update-voice-state', (newVoiceState) => {
     const user = users.get(socket.id);
     if (!user) return;

@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { soundEffects } from '../services/soundEffects';
 import { webrtc } from '../services/webrtc';
+import { screenRelay } from '../services/screenRelay';
 import SharedCinemaPlayer from './SharedCinemaPlayer';
 
 function formatTime(seconds) {
@@ -20,20 +21,19 @@ function formatTime(seconds) {
   return `${m}:${s < 10 ? '0' : ''}${s}`;
 }
 
-// Standalone bulletproof Stream Player that guarantees NO black screen
+// Standalone bulletproof Stream Player with Dual-Pipeline (WebRTC 60 FPS + Guaranteed WebSocket Screen Relay)
 function StreamPlayer({ streamItem, isFocused = false, onFocus, onRetry }) {
   const videoRef = useRef(null);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const canvasRef = useRef(null);
+  const [isWebRtcPlaying, setIsWebRtcPlaying] = useState(false);
+  const [isRelayPlaying, setIsRelayPlaying] = useState(false);
   const [loadSeconds, setLoadSeconds] = useState(0);
 
+  // --- 1. WebRTC Direct Video Pipeline ---
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !streamItem?.stream) return;
 
-    setIsPlaying(false);
-    setLoadSeconds(0);
-
-    // Set muted on DOM properties directly before srcObject (bypasses browser autoplay policy)
     video.muted = true;
     video.defaultMuted = true;
     video.playsInline = true;
@@ -41,10 +41,14 @@ function StreamPlayer({ streamItem, isFocused = false, onFocus, onRetry }) {
     video.setAttribute('webkit-playsinline', 'true');
     video.setAttribute('autoplay', 'true');
 
-    video.srcObject = streamItem.stream;
+    if (video.srcObject !== streamItem.stream) {
+      video.srcObject = streamItem.stream;
+    }
 
-    const markPlaying = () => {
-      setIsPlaying(true);
+    const markWebRtc = () => {
+      if (video.videoWidth > 0 || video.currentTime > 0) {
+        setIsWebRtcPlaying(true);
+      }
     };
 
     const tryPlay = () => {
@@ -53,7 +57,7 @@ function StreamPlayer({ streamItem, isFocused = false, onFocus, onRetry }) {
       if (playPromise !== undefined) {
         playPromise.then(() => {
           if (video.videoWidth > 0 || video.currentTime > 0) {
-            markPlaying();
+            markWebRtc();
           }
         }).catch(() => {});
       }
@@ -61,37 +65,34 @@ function StreamPlayer({ streamItem, isFocused = false, onFocus, onRetry }) {
 
     tryPlay();
 
-    const onLoadedMetadata = () => { tryPlay(); if (video.videoWidth > 0) markPlaying(); };
-    const onCanPlay = () => { tryPlay(); if (video.videoWidth > 0) markPlaying(); };
-    const onPlaying = () => markPlaying();
-    const onResize = () => { if (video.videoWidth > 0) markPlaying(); };
-    const onTimeUpdate = () => { if (video.videoWidth > 0 || video.currentTime > 0) markPlaying(); };
+    const onLoadedMetadata = () => { tryPlay(); if (video.videoWidth > 0) markWebRtc(); };
+    const onCanPlay = () => { tryPlay(); if (video.videoWidth > 0) markWebRtc(); };
+    const onPlaying = () => markWebRtc();
+    const onResize = () => { if (video.videoWidth > 0) markWebRtc(); };
+    const onTimeUpdate = () => { if (video.videoWidth > 0 || video.currentTime > 0) markWebRtc(); };
 
-    video.addEventListener('loadeddata', markPlaying);
+    video.addEventListener('loadeddata', markWebRtc);
     video.addEventListener('loadedmetadata', onLoadedMetadata);
     video.addEventListener('canplay', onCanPlay);
     video.addEventListener('playing', onPlaying);
     video.addEventListener('resize', onResize);
     video.addEventListener('timeupdate', onTimeUpdate);
 
-    // Watch video track unmute (when first UDP RTP video packet arrives)
     const vTrack = streamItem.stream.getVideoTracks()[0];
     const onUnmute = () => {
       tryPlay();
-      markPlaying();
+      markWebRtc();
     };
     if (vTrack) {
       if (!vTrack.muted && vTrack.readyState === 'live') {
-        markPlaying();
+        markWebRtc();
       }
       vTrack.addEventListener('unmute', onUnmute);
     }
 
-    // High frequency watchdog interval to detect first frame immediately
     const checkInterval = setInterval(() => {
-      setLoadSeconds(prev => prev + 0.25);
       if (video.videoWidth > 0 || video.currentTime > 0) {
-        markPlaying();
+        markWebRtc();
       } else {
         tryPlay();
       }
@@ -99,7 +100,7 @@ function StreamPlayer({ streamItem, isFocused = false, onFocus, onRetry }) {
 
     return () => {
       clearInterval(checkInterval);
-      video.removeEventListener('loadeddata', markPlaying);
+      video.removeEventListener('loadeddata', markWebRtc);
       video.removeEventListener('loadedmetadata', onLoadedMetadata);
       video.removeEventListener('canplay', onCanPlay);
       video.removeEventListener('playing', onPlaying);
@@ -109,7 +110,77 @@ function StreamPlayer({ streamItem, isFocused = false, onFocus, onRetry }) {
         vTrack.removeEventListener('unmute', onUnmute);
       }
     };
-  }, [streamItem?.stream, streamItem?.id]);
+  }, [streamItem?.stream]);
+
+  // --- 2. Guaranteed WebSocket Relay Pipeline (Canvas fallback for CGNAT / Firewalls) ---
+  useEffect(() => {
+    if (streamItem.isLocal) return;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+
+    // Check cached frame
+    const cached = screenRelay.getLatestFrame(streamItem.socketId);
+    if (cached) {
+      const url = URL.createObjectURL(cached);
+      const img = new Image();
+      img.onload = () => {
+        if (canvas) {
+          if (canvas.width !== img.width || canvas.height !== img.height) {
+            canvas.width = img.width;
+            canvas.height = img.height;
+          }
+          ctx.drawImage(img, 0, 0);
+        }
+        URL.revokeObjectURL(url);
+        setIsRelayPlaying(true);
+      };
+      img.src = url;
+    }
+
+    const unsub = screenRelay.onFrame((senderSocketId, frameBlob) => {
+      if (senderSocketId === streamItem.socketId) {
+        const url = URL.createObjectURL(frameBlob);
+        const img = new Image();
+        img.onload = () => {
+          if (canvas) {
+            if (canvas.width !== img.width || canvas.height !== img.height) {
+              canvas.width = img.width;
+              canvas.height = img.height;
+            }
+            ctx.drawImage(img, 0, 0);
+          }
+          URL.revokeObjectURL(url);
+          setIsRelayPlaying(true);
+        };
+        img.src = url;
+      }
+    });
+
+    const unsubStop = screenRelay.onStopped((senderSocketId) => {
+      if (senderSocketId === streamItem.socketId) {
+        setIsRelayPlaying(false);
+      }
+    });
+
+    return () => {
+      unsub();
+      unsubStop();
+    };
+  }, [streamItem.socketId, streamItem.isLocal]);
+
+  // Has live frames from either WebRTC or WebSocket Relay (or local display stream)
+  const isRendering = isWebRtcPlaying || isRelayPlaying || streamItem.isLocal;
+
+  useEffect(() => {
+    if (isRendering) {
+      setLoadSeconds(0);
+      return;
+    }
+    const t = setInterval(() => setLoadSeconds(s => s + 0.5), 500);
+    return () => clearInterval(t);
+  }, [isRendering]);
 
   const toggleFullscreen = () => {
     if (videoRef.current) {
@@ -123,16 +194,29 @@ function StreamPlayer({ streamItem, isFocused = false, onFocus, onRetry }) {
 
   return (
     <div className="relative w-full h-full bg-black rounded-2xl overflow-hidden border border-[#3f4147] shadow-xl flex items-center justify-center group select-none">
+      {/* 1. Primary WebRTC Video (Direct 60 FPS HD) */}
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted
-        className="w-full h-full object-contain"
+        className={`w-full h-full object-contain transition-opacity duration-300 ${
+          isWebRtcPlaying || streamItem.isLocal ? 'opacity-100 z-10' : 'opacity-0 absolute -z-10'
+        }`}
       />
 
+      {/* 2. Guaranteed Canvas Relay (Active when WebRTC is establishing or blocked by CGNAT) */}
+      {!streamItem.isLocal && (
+        <canvas
+          ref={canvasRef}
+          className={`w-full h-full object-contain transition-opacity duration-300 ${
+            !isWebRtcPlaying && isRelayPlaying ? 'opacity-100 z-10' : 'opacity-0 absolute -z-10'
+          }`}
+        />
+      )}
+
       {/* Top Left: Streamer Badges */}
-      <div className="absolute top-3.5 left-3.5 flex items-center gap-2 z-10">
+      <div className="absolute top-3.5 left-3.5 flex items-center gap-2 z-20">
         <span className="flex items-center gap-1.5 text-xs font-bold bg-[#f23f43] text-white px-2.5 py-1 rounded-md shadow-md">
           <Radio className="w-3.5 h-3.5 animate-pulse" />
           CANLI YAYIN
@@ -141,12 +225,12 @@ function StreamPlayer({ streamItem, isFocused = false, onFocus, onRetry }) {
           {streamItem.username} {streamItem.isLocal ? '(Senin Ekranın)' : 'ekranı'}
         </span>
         <span className="text-xs font-semibold bg-[#5865f2] text-white px-2.5 py-1 rounded-md">
-          60 FPS HD
+          {isWebRtcPlaying ? '60 FPS HD (P2P)' : isRelayPlaying ? 'CANLI (RELAY)' : 'BAĞLANIYOR'}
         </span>
       </div>
 
       {/* Top Right: Actions */}
-      <div className="absolute top-3.5 right-3.5 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+      <div className="absolute top-3.5 right-3.5 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
         {onFocus && (
           <button
             onClick={onFocus}
@@ -165,9 +249,9 @@ function StreamPlayer({ streamItem, isFocused = false, onFocus, onRetry }) {
         </button>
       </div>
 
-      {/* Loading overlay if video hasn't rendered first frame */}
-      {!isPlaying && (
-        <div className="absolute inset-0 bg-black/85 flex flex-col items-center justify-center gap-3 text-white z-0">
+      {/* Loading overlay shown ONLY if neither WebRTC nor Relay has rendered a frame yet */}
+      {!isRendering && (
+        <div className="absolute inset-0 bg-black/85 flex flex-col items-center justify-center gap-3 text-white z-20">
           <Loader2 className="w-9 h-9 text-[#5865f2] animate-spin" />
           <span className="text-xs font-medium text-[#dbdee1]">Yayın yükleniyor ve senkronize ediliyor...</span>
           {loadSeconds > 3.0 && (
@@ -263,33 +347,28 @@ export default function VoiceRoom({
   const activeScreenStreams = useMemo(() => {
     const list = [];
 
-    // 1. Remote members who are actively sharing screen with a confirmed live video stream
+    // 1. All remote members in the voice room who have isScreenSharing: true
     channelMembers.forEach(member => {
       if (member.id !== currentUser?.id && member.voiceState?.isScreenSharing) {
-        const stream = remoteScreenStreams?.get(member.socketId);
-        const liveVideo = stream && stream.getVideoTracks().find(t => t.readyState === 'live');
-        if (stream && liveVideo) {
-          list.push({
-            id: `${member.socketId}-${liveVideo.id}`,
-            socketId: member.socketId,
-            username: member.username,
-            avatar: member.avatar,
-            stream,
-            isLocal: false
-          });
-        }
+        const stream = remoteScreenStreams?.get(member.socketId) || null;
+        list.push({
+          id: member.socketId,
+          socketId: member.socketId,
+          username: member.username,
+          avatar: member.avatar,
+          stream,
+          isLocal: false
+        });
       }
     });
 
-    // 2. Any additional remote screen streams with verified active screen share
+    // 2. Any additional remote streams in remoteScreenStreams
     if (remoteScreenStreams) {
       for (const [socketId, stream] of remoteScreenStreams.entries()) {
-        const peer = members.find(m => m.socketId === socketId);
-        const isSharing = peer?.voiceState?.isScreenSharing;
-        const liveVideo = stream && stream.getVideoTracks().find(t => t.readyState === 'live');
-        if (isSharing && liveVideo && !list.some(s => s.socketId === socketId)) {
+        if (!list.some(s => s.socketId === socketId)) {
+          const peer = members.find(m => m.socketId === socketId);
           list.push({
-            id: `${socketId}-${liveVideo.id}`,
+            id: socketId,
             socketId,
             username: peer?.username || 'Arkadaşın',
             avatar: peer?.avatar,
@@ -302,17 +381,14 @@ export default function VoiceRoom({
 
     // 3. Local screen share
     if (isScreenSharing && screenStream) {
-      const liveLocalVideo = screenStream.getVideoTracks().find(t => t.readyState === 'live');
-      if (liveLocalVideo) {
-        list.push({
-          id: 'local',
-          socketId: 'local',
-          username: currentUser?.username || 'Sen',
-          avatar: currentUser?.avatar,
-          stream: screenStream,
-          isLocal: true
-        });
-      }
+      list.push({
+        id: 'local',
+        socketId: 'local',
+        username: currentUser?.username || 'Sen',
+        avatar: currentUser?.avatar,
+        stream: screenStream,
+        isLocal: true
+      });
     }
 
     return list;
