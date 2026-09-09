@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Hash, Volume2, Monitor, MonitorOff, Video, VideoOff, 
   PhoneOff, ChevronDown, Plus, BadgeCheck, Wifi, SignalHigh, 
-  Radio, Download, Trash2, Edit3, Copy, Check, Info, Settings, MoreVertical, RotateCw
+  Radio, Download, Trash2, Edit3, Copy, Check, Info, Settings, MoreVertical, RotateCw, LogIn
 } from 'lucide-react';
 import UserControlBar from './UserControlBar';
 
