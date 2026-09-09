@@ -12,6 +12,7 @@ export default function UserContextMenu({
   targetMember,
   currentUser,
   roles = [],
+  members = [],
   onClose,
   onOpenDM,
   onOpenProfile
@@ -30,13 +31,26 @@ export default function UserContextMenu({
     }
   });
 
-  const isSelf = targetMember?.id === currentUser?.id;
+  const isSelf = targetMember?.id === currentUser?.id || (currentUser?.username && targetMember?.username?.toLowerCase() === currentUser?.username?.toLowerCase());
   const isBot = targetMember?.isBot;
 
-  // Permissions check
-  const currentUserRoles = currentUser?.roles || [];
-  const hasAdminPerm = currentUserRoles.includes('role-founder') || roles.some(r => 
-    currentUserRoles.includes(r.id) && (r.permissions?.includes('admin') || r.permissions?.includes('kick') || r.permissions?.includes('ban'))
+  // Permissions check: find current user in members list or fallback to currentUser.roles
+  const myMemberObj = members?.find(m => 
+    (currentUser?.id && m.id === currentUser.id) || 
+    (currentUser?.username && m.username?.toLowerCase() === currentUser.username.toLowerCase())
+  );
+  const currentUserRoles = (myMemberObj?.roles && myMemberObj.roles.length > 0) 
+    ? myMemberObj.roles 
+    : (currentUser?.roles || []);
+
+  const isFounder = 
+    currentUser?.id === 'user-emir' ||
+    currentUser?.username?.toLowerCase() === 'emir' ||
+    currentUserRoles.includes('role-founder') ||
+    myMemberObj?.highestRole?.id === 'role-founder';
+
+  const hasAdminPerm = isFounder || roles.some(r => 
+    currentUserRoles.includes(r.id) && (r.permissions?.includes('admin') || r.permissions?.includes('kick') || r.permissions?.includes('ban') || r.permissions?.includes('manage_roles'))
   );
 
   useEffect(() => {

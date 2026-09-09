@@ -210,6 +210,19 @@ export default function App() {
 
     socket.on('members-updated', (updatedMembers) => {
       setMembers(updatedMembers);
+      if (currentUser) {
+        const me = updatedMembers.find(m => 
+          m.id === currentUser.id || 
+          (m.username && currentUser.username && m.username.toLowerCase() === currentUser.username.toLowerCase())
+        );
+        if (me && JSON.stringify(me.roles) !== JSON.stringify(currentUser.roles)) {
+          setCurrentUser(prev => {
+            const updated = { ...prev, roles: me.roles, highestRole: me.highestRole };
+            try { localStorage.setItem('fivecord_user', JSON.stringify(updated)); } catch (e) {}
+            return updated;
+          });
+        }
+      }
     });
 
     socket.on('messages-history', ({ channelId, messages }) => {
@@ -1117,6 +1130,7 @@ export default function App() {
           targetMember={contextMenu.targetMember}
           currentUser={currentUser}
           roles={roles}
+          members={members}
           onClose={() => setContextMenu(null)}
           onOpenDM={handleSelectDmUser}
         />

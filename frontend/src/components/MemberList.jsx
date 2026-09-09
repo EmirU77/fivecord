@@ -17,8 +17,21 @@ export default function MemberList({
   const [selectedMemberId, setSelectedMemberId] = useState(null);
   const [userVolumes, setUserVolumes] = useState({});
 
-  const currentUserRoles = currentUser?.roles || [];
-  const canManageRoles = currentUserRoles.includes('role-founder') || roles.some(r => 
+  const myMemberObj = members?.find(m => 
+    (currentUser?.id && m.id === currentUser.id) || 
+    (currentUser?.username && m.username?.toLowerCase() === currentUser.username.toLowerCase())
+  );
+  const currentUserRoles = (myMemberObj?.roles && myMemberObj.roles.length > 0) 
+    ? myMemberObj.roles 
+    : (currentUser?.roles || []);
+
+  const isFounder = 
+    currentUser?.id === 'user-emir' ||
+    currentUser?.username?.toLowerCase() === 'emir' ||
+    currentUserRoles.includes('role-founder') ||
+    myMemberObj?.highestRole?.id === 'role-founder';
+
+  const canManageRoles = isFounder || roles.some(r => 
     currentUserRoles.includes(r.id) && (r.permissions?.includes('admin') || r.permissions?.includes('manage_roles'))
   );
 
