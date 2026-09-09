@@ -214,8 +214,8 @@ export default function ChatArea({
         {/* Channel Info */}
         <div className="flex items-center gap-3 overflow-hidden">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-[#5865f2]/15 flex items-center justify-center text-[#5865f2] border border-[#5865f2]/30">
-              <Hash className="w-4 h-4 stroke-[2.5]" />
+            <div className="w-7 h-7 rounded-lg bg-[#5865f2]/15 flex items-center justify-center text-[#5865f2] border border-[#5865f2]/30 font-bold text-sm">
+              {channel.type === 'dm' ? '@' : <Hash className="w-4 h-4 stroke-[2.5]" />}
             </div>
             <span className="font-black text-sm text-white tracking-tight">
               {channel.name}
@@ -348,11 +348,61 @@ export default function ChatArea({
       {/* 2. MAIN CHAT AREA (HERO HUB + MESSAGES) */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
         
-        {/* HERO WELCOME & ACTION HUB (Rendered at top of channel) */}
-        <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-b from-[#2b2d31] via-[#232428] to-[#1e1f22] border border-[#3f4147] shadow-xl relative overflow-hidden select-none mb-6">
-          {/* Subtle Ambient Glow */}
-          <div className="absolute -top-24 -left-24 w-72 h-72 bg-[#5865f2]/15 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-24 -right-24 w-72 h-72 bg-[#eb459e]/10 rounded-full blur-3xl pointer-events-none" />
+        {/* HERO WELCOME & ACTION HUB */}
+        {channel.id === 'dm-empty' ? (
+          <div className="flex-1 flex flex-col items-center justify-center p-12 text-center select-none my-auto">
+            <div className="w-16 h-16 rounded-3xl bg-[#5865f2]/20 flex items-center justify-center text-[#5865f2] mb-4 shadow-lg shadow-[#5865f2]/20">
+              <Users className="w-8 h-8" />
+            </div>
+            <h2 className="text-xl font-black text-white mb-2">Henüz Bir Arkadaş Seçilmedi</h2>
+            <p className="text-sm text-[#949ba4] max-w-md">
+              Özel mesajlaşmak için sol taraftaki direkt mesaj listesinden bir arkadaşınızı seçin veya genel sohbette arkadaşınızın profiline tıklayın.
+            </p>
+          </div>
+        ) : channel.type === 'dm' ? (
+          <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-b from-[#2b2d31] via-[#232428] to-[#1e1f22] border border-[#3f4147] shadow-xl relative overflow-hidden select-none mb-6">
+            <div className="relative z-10 flex flex-col items-start gap-4">
+              <div className="relative">
+                <img
+                  src={channel.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${channel.name}`}
+                  alt={channel.name}
+                  className="w-18 h-18 rounded-full bg-[#1e1f22] object-cover border-4 border-[#5865f2] shadow-xl"
+                />
+                <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-[#23a55a] border-3 border-[#2b2d31]" />
+              </div>
+
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                  @{channel.name}
+                </h1>
+                <p className="text-xs sm:text-sm text-[#949ba4] mt-1.5 max-w-xl leading-relaxed">
+                  Bu sizin <strong>@{channel.name}</strong> ile olan doğrudan özel mesajlaşma geçmişinizin başlangıcıdır.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => onSendMessage('👋 Selam! Nasılsın?')}
+                  className="px-4 py-2 rounded-xl bg-[#5865f2] hover:bg-[#4752c4] text-white text-xs font-bold transition-all shadow-md cursor-pointer hover:scale-105"
+                >
+                  👋 Selam Ver
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onSendMessage('🎮 Akşam Fivecord\'da oyuna geliyor musun?')}
+                  className="px-4 py-2 rounded-xl bg-[#2b2d31] hover:bg-[#35373c] text-white text-xs font-bold border border-[#3f4147] transition-all cursor-pointer hover:scale-105"
+                >
+                  🎮 Oyuna Çağır
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-b from-[#2b2d31] via-[#232428] to-[#1e1f22] border border-[#3f4147] shadow-xl relative overflow-hidden select-none mb-6">
+            {/* Subtle Ambient Glow */}
+            <div className="absolute -top-24 -left-24 w-72 h-72 bg-[#5865f2]/15 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute -bottom-24 -right-24 w-72 h-72 bg-[#eb459e]/10 rounded-full blur-3xl pointer-events-none" />
 
           {/* Hero Header */}
           <div className="relative z-10 flex flex-col items-start gap-3">
@@ -524,6 +574,7 @@ export default function ChatArea({
             </div>
           </div>
         </div>
+        )}
 
         {/* 3. MESSAGES STREAM */}
         {displayedMessages.map((msg) => {
@@ -903,7 +954,11 @@ export default function ChatArea({
             type="text"
             value={inputText}
             onChange={handleInputChange}
-            placeholder={`#${channel.name} kanalına mesaj gönder... (/tts veya /cark yazabilirsin)`}
+            placeholder={
+              channel.type === 'dm'
+                ? `@${channel.name} kullanıcısına özel mesaj gönder...`
+                : `#${channel.name} kanalına mesaj gönder... (/tts veya /cark yazabilirsin)`
+            }
             className="flex-1 bg-transparent text-white text-sm focus:outline-hidden placeholder-[#80848e] font-normal"
           />
 

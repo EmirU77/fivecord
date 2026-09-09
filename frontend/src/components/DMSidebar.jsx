@@ -11,12 +11,13 @@ export default function DMSidebar({
   isMuted,
   setIsMuted,
   isDeafened,
-  setIsDeafened
+  setIsDeafened,
+  unreadDms
 }) {
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Other members excluding current user
-  const otherMembers = members.filter(m => m.id !== currentUser?.id);
+  // Other human members excluding current user and bots
+  const otherMembers = members.filter(m => m.id !== currentUser?.id && !m.isBot);
   const filteredMembers = otherMembers.filter(m => 
     m.username.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -108,7 +109,14 @@ export default function DMSidebar({
                       </div>
                     </div>
 
-                    <MessageCircle className={`w-3.5 h-3.5 shrink-0 opacity-0 group-hover:opacity-100 ${isActive ? 'text-[#5865f2] opacity-100' : 'text-[#949ba4]'}`} />
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {unreadDms?.has(member.id) && (
+                        <span className="px-1.5 py-0.5 rounded-full bg-[#f23f43] text-white text-[9px] font-black animate-pulse shadow-xs">
+                          YENİ
+                        </span>
+                      )}
+                      <MessageCircle className={`w-3.5 h-3.5 opacity-0 group-hover:opacity-100 ${isActive ? 'text-[#5865f2] opacity-100' : 'text-[#949ba4]'}`} />
+                    </div>
                   </div>
                 );
               })

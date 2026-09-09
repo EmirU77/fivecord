@@ -39,9 +39,15 @@ export default function App() {
 
   const [channels, setChannels] = useState([]);
   const [currentChannel, setCurrentChannel] = useState(null);
+  const currentChannelRef = useRef(null);
+  const [unreadDms, setUnreadDms] = useState(new Set());
   const [currentVoiceChannel, setCurrentVoiceChannel] = useState(null);
   const [members, setMembers] = useState([]);
   const [messages, setMessages] = useState([]);
+
+  useEffect(() => {
+    currentChannelRef.current = currentChannel;
+  }, [currentChannel]);
 
   // Voice & Video States
   const [isMuted, setIsMuted] = useState(false);
@@ -164,34 +170,39 @@ export default function App() {
     });
 
     socket.on('messages-history', ({ channelId, messages }) => {
-      if (currentChannel?.id === channelId) {
+      if (currentChannelRef.current?.id === channelId) {
         setMessages(messages);
       }
     });
 
     socket.on('new-message', (msg) => {
-      if (currentChannel?.id === msg.channelId) {
+      const isViewingThisChannel = currentChannelRef.current?.id === msg.channelId;
+      if (isViewingThisChannel) {
         setMessages(prev => [...prev, msg]);
+      } else if (msg.channelId && msg.channelId.startsWith('dm-')) {
+        // Incoming DM for a chat that is not currently open
+        setUnreadDms(prev => new Set(prev).add(msg.sender.id));
       }
+
       if (msg.sender.id !== currentUser.id) {
         soundEffects.playMessage();
       }
     });
 
     socket.on('message-reaction-updated', ({ channelId, messageId, reactions }) => {
-      if (currentChannel?.id === channelId) {
+      if (currentChannelRef.current?.id === channelId) {
         setMessages(prev => prev.map(m => m.id === messageId ? { ...m, reactions } : m));
       }
     });
 
     socket.on('message-deleted', ({ channelId, messageId }) => {
-      if (currentChannel?.id === channelId) {
+      if (currentChannelRef.current?.id === channelId) {
         setMessages(prev => prev.filter(m => m.id !== messageId));
       }
     });
 
     socket.on('message-pinned', ({ channelId, messageId, isPinned }) => {
-      if (currentChannel?.id === channelId) {
+      if (currentChannelRef.current?.id === channelId) {
         setMessages(prev => prev.map(m => m.id === messageId ? { ...m, isPinned } : m));
       }
     });
@@ -446,17 +457,25 @@ export default function App() {
 
   // Switch to a 1-on-1 private DM with a friend
   const handleSelectDmUser = (targetFriend) => {
+    if (!targetFriend) return;
     setActiveDmUser(targetFriend);
     setActiveView('dm');
+    setUnreadDms(prev => {
+      const next = new Set(prev);
+      next.delete(targetFriend.id);
+      return next;
+    });
     const dmChannelId = 'dm-' + [currentUser.id, targetFriend.id].sort().join('-');
     const dmChannel = {
       id: dmChannelId,
       name: targetFriend.username,
       type: 'dm',
-      topic: `${targetFriend.username} ile özel mesajlaşma`,
+      topic: `@${targetFriend.username} ile özel mesajlaşma`,
       avatar: targetFriend.avatar
     };
     setCurrentChannel(dmChannel);
+    currentChannelRef.current = dmChannel;
+    setMessages([]);
     socket.emit('fetch-messages', dmChannelId);
   };
 
@@ -515,8 +534,26 @@ export default function App() {
     }
   };
 
-  const handleSendMessage = ({ channelId, content, file }) => {
-    socket.emit('send-message', { channelId, content, file });
+  const handleSendMessage = (contentOrObj, maybeFile) => {
+    let content = '';
+    let file = null;
+    let chId = currentChannelRef.current?.id || currentChannel?.id;
+
+    if (typeof contentOrObj === 'object' && contentOrObj !== null && !contentOrObj.url) {
+      chId = contentOrObj.channelId || chId;
+      content = contentOrObj.content || '';
+      file = contentOrObj.file || null;
+    } else {
+      content = typeof contentOrObj === 'string' ? contentOrObj : '';
+      file = maybeFile || null;
+    }
+
+    if (!chId || chId === 'dm-empty') {
+      console.warn('[Chat] Mesaj gönderilemedi: Geçerli bir kanal veya arkadaş seçili değil.');
+      return;
+    }
+
+    socket.emit('send-message', { channelId: chId, content, file });
   };
 
   // Watch Together (Birlikte İzle) Handlers
@@ -645,19 +682,27 @@ export default function App() {
         }}
         onSelectDM={() => {
           setActiveView('dm');
-          const other = members.find(m => m.id !== currentUser.id);
+          if (activeDmUser) {
+            handleSelectDmUser(activeDmUser);
+            return;
+          }
+          const other = members.find(m => m.id !== currentUser.id && !m.isBot);
           if (other) {
             handleSelectDmUser(other);
           } else {
-            setCurrentChannel({
+            const emptyCh = {
               id: 'dm-empty',
               name: 'Arkadaşlar',
               type: 'dm',
               topic: 'Özel Mesajlar'
-            });
+            };
+            setCurrentChannel(emptyCh);
+            currentChannelRef.current = emptyCh;
+            setMessages([]);
           }
         }}
         onOpenInfo={() => setIsInfoModalOpen(true)}
+        unreadCount={unreadDms.size}
       />
 
       {/* LEFT SIDEBAR (Changes based on activeView) */}
@@ -672,6 +717,7 @@ export default function App() {
           setIsMuted={setIsMuted}
           isDeafened={isDeafened}
           setIsDeafened={setIsDeafened}
+          unreadDms={unreadDms}
         />
       ) : (
         <Sidebar

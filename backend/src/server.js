@@ -633,6 +633,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('send-message', ({ channelId, content, file }) => {
+    if (!channelId) return;
     const sender = users.get(socket.id);
     if (!sender) return;
 

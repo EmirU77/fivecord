@@ -5,7 +5,8 @@ export default function ServerRail({
   activeView = 'server', 
   onSelectServer, 
   onSelectDM, 
-  onOpenInfo
+  onOpenInfo,
+  unreadCount = 0
 }) {
   const isDM = activeView === 'dm';
   const isServer = activeView === 'server';
@@ -21,7 +22,7 @@ export default function ServerRail({
         
         <button
           onClick={onSelectDM}
-          className={`w-12 h-12 flex items-center justify-center transition-all duration-200 shadow-md ${
+          className={`w-12 h-12 flex items-center justify-center transition-all duration-200 shadow-md relative cursor-pointer ${
             isDM 
               ? 'rounded-2xl bg-[#5865f2] text-white ring-2 ring-[#5865f2]/40 scale-105' 
               : 'rounded-3xl group-hover:rounded-2xl bg-[#313338] hover:bg-[#5865f2] text-[#dbdee1] hover:text-white group-hover:scale-105'
@@ -29,6 +30,11 @@ export default function ServerRail({
           title="Direkt Mesajlar (Özel Mesaj)"
         >
           <MessageCircle className="w-6 h-6" />
+          {unreadCount > 0 && (
+            <div className="absolute -top-1 -right-1 bg-[#f23f43] text-white text-[10px] font-black px-1.5 py-0.2 rounded-full border-2 border-[#1e1f22] animate-bounce shadow">
+              {unreadCount}
+            </div>
+          )}
         </button>
       </div>
 
