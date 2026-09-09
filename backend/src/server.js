@@ -428,15 +428,48 @@ async function searchMultiPlatform(query, platform = 'all') {
   return (deduped.length > 0 ? deduped : ytResults).slice(0, 12);
 }
 
+function parseDurationToSeconds(duration) {
+  if (typeof duration === 'number') return duration;
+  if (!duration || typeof duration !== 'string' || duration.toLowerCase().includes('canlı') || duration.toLowerCase().includes('live')) {
+    return 0;
+  }
+  const parts = duration.trim().split(':').map(p => parseInt(p, 10));
+  if (parts.some(isNaN)) return 210;
+  if (parts.length === 2) {
+    return parts[0] * 60 + parts[1];
+  } else if (parts.length === 3) {
+    return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  }
+  const parsed = parseInt(duration, 10);
+  return isNaN(parsed) ? 210 : parsed;
+}
+
+function formatDuration(totalSeconds) {
+  if (!totalSeconds || isNaN(totalSeconds) || totalSeconds < 0) return '0:00';
+  const total = Math.floor(totalSeconds);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = Math.floor(total % 60);
+  if (hours > 0) {
+    return `${hours}:${minutes < 10 ? '0' : ''}${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+  }
+  return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+}
+
 function setVoiceChannelMusic(targetVoiceChannelId, track, senderUsername = 'Kullanıcı') {
+  const durationSec = parseDurationToSeconds(track.duration);
   const state = {
     isPlaying: true,
     currentTrack: {
       ...track,
+      durationSec,
       requestedBy: senderUsername
     },
+    duration: durationSec,
+    currentTime: 0,
     volume: 80,
-    startedAt: Date.now()
+    startedAt: Date.now(),
+    updatedAt: Date.now()
   };
   channelMusic.set(targetVoiceChannelId, state);
 
@@ -859,7 +892,13 @@ io.on('connection', (socket) => {
       } else if (cmd === '!pause') {
         const state = channelMusic.get(targetVoiceChannelId);
         if (state) {
+          if (state.isPlaying) {
+            const elapsed = (Date.now() - (state.updatedAt || state.startedAt || Date.now())) / 1000;
+            const maxDur = state.duration > 0 ? state.duration : 999999;
+            state.currentTime = Math.min(maxDur, (state.currentTime || 0) + elapsed);
+          }
           state.isPlaying = false;
+          state.updatedAt = Date.now();
           DJ_BOT_USER.voiceState.isSpeaking = false;
           io.emit('music-state-updated', { channelId: targetVoiceChannelId, state });
           io.emit('members-updated', getAllMembers());
@@ -869,17 +908,68 @@ io.on('connection', (socket) => {
         const state = channelMusic.get(targetVoiceChannelId);
         if (state && state.currentTrack) {
           state.isPlaying = true;
+          state.updatedAt = Date.now();
           DJ_BOT_USER.voiceState.isSpeaking = true;
           io.emit('music-state-updated', { channelId: targetVoiceChannelId, state });
           io.emit('members-updated', getAllMembers());
           sendBotChatMessage(channelId, `▶️ **Fivecord DJ**: Müzik devam ediyor: **${state.currentTrack.title || state.currentTrack.name}**`);
         }
+      } else if (cmd === '!seek') {
+        const state = channelMusic.get(targetVoiceChannelId);
+        if (!state || !state.currentTrack) {
+          sendBotChatMessage(channelId, `🔇 Şu anda çalan bir şarkı yok.`);
+          return;
+        }
+        if (!arg) {
+          sendBotChatMessage(channelId, `❓ **Kullanım:** \`!seek <saniye veya dakika:saniye>\`\nÖrnek: \`!seek 1:30\` veya \`!seek 45\``);
+          return;
+        }
+        const targetSec = parseDurationToSeconds(arg);
+        const maxDur = state.duration > 0 ? state.duration : 999999;
+        state.currentTime = Math.max(0, Math.min(targetSec, maxDur));
+        state.updatedAt = Date.now();
+        io.emit('music-state-updated', { channelId: targetVoiceChannelId, state });
+        sendBotChatMessage(channelId, `⏩ **Fivecord DJ**: Şarkı \`${formatDuration(state.currentTime)}\` konumuna sarıldı.`);
+      } else if (cmd === '!forward' || cmd === '!ileri') {
+        const state = channelMusic.get(targetVoiceChannelId);
+        if (!state || !state.currentTrack) {
+          sendBotChatMessage(channelId, `🔇 Şu anda çalan bir şarkı yok.`);
+          return;
+        }
+        const delta = parseInt(arg, 10) || 10;
+        const elapsed = state.isPlaying ? (Date.now() - (state.updatedAt || state.startedAt || Date.now())) / 1000 : 0;
+        const currentPos = (state.currentTime || 0) + elapsed;
+        const maxDur = state.duration > 0 ? state.duration : 999999;
+        state.currentTime = Math.min(maxDur, currentPos + delta);
+        state.updatedAt = Date.now();
+        io.emit('music-state-updated', { channelId: targetVoiceChannelId, state });
+        const durStr = state.duration > 0 ? ` / ${formatDuration(state.duration)}` : '';
+        sendBotChatMessage(channelId, `⏩ **Fivecord DJ**: Şarkı \`+${delta}s\` ileri sarıldı (\`${formatDuration(state.currentTime)}${durStr}\`).`);
+      } else if (cmd === '!rewind' || cmd === '!geri') {
+        const state = channelMusic.get(targetVoiceChannelId);
+        if (!state || !state.currentTrack) {
+          sendBotChatMessage(channelId, `🔇 Şu anda çalan bir şarkı yok.`);
+          return;
+        }
+        const delta = parseInt(arg, 10) || 10;
+        const elapsed = state.isPlaying ? (Date.now() - (state.updatedAt || state.startedAt || Date.now())) / 1000 : 0;
+        const currentPos = (state.currentTime || 0) + elapsed;
+        state.currentTime = Math.max(0, currentPos - delta);
+        state.updatedAt = Date.now();
+        io.emit('music-state-updated', { channelId: targetVoiceChannelId, state });
+        const durStr = state.duration > 0 ? ` / ${formatDuration(state.duration)}` : '';
+        sendBotChatMessage(channelId, `⏪ **Fivecord DJ**: Şarkı \`-${delta}s\` geri sarıldı (\`${formatDuration(state.currentTime)}${durStr}\`).`);
       } else if (cmd === '!np' || cmd === '!nowplaying') {
         const state = channelMusic.get(targetVoiceChannelId);
         if (state && state.isPlaying && state.currentTrack) {
+          const elapsed = (Date.now() - (state.updatedAt || state.startedAt || Date.now())) / 1000;
+          const currentPos = Math.floor((state.currentTime || 0) + elapsed);
+          const timeStr = state.duration > 0 
+            ? `${formatDuration(currentPos)} / ${formatDuration(state.duration)}`
+            : `${formatDuration(currentPos)} (Canlı)`;
           sendBotChatMessage(
             channelId,
-            `🎶 **Şu An Çalan:** **${state.currentTrack.title || state.currentTrack.name}**\n⏱️ **Süre:** \`${state.currentTrack.duration || 'Canlı'}\` | 👤 **İsteyen:** @${state.currentTrack.requestedBy || 'Bilinmiyor'}`
+            `🎶 **Şu An Çalan:** **${state.currentTrack.title || state.currentTrack.name}**\n⏱️ **Süre:** \`${timeStr}\` | 👤 **İsteyen:** @${state.currentTrack.requestedBy || 'Bilinmiyor'}\n⏩ **İleri/Geri Sar:** \`!ileri 15\` veya \`!geri 10\``
           );
         } else {
           sendBotChatMessage(channelId, `🔇 Şu anda hiçbir şarkı çalmıyor. Şarkı açmak için \`!play <şarkı adı>\` yazabilirsiniz.`);
@@ -909,7 +999,10 @@ io.on('connection', (socket) => {
           `• \`!pause\` — Müziği duraklatır\n` +
           `• \`!resume\` — Müziği kaldığı yerden devam ettirir\n` +
           `• \`!stop\` — Müziği tamamen durdurur\n` +
-          `• \`!np\` — Şu an çalan şarkıyı gösterir\n` +
+          `• \`!seek <saniye veya dakika:saniye>\` — Şarkıyı istenen süreye sarar (Örn: \`!seek 1:30\`)\n` +
+          `• \`!forward\` veya \`!ileri <saniye>\` — Şarkıyı ileri sarar (Örn: \`!ileri 15\`)\n` +
+          `• \`!rewind\` veya \`!geri <saniye>\` — Şarkıyı geri sarar (Örn: \`!geri 10\`)\n` +
+          `• \`!np\` — Şu an çalan şarkıyı ve süresini gösterir\n` +
           `• \`!volume <0-100>\` — Ses seviyesini ayarlar\n` +
           `• \`!radio\` — Radyo istasyonlarını listeler`
         );
@@ -1119,10 +1212,26 @@ io.on('connection', (socket) => {
     setVoiceChannelMusic(channelId, chosenTrack, sender?.username || 'Kullanıcı');
   });
 
+  socket.on('music-seek', ({ channelId, currentTime }) => {
+    const state = channelMusic.get(channelId);
+    if (state && state.currentTrack) {
+      const maxDur = state.duration > 0 ? state.duration : 999999;
+      state.currentTime = Math.max(0, Math.min(Number(currentTime) || 0, maxDur));
+      state.updatedAt = Date.now();
+      io.emit('music-state-updated', { channelId, state });
+    }
+  });
+
   socket.on('music-pause', ({ channelId }) => {
     const state = channelMusic.get(channelId);
     if (state) {
+      if (state.isPlaying) {
+        const elapsed = (Date.now() - (state.updatedAt || state.startedAt || Date.now())) / 1000;
+        const maxDur = state.duration > 0 ? state.duration : 999999;
+        state.currentTime = Math.min(maxDur, (state.currentTime || 0) + elapsed);
+      }
       state.isPlaying = false;
+      state.updatedAt = Date.now();
       DJ_BOT_USER.voiceState.isSpeaking = false;
       io.emit('music-state-updated', { channelId, state });
       io.emit('members-updated', getAllMembers());
@@ -1133,6 +1242,7 @@ io.on('connection', (socket) => {
     const state = channelMusic.get(channelId);
     if (state && state.currentTrack) {
       state.isPlaying = true;
+      state.updatedAt = Date.now();
       DJ_BOT_USER.voiceState.isSpeaking = true;
       io.emit('music-state-updated', { channelId, state });
       io.emit('members-updated', getAllMembers());

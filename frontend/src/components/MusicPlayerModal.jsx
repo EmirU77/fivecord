@@ -1,9 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Music, Play, Pause, Square, Volume2, Sparkles, 
   X, Check, ExternalLink, Disc3, Search, Loader2, Clock, User,
-  Globe, Radio
+  Globe, Radio, RotateCcw, RotateCw
 } from 'lucide-react';
+
+function formatTime(seconds) {
+  if (!seconds || isNaN(seconds) || seconds < 0) return '0:00';
+  const total = Math.floor(seconds);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = Math.floor(total % 60);
+  if (h > 0) {
+    return `${h}:${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+  }
+  return `${m}:${s < 10 ? '0' : ''}${s}`;
+}
 
 export default function MusicPlayerModal({
   isOpen,
@@ -14,18 +26,60 @@ export default function MusicPlayerModal({
   onPause,
   onResume,
   onStop,
+  onSeek,
   onSetVolume
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
-
-  if (!isOpen) return null;
+  const [sliderVal, setSliderVal] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
 
   const isPlaying = musicState?.isPlaying;
   const currentTrack = musicState?.currentTrack;
   const volume = musicState?.volume ?? 80;
+  const durationSec = musicState?.duration || (musicState?.currentTrack?.durationSec) || 0;
+  const isLive = !durationSec || durationSec <= 0 || musicState?.currentTrack?.source === 'station';
+
+  // Sync ticker when playing
+  useEffect(() => {
+    if (!musicState || !isPlaying || isDragging || isLive) {
+      if (!isDragging && musicState) {
+        setSliderVal(musicState.currentTime || 0);
+      }
+      return;
+    }
+
+    const updateCurrent = () => {
+      const elapsed = (Date.now() - (musicState.updatedAt || musicState.startedAt || Date.now())) / 1000;
+      const current = Math.min(durationSec, (musicState.currentTime || 0) + elapsed);
+      setSliderVal(current);
+    };
+
+    updateCurrent();
+    const interval = setInterval(updateCurrent, 250);
+    return () => clearInterval(interval);
+  }, [musicState, isPlaying, isDragging, durationSec, isLive]);
+
+  const handleSliderChange = (e) => {
+    setIsDragging(true);
+    setSliderVal(Number(e.target.value));
+  };
+
+  const handleSliderCommit = () => {
+    setIsDragging(false);
+    if (onSeek) onSeek(sliderVal);
+  };
+
+  const handleQuickJump = (delta) => {
+    if (isLive || !onSeek) return;
+    const newTime = Math.max(0, Math.min(durationSec, sliderVal + delta));
+    setSliderVal(newTime);
+    onSeek(newTime);
+  };
+
+  if (!isOpen) return null;
 
   const handleSearchSubmit = async (e) => {
     e?.preventDefault();
@@ -283,9 +337,59 @@ export default function MusicPlayerModal({
                   </div>
                 </div>
 
+                {/* TIMELINE SCRUBBER SLIDER */}
+                {!isLive ? (
+                  <div className="space-y-1 pt-1">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-[11px] font-mono text-[#949ba4] w-10 text-left shrink-0">
+                        {formatTime(sliderVal)}
+                      </span>
+                      <div className="relative flex-1 flex items-center group">
+                        <input
+                          type="range"
+                          min="0"
+                          max={durationSec}
+                          step="1"
+                          value={Math.floor(sliderVal)}
+                          onChange={handleSliderChange}
+                          onMouseUp={handleSliderCommit}
+                          onTouchEnd={handleSliderCommit}
+                          className="w-full h-1.5 bg-[#1e1f22] group-hover:h-2 rounded-lg appearance-none cursor-pointer accent-[#5865f2] transition-all"
+                          style={{
+                            background: `linear-gradient(to right, #5865f2 ${(sliderVal / Math.max(durationSec, 1)) * 100}%, #1e1f22 ${(sliderVal / Math.max(durationSec, 1)) * 100}%)`
+                          }}
+                        />
+                      </div>
+                      <span className="text-[11px] font-mono text-[#949ba4] w-10 text-right shrink-0">
+                        {formatTime(durationSec)}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between text-[11px] text-[#949ba4] bg-[#1e1f22] px-3 py-1.5 rounded-lg">
+                    <span className="flex items-center gap-1.5 text-[#23a55a] font-bold">
+                      <span className="w-2 h-2 rounded-full bg-[#23a55a] animate-ping" />
+                      7/24 Kesintisiz Canlı Yayın
+                    </span>
+                    <span className="text-[10px] text-[#80848e]">İleri / geri sarılamaz</span>
+                  </div>
+                )}
+
                 {/* Player Controls */}
-                <div className="flex items-center justify-between pt-2.5 border-t border-[#383a40]/60">
+                <div className="flex items-center justify-between pt-2.5 border-t border-[#383a40]/60 flex-wrap gap-2">
                   <div className="flex items-center gap-2">
+                    {/* 10s Rewind */}
+                    <button
+                      onClick={() => handleQuickJump(-10)}
+                      disabled={isLive}
+                      className="px-2.5 py-1.5 rounded-lg bg-[#313338] hover:bg-[#3f4147] disabled:opacity-40 disabled:hover:bg-[#313338] text-white text-xs font-bold transition-all flex items-center gap-1 shadow-xs hover:scale-105 cursor-pointer disabled:cursor-not-allowed"
+                      title="10 Saniye Geri Sar"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5 text-[#5865f2]" />
+                      <span className="text-[11px]">-10s</span>
+                    </button>
+
+                    {/* Play / Pause */}
                     {isPlaying ? (
                       <button
                         onClick={onPause}
@@ -304,9 +408,21 @@ export default function MusicPlayerModal({
                       </button>
                     )}
 
+                    {/* 10s Forward */}
+                    <button
+                      onClick={() => handleQuickJump(10)}
+                      disabled={isLive}
+                      className="px-2.5 py-1.5 rounded-lg bg-[#313338] hover:bg-[#3f4147] disabled:opacity-40 disabled:hover:bg-[#313338] text-white text-xs font-bold transition-all flex items-center gap-1 shadow-xs hover:scale-105 cursor-pointer disabled:cursor-not-allowed"
+                      title="10 Saniye İleri Sar"
+                    >
+                      <span className="text-[11px]">+10s</span>
+                      <RotateCw className="w-3.5 h-3.5 text-[#5865f2]" />
+                    </button>
+
+                    {/* Stop */}
                     <button
                       onClick={onStop}
-                      className="px-3.5 py-1.5 rounded-lg bg-[#f23f43]/15 hover:bg-[#f23f43] text-[#f23f43] hover:text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                      className="px-3 py-1.5 rounded-lg bg-[#f23f43]/15 hover:bg-[#f23f43] text-[#f23f43] hover:text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
                     >
                       <Square className="w-3.5 h-3.5 fill-current" />
                       <span>Durdur</span>
@@ -346,8 +462,10 @@ export default function MusicPlayerModal({
               <span className="bg-[#2b2d31] px-1.5 py-0.5 rounded text-[#5865f2]">!play [şarkı]</span>
               <span className="bg-[#2b2d31] px-1.5 py-0.5 rounded text-[#5865f2]">!pause</span>
               <span className="bg-[#2b2d31] px-1.5 py-0.5 rounded text-[#5865f2]">!resume</span>
+              <span className="bg-[#2b2d31] px-1.5 py-0.5 rounded text-[#5865f2]">!seek 1:30</span>
+              <span className="bg-[#2b2d31] px-1.5 py-0.5 rounded text-[#5865f2]">!ileri 15</span>
+              <span className="bg-[#2b2d31] px-1.5 py-0.5 rounded text-[#5865f2]">!geri 10</span>
               <span className="bg-[#2b2d31] px-1.5 py-0.5 rounded text-[#5865f2]">!stop</span>
-              <span className="bg-[#2b2d31] px-1.5 py-0.5 rounded text-[#5865f2]">!volume 0-100</span>
               <span className="bg-[#2b2d31] px-1.5 py-0.5 rounded text-[#5865f2]">!np</span>
             </div>
           </div>

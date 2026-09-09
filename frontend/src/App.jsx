@@ -93,38 +93,82 @@ export default function App() {
   const audioContainerRef = useRef(null);
   const bgMusicAudioRef = useRef(null);
   const bgYtIframeRef = useRef(null);
+  const lastMusicUpdateRef = useRef(0);
+  const lastVideoIdRef = useRef(null);
   const activeMusicState = currentVoiceChannel ? musicStates.get(currentVoiceChannel.id) : null;
   const activeWatchTogether = currentVoiceChannel ? watchTogetherRooms.get(currentVoiceChannel.id) : null;
 
-  // Background stream playback (Radio / MP3) across all channels
+  // Background playback (YouTube & HTML5 Audio Stream) with seek synchronization
   useEffect(() => {
-    if (!bgMusicAudioRef.current) return;
-    if (activeMusicState?.isPlaying && activeMusicState?.currentTrack?.url && activeMusicState.currentTrack.source !== 'youtube') {
-      if (bgMusicAudioRef.current.src !== activeMusicState.currentTrack.url) {
-        bgMusicAudioRef.current.src = activeMusicState.currentTrack.url;
+    if (!activeMusicState || !activeMusicState.currentTrack) {
+      if (bgMusicAudioRef.current) bgMusicAudioRef.current.pause();
+      if (bgYtIframeRef.current) {
+        bgYtIframeRef.current.contentWindow?.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
       }
-      bgMusicAudioRef.current.volume = Math.min(Math.max((activeMusicState.volume ?? 80) / 100, 0), 1);
-      bgMusicAudioRef.current.play().catch(e => console.warn('Music play error:', e));
-    } else {
-      bgMusicAudioRef.current.pause();
+      lastVideoIdRef.current = null;
+      return;
     }
-  }, [activeMusicState]);
 
-  // Background YouTube playback across all channels
-  useEffect(() => {
-    if (!bgYtIframeRef.current) return;
-    if (activeMusicState?.isPlaying && activeMusicState?.currentTrack?.source === 'youtube') {
-      const videoId = activeMusicState.currentTrack.id;
-      const targetSrc = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&enablejsapi=1&playsinline=1`;
-      if (!bgYtIframeRef.current.src.includes(videoId)) {
-        bgYtIframeRef.current.src = targetSrc;
-      } else {
-        bgYtIframeRef.current.contentWindow?.postMessage('{"event":"command","func":"playVideo","args":""}', '*');
+    const elapsed = activeMusicState.isPlaying && activeMusicState.updatedAt
+      ? (Date.now() - activeMusicState.updatedAt) / 1000
+      : 0;
+    const targetTime = Math.max(0, (activeMusicState.currentTime || 0) + elapsed);
+
+    // 1. YouTube playback
+    if (activeMusicState.currentTrack.source === 'youtube') {
+      if (bgMusicAudioRef.current) bgMusicAudioRef.current.pause();
+
+      if (bgYtIframeRef.current) {
+        const videoId = activeMusicState.currentTrack.id;
+        const isNewVideo = lastVideoIdRef.current !== videoId || !bgYtIframeRef.current.src.includes(videoId);
+
+        if (isNewVideo) {
+          lastVideoIdRef.current = videoId;
+          lastMusicUpdateRef.current = activeMusicState.updatedAt || Date.now();
+          const startParam = Math.floor(targetTime) > 0 ? `&start=${Math.floor(targetTime)}` : '';
+          bgYtIframeRef.current.src = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&enablejsapi=1&playsinline=1${startParam}`;
+        } else {
+          // If seeking or state timestamp changed
+          if (activeMusicState.updatedAt !== lastMusicUpdateRef.current) {
+            lastMusicUpdateRef.current = activeMusicState.updatedAt;
+            bgYtIframeRef.current.contentWindow?.postMessage(
+              JSON.stringify({ event: 'command', func: 'seekTo', args: [targetTime, true] }),
+              '*'
+            );
+          }
+          if (activeMusicState.isPlaying) {
+            bgYtIframeRef.current.contentWindow?.postMessage('{"event":"command","func":"playVideo","args":""}', '*');
+          } else {
+            bgYtIframeRef.current.contentWindow?.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
+          }
+        }
+        const vol = activeMusicState.volume ?? 80;
+        bgYtIframeRef.current.contentWindow?.postMessage(`{"event":"command","func":"setVolume","args":[${vol}]}`, '*');
       }
-      const vol = activeMusicState.volume ?? 80;
-      bgYtIframeRef.current.contentWindow?.postMessage(`{"event":"command","func":"setVolume","args":[${vol}]}`, '*');
-    } else if (bgYtIframeRef.current) {
-      bgYtIframeRef.current.contentWindow?.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
+    } else if (activeMusicState.currentTrack.url) {
+      // 2. Direct HTML5 audio stream (Radio / MP3)
+      if (bgYtIframeRef.current) {
+        bgYtIframeRef.current.contentWindow?.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
+      }
+      lastVideoIdRef.current = null;
+
+      if (bgMusicAudioRef.current) {
+        if (bgMusicAudioRef.current.src !== activeMusicState.currentTrack.url) {
+          bgMusicAudioRef.current.src = activeMusicState.currentTrack.url;
+        }
+        if (activeMusicState.currentTrack.source !== 'station' && activeMusicState.updatedAt !== lastMusicUpdateRef.current) {
+          lastMusicUpdateRef.current = activeMusicState.updatedAt;
+          if (Math.abs(bgMusicAudioRef.current.currentTime - targetTime) > 1.5) {
+            bgMusicAudioRef.current.currentTime = targetTime;
+          }
+        }
+        bgMusicAudioRef.current.volume = Math.min(Math.max((activeMusicState.volume ?? 80) / 100, 0), 1);
+        if (activeMusicState.isPlaying) {
+          bgMusicAudioRef.current.play().catch(e => console.warn('Music play error:', e));
+        } else {
+          bgMusicAudioRef.current.pause();
+        }
+      }
     }
   }, [activeMusicState]);
 
@@ -662,6 +706,11 @@ export default function App() {
     socket.emit('music-volume', { channelId: chId, volume });
   };
 
+  const handleSeekMusic = (currentTime) => {
+    const chId = currentVoiceChannel?.id || 'voice-genel';
+    socket.emit('music-seek', { channelId: chId, currentTime });
+  };
+
   const isViewingVoice = Boolean(currentVoiceChannel && currentChannel?.id === currentVoiceChannel.id);
 
   return (
@@ -822,6 +871,7 @@ export default function App() {
               else handleResumeMusic();
             }}
             onStopMusic={handleStopMusic}
+            onSeekMusic={handleSeekMusic}
             watchTogetherState={activeWatchTogether}
             onOpenWatchTogether={() => setIsWatchTogetherOpen(true)}
             onStopWatchTogether={handleStopWatchTogether}
@@ -917,6 +967,7 @@ export default function App() {
         onPause={handlePauseMusic}
         onResume={handleResumeMusic}
         onStop={handleStopMusic}
+        onSeek={handleSeekMusic}
         onSetVolume={handleSetMusicVolume}
       />
 

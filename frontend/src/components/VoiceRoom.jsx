@@ -1,11 +1,24 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { 
   Monitor, MonitorOff, Video, VideoOff, Mic, MicOff, Headphones, 
-  PhoneOff, Maximize, Sparkles, Volume2, Radio, Check, Disc3, Music, Pause, Play, Tv, Download
+  PhoneOff, Maximize, Sparkles, Volume2, Radio, Check, Disc3, Music, Pause, Play, Tv, Download,
+  RotateCcw, RotateCw
 } from 'lucide-react';
 import { soundEffects } from '../services/soundEffects';
 import { webrtc } from '../services/webrtc';
 import SharedCinemaPlayer from './SharedCinemaPlayer';
+
+function formatTime(seconds) {
+  if (!seconds || isNaN(seconds) || seconds < 0) return '0:00';
+  const total = Math.floor(seconds);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = Math.floor(total % 60);
+  if (h > 0) {
+    return `${h}:${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+  }
+  return `${m}:${s < 10 ? '0' : ''}${s}`;
+}
 
 export default function VoiceRoom({
   channel,
@@ -29,6 +42,7 @@ export default function VoiceRoom({
   onOpenMusicModal,
   onToggleMusicPlay,
   onStopMusic,
+  onSeekMusic,
   watchTogetherState,
   onOpenWatchTogether,
   onStopWatchTogether,
@@ -38,30 +52,50 @@ export default function VoiceRoom({
 }) {
   const [activeScreenUser, setActiveScreenUser] = useState(null);
   const [isNoiseSuppressed, setIsNoiseSuppressed] = useState(webrtc.isNoiseSuppressionOn);
+  const [sliderVal, setSliderVal] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
   const mainVideoRef = useRef(null);
-  const musicAudioRef = useRef(null);
 
+  const durationSec = musicState?.duration || (musicState?.currentTrack?.durationSec) || 0;
+  const isLive = !durationSec || durationSec <= 0 || musicState?.currentTrack?.source === 'station';
 
+  // Synchronized timeline ticker for music bar
+  useEffect(() => {
+    if (!musicState || !musicState.isPlaying || isDragging || isLive) {
+      if (!isDragging && musicState) {
+        setSliderVal(musicState.currentTime || 0);
+      }
+      return;
+    }
+
+    const updateCurrent = () => {
+      const elapsed = (Date.now() - (musicState.updatedAt || musicState.startedAt || Date.now())) / 1000;
+      const current = Math.min(durationSec, (musicState.currentTime || 0) + elapsed);
+      setSliderVal(current);
+    };
+
+    updateCurrent();
+    const interval = setInterval(updateCurrent, 250);
+    return () => clearInterval(interval);
+  }, [musicState, isDragging, durationSec, isLive]);
+
+  const handleQuickJump = (delta) => {
+    if (isLive || !onSeekMusic) return;
+    const newTime = Math.max(0, Math.min(durationSec, sliderVal + delta));
+    setSliderVal(newTime);
+    onSeekMusic(newTime);
+  };
+
+  const handleSliderCommit = () => {
+    setIsDragging(false);
+    if (onSeekMusic) onSeekMusic(sliderVal);
+  };
 
   const toggleNoiseSuppression = () => {
     const next = !isNoiseSuppressed;
     webrtc.setNoiseSuppression(next);
     setIsNoiseSuppressed(next);
   };
-
-  // Synchronized background music stream player
-  useEffect(() => {
-    if (!musicAudioRef.current) return;
-    if (musicState?.isPlaying && musicState?.currentTrack?.url) {
-      if (musicAudioRef.current.src !== musicState.currentTrack.url) {
-        musicAudioRef.current.src = musicState.currentTrack.url;
-      }
-      musicAudioRef.current.volume = Math.min(Math.max((musicState.volume ?? 80) / 100, 0), 1);
-      musicAudioRef.current.play().catch(e => console.warn('Music audio play error:', e));
-    } else {
-      musicAudioRef.current.pause();
-    }
-  }, [musicState]);
 
   // Determine if anyone (local or remote) is sharing screen
   useEffect(() => {
@@ -127,37 +161,87 @@ export default function VoiceRoom({
 
       {/* 24/7 MUSIC BOT ACTIVE BAR */}
       {musicState?.currentTrack && (
-        <div className="bg-[#2b2d31] border-b border-[#383a40] px-6 py-2 flex items-center justify-between text-xs shadow-inner">
-          <div className="flex items-center gap-3 overflow-hidden">
+        <div className="bg-[#2b2d31] border-b border-[#383a40] px-4 md:px-6 py-2 flex items-center justify-between text-xs shadow-inner flex-wrap gap-2">
+          {/* Track Info */}
+          <div className="flex items-center gap-3 overflow-hidden min-w-0 max-w-full sm:max-w-xs md:max-w-md">
             <div className="flex items-center gap-1.5 text-[#5865f2] font-black shrink-0">
               <Disc3 className={`w-4 h-4 ${musicState.isPlaying ? 'animate-spin' : ''}`} />
-              <span>Fivecord DJ:</span>
+              <span className="hidden sm:inline">Fivecord DJ:</span>
             </div>
-            <span className="text-white font-bold truncate max-w-xs sm:max-w-md">
+            <span className="text-white font-bold truncate">
               {musicState.currentTrack.title || musicState.currentTrack.name}
             </span>
             <span className="text-[10px] text-[#949ba4] px-1.5 py-0.2 rounded bg-[#1e1f22] shrink-0">
-              {musicState.currentTrack.duration || musicState.currentTrack.artist || musicState.currentTrack.genre || 'Müzik'}
+              {musicState.currentTrack.artist || musicState.currentTrack.genre || 'Müzik'}
             </span>
           </div>
 
+          {/* Timeline & Scrubber */}
+          {!isLive ? (
+            <div className="flex items-center gap-2 shrink-0 bg-[#232428] px-3 py-1 rounded-lg border border-[#383a40]">
+              <button
+                onClick={() => handleQuickJump(-10)}
+                className="p-1 rounded hover:bg-[#35373c] text-[#949ba4] hover:text-white transition-colors cursor-pointer"
+                title="10 Saniye Geri Sar"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-[#5865f2]" />
+              </button>
+              <span className="text-[11px] font-mono text-[#949ba4] w-9 text-right">
+                {formatTime(sliderVal)}
+              </span>
+              <input
+                type="range"
+                min="0"
+                max={durationSec}
+                step="1"
+                value={Math.floor(sliderVal)}
+                onChange={(e) => {
+                  setIsDragging(true);
+                  setSliderVal(Number(e.target.value));
+                }}
+                onMouseUp={handleSliderCommit}
+                onTouchEnd={handleSliderCommit}
+                className="w-16 sm:w-28 md:w-36 h-1.5 bg-[#1e1f22] rounded-lg appearance-none cursor-pointer accent-[#5865f2]"
+                style={{
+                  background: `linear-gradient(to right, #5865f2 ${(sliderVal / Math.max(durationSec, 1)) * 100}%, #1e1f22 ${(sliderVal / Math.max(durationSec, 1)) * 100}%)`
+                }}
+              />
+              <span className="text-[11px] font-mono text-[#949ba4] w-9 text-left">
+                {formatTime(durationSec)}
+              </span>
+              <button
+                onClick={() => handleQuickJump(10)}
+                className="p-1 rounded hover:bg-[#35373c] text-[#949ba4] hover:text-white transition-colors cursor-pointer"
+                title="10 Saniye İleri Sar"
+              >
+                <RotateCw className="w-3.5 h-3.5 text-[#5865f2]" />
+              </button>
+            </div>
+          ) : (
+            <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-[#23a55a] font-bold bg-[#1e1f22] px-2.5 py-0.5 rounded-full border border-[#23a55a]/30">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#23a55a] animate-ping" />
+              7/24 Kesintisiz Canlı Yayın
+            </div>
+          )}
+
+          {/* Action Buttons */}
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={onToggleMusicPlay}
-              className="px-3 py-1 rounded-lg bg-[#383a40] hover:bg-[#4e5058] text-white text-xs font-bold transition-all flex items-center gap-1.5"
+              className="px-3 py-1 rounded-lg bg-[#383a40] hover:bg-[#4e5058] text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
             >
               {musicState.isPlaying ? <Pause className="w-3 h-3 fill-current" /> : <Play className="w-3 h-3 fill-current" />}
               <span>{musicState.isPlaying ? 'Duraklat' : 'Oynat'}</span>
             </button>
             <button
               onClick={onOpenMusicModal}
-              className="px-3 py-1 rounded-lg bg-[#5865f2] hover:bg-[#4752c4] text-white text-xs font-bold transition-all"
+              className="px-3 py-1 rounded-lg bg-[#5865f2] hover:bg-[#4752c4] text-white text-xs font-bold transition-all cursor-pointer"
             >
               🔍 Şarkı Ara / Ayar
             </button>
             <button
               onClick={onStopMusic}
-              className="px-2.5 py-1 rounded-lg bg-[#f23f43]/20 hover:bg-[#f23f43] text-[#f23f43] hover:text-white text-xs font-bold transition-all"
+              className="px-2.5 py-1 rounded-lg bg-[#f23f43]/20 hover:bg-[#f23f43] text-[#f23f43] hover:text-white text-xs font-bold transition-all cursor-pointer"
               title="Müziği Kapat"
             >
               Kapat
@@ -538,9 +622,6 @@ export default function VoiceRoom({
 
         </div>
       </div>
-
-      {/* SYNCHRONIZED HTML5 AUDIO ELEMENT FOR MUSIC BOT */}
-      <audio ref={musicAudioRef} autoPlay playsInline />
     </div>
   );
 }
