@@ -107,7 +107,7 @@ export default function WatchTogetherModal({ isOpen, onClose, onStart }) {
     return match ? match[1] : (clean.length === 11 ? clean : null);
   };
 
-  const handleStartCustom = (e) => {
+  const handleStartYouTube = (e) => {
     e.preventDefault();
     const id = extractYouTubeId(url);
     if (id) {
@@ -118,6 +118,7 @@ export default function WatchTogetherModal({ isOpen, onClose, onStart }) {
       alert('Geçerli bir YouTube video linki giriniz.');
     }
   };
+  const handleStartCustom = handleStartYouTube;
 
   const handleStartGoogle = (e) => {
     e.preventDefault();
