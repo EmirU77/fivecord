@@ -185,9 +185,33 @@ export default function VoiceRoom({
 }) {
   const [sliderVal, setSliderVal] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
-  const [isNoiseSuppressed, setIsNoiseSuppressed] = useState(false);
+  const [isNoiseSuppressed, setIsNoiseSuppressed] = useState(() => {
+    try {
+      return localStorage.getItem('fivecord_noise_suppressed') === 'true';
+    } catch (e) {
+      return false;
+    }
+  });
   const [selectedStreamId, setSelectedStreamId] = useState(null);
-  const [layoutMode, setLayoutMode] = useState('auto'); // 'auto', 'grid', 'focus'
+  const [layoutMode, setLayoutMode] = useState(() => {
+    try {
+      return localStorage.getItem('fivecord_layout_mode') || 'auto';
+    } catch (e) {
+      return 'auto';
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('fivecord_noise_suppressed', isNoiseSuppressed ? 'true' : 'false');
+    } catch (e) {}
+  }, [isNoiseSuppressed]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('fivecord_layout_mode', layoutMode);
+    } catch (e) {}
+  }, [layoutMode]);
 
   const channelMembers = useMemo(() => {
     return members.filter(m => m.voiceState?.channelId === channel.id);

@@ -171,6 +171,15 @@ export default function Sidebar({
                 </button>
               </>
             )}
+
+            <div className="h-[1px] bg-[#232428] my-1" />
+            <div className="px-2.5 py-1.5 flex items-center justify-between text-[11px] text-[#23a55a] bg-[#1e1f22]/60 rounded-lg">
+              <span className="flex items-center gap-1.5 font-medium">
+                <span className="w-2 h-2 rounded-full bg-[#23a55a] animate-pulse" />
+                Otomatik Kayıt Devrede
+              </span>
+              <span className="text-[10px] text-[#949ba4] font-mono">Aktif</span>
+            </div>
           </div>
         )}
       </div>
