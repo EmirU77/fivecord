@@ -1720,83 +1720,12 @@ export default function UserControlBar({
                       </div>
                     </div>
 
-                    {/* Krisp AI Studio 2.0 Noise Suppression & Multi-Stage DSP */}
-                    <div className="p-4 rounded-xl bg-[#2b2d31] border border-[#383a40] space-y-3.5">
+                    {/* Audio Processing Info */}
+                    <div className="p-4 rounded-xl bg-[#2b2d31] border border-[#383a40] space-y-3">
                       <div className="flex items-center justify-between">
                         <div className="text-xs font-bold uppercase tracking-wider text-[#b5bac1] flex items-center gap-1.5">
-                          <Sparkles className="w-4 h-4 text-[#5865f2]" />
-                          <span>Krisp AI Studio 2.0 Gürültü Engelleme</span>
-                          <span className="text-[9px] px-2 py-0.5 rounded-full bg-[#5865f2] text-white font-extrabold shadow-sm">
-                            PRO DSP
-                          </span>
-                        </div>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full font-mono ${
-                          isKrispEnabled ? 'bg-[#23a55a]/20 text-[#23a55a]' : 'bg-[#4e5058]/30 text-[#949ba4]'
-                        }`}>
-                          {isKrispEnabled ? '● STÜDYO İZOLASYON AKTİF' : '○ KAPALI'}
-                        </span>
-                      </div>
-
-                      {/* Main Krisp AI Card */}
-                      <div 
-                        onClick={handleKrispToggle}
-                        className={`p-4 rounded-xl border transition-all cursor-pointer ${
-                          isKrispEnabled 
-                            ? 'bg-gradient-to-r from-[#1e1f22] to-[#232428] border-[#23a55a] shadow-md shadow-[#23a55a]/10' 
-                            : 'bg-[#1e1f22] border-[#383a40] hover:border-[#4e5058]'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-2.5">
-                          <div className="flex items-center gap-2">
-                            <span className="text-base">🎙️</span>
-                            <div>
-                              <div className="text-xs font-bold text-white flex items-center gap-1.5">
-                                <span>Akıllı Yapay Zeka Ses İzolasyonu</span>
-                                <span className="text-[9px] px-1.5 py-0.2 rounded bg-gradient-to-r from-[#5865f2] to-[#eb459e] text-white font-black">
-                                  DERİN FİLTRE
-                                </span>
-                              </div>
-                              <div className="text-[11px] text-[#949ba4] mt-0.5">
-                                Mekanik klavye, mouse tıkırtısı, fan sesi ve oda uğultusunu sıfırlar; sadece insan sesini geçirir.
-                              </div>
-                            </div>
-                          </div>
-                          
-                          <div className={`w-12 h-6 rounded-full transition-colors relative flex items-center px-1 shrink-0 ${
-                            isKrispEnabled ? 'bg-[#23a55a]' : 'bg-[#4e5058]'
-                          }`}>
-                            <div className={`w-4 h-4 rounded-full bg-white transition-transform shadow-md ${
-                              isKrispEnabled ? 'translate-x-6' : 'translate-x-0'
-                            }`} />
-                          </div>
-                        </div>
-
-                        {/* Feature Badges Strip */}
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-1 text-[10px]">
-                          <div className={`p-1.5 rounded-lg border flex items-center gap-1.5 font-medium truncate ${
-                            isKrispEnabled ? 'bg-[#2b2d31] border-[#23a55a]/30 text-white' : 'bg-[#2b2d31]/50 border-transparent text-[#949ba4]'
-                          }`}>
-                            <span>⌨️</span>
-                            <span className="truncate">Klavye Filtresi</span>
-                          </div>
-                          <div className={`p-1.5 rounded-lg border flex items-center gap-1.5 font-medium truncate ${
-                            isKrispEnabled ? 'bg-[#2b2d31] border-[#23a55a]/30 text-white' : 'bg-[#2b2d31]/50 border-transparent text-[#949ba4]'
-                          }`}>
-                            <span>💨</span>
-                            <span className="truncate">Fan / Uğultu (85Hz)</span>
-                          </div>
-                          <div className={`p-1.5 rounded-lg border flex items-center gap-1.5 font-medium truncate ${
-                            isKrispEnabled ? 'bg-[#2b2d31] border-[#23a55a]/30 text-white' : 'bg-[#2b2d31]/50 border-transparent text-[#949ba4]'
-                          }`}>
-                            <span>⚡</span>
-                            <span className="truncate">Dip Ses / Vızıltı</span>
-                          </div>
-                          <div className={`p-1.5 rounded-lg border flex items-center gap-1.5 font-medium truncate ${
-                            isKrispEnabled ? 'bg-[#2b2d31] border-[#23a55a]/30 text-white' : 'bg-[#2b2d31]/50 border-transparent text-[#949ba4]'
-                          }`}>
-                            <span>📻</span>
-                            <span className="truncate">Stüdyo Kompresör</span>
-                          </div>
+                          <span className="text-sm">🎙️</span>
+                          <span>Ses İşleme</span>
                         </div>
                       </div>
 
@@ -1811,8 +1740,12 @@ export default function UserControlBar({
                         </div>
                         <span className="text-[10px] font-bold text-[#23a55a] bg-[#23a55a]/15 px-2.5 py-1 rounded-full flex items-center gap-1 shrink-0">
                           <Check className="w-3.5 h-3.5" />
-                          <span>DONANIMSAL AKTİF</span>
+                          <span>AKTİF</span>
                         </span>
+                      </div>
+
+                      <div className="text-[11px] text-[#949ba4]">
+                        Ses doğrudan iletilir — hiçbir filtre veya gürültü engelleme uygulanmaz. Temiz ve doğal ses.
                       </div>
                     </div>
 

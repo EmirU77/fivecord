@@ -107,15 +107,8 @@ class WebRTCManager {
     const savedInputId = typeof localStorage !== 'undefined' ? localStorage.getItem('fivecord_audio_input') : null;
     const audioConstraint = {
       echoCancellation: { ideal: true },
-      noiseSuppression: { ideal: this.isNoiseSuppressionOn },
+      noiseSuppression: false,
       autoGainControl: { ideal: true },
-      // Chromium 120+ / Google Meet Deep Neural Voice Isolation & Typing Filter
-      voiceIsolation: { ideal: this.isNoiseSuppressionOn },
-      googEchoCancellation: { ideal: true },
-      googAutoGainControl: { ideal: true },
-      googNoiseSuppression: { ideal: this.isNoiseSuppressionOn },
-      googHighpassFilter: { ideal: this.isNoiseSuppressionOn },
-      googTypingNoiseDetection: { ideal: this.isNoiseSuppressionOn },
       ...(savedInputId ? { deviceId: { exact: savedInputId } } : {})
     };
 
@@ -202,8 +195,8 @@ class WebRTCManager {
 
         // Sensitive speech threshold:
         // Ambient noise is usually < 8, soft/normal speech is 15-70+.
-        const thresholdAvg = this.isNoiseSuppressionOn ? 14 : 7;
-        const thresholdMax = this.isNoiseSuppressionOn ? 32 : 18;
+        const thresholdAvg = 7;
+        const thresholdMax = 18;
         const nowSpeaking = speechAvg > thresholdAvg || speechMax > thresholdMax;
 
         if (nowSpeaking) {
@@ -239,31 +232,13 @@ class WebRTCManager {
   }
 
   setNoiseSuppression(enabled) {
+    // Noise suppression removed — this is a no-op kept for UI compatibility
     this.isNoiseSuppressionOn = Boolean(enabled);
     try {
       if (typeof localStorage !== 'undefined') {
         localStorage.setItem('fivecord_noise_suppressed', enabled ? 'true' : 'false');
       }
     } catch (e) {}
-
-    try {
-      voiceRelay.setNoiseSuppression(this.isNoiseSuppressionOn);
-    } catch (e) {}
-
-    if (this.localStream) {
-      const audioTrack = this.localStream.getAudioTracks()[0];
-      if (audioTrack && audioTrack.applyConstraints) {
-        audioTrack.applyConstraints({
-          noiseSuppression: { ideal: this.isNoiseSuppressionOn },
-          echoCancellation: { ideal: true },
-          autoGainControl: { ideal: true },
-          voiceIsolation: { ideal: this.isNoiseSuppressionOn },
-          googNoiseSuppression: { ideal: this.isNoiseSuppressionOn },
-          googHighpassFilter: { ideal: this.isNoiseSuppressionOn },
-          googTypingNoiseDetection: { ideal: this.isNoiseSuppressionOn }
-        }).catch(() => {});
-      }
-    }
     return this.isNoiseSuppressionOn;
   }
 
