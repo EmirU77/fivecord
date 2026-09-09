@@ -379,6 +379,32 @@ export default function App() {
     webrtc.setDeafened(isDeafened);
   }, [isDeafened]);
 
+  // Global unlock for browser media autoplay policy on any user gesture
+  useEffect(() => {
+    const unlockAllMedia = () => {
+      document.querySelectorAll('audio').forEach(el => {
+        if (el.srcObject && el.paused) {
+          el.play().catch(() => {});
+        }
+      });
+    };
+    window.addEventListener('click', unlockAllMedia);
+    window.addEventListener('keydown', unlockAllMedia);
+    return () => {
+      window.removeEventListener('click', unlockAllMedia);
+      window.removeEventListener('keydown', unlockAllMedia);
+    };
+  }, []);
+
+  const handleReconnectVoice = async () => {
+    if (!currentVoiceChannel) return;
+    console.log('[Voice] Reconnecting voice channel:', currentVoiceChannel.name);
+    webrtc.leaveVoice();
+    soundEffects.playJoin();
+    await webrtc.initLocalAudio();
+    socket.emit('join-voice-channel', { channelId: currentVoiceChannel.id });
+  };
+
   // --- CHANNEL & DM ACTIONS ---
   const handleSelectChannel = (channel) => {
     setCurrentChannel(channel);
@@ -539,7 +565,40 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#1e1f22]">
-      <div ref={audioContainerRef} style={{ position: 'fixed', top: -9999, left: -9999, width: 1, height: 1, opacity: 0.001, pointerEvents: 'none' }} />
+      {/* Declarative global voice audio players for all active remote peers */}
+      <div style={{ position: 'fixed', top: -9999, left: -9999, width: 1, height: 1, opacity: 0.001, pointerEvents: 'none' }}>
+        <div ref={audioContainerRef} />
+        {Array.from(remoteStreams.entries()).map(([peerSocketId, stream]) => (
+          <audio
+            key={peerSocketId}
+            id={`audio-${peerSocketId}`}
+            autoPlay
+            playsInline
+            ref={(el) => {
+              if (el && el.srcObject !== stream) {
+                el.srcObject = stream;
+                el.volume = 1.0;
+                el.play().catch(() => {});
+              }
+            }}
+          />
+        ))}
+        {Array.from(remoteScreenStreams.entries()).map(([peerSocketId, stream]) => (
+          <audio
+            key={`screen-${peerSocketId}`}
+            id={`audio-screen-${peerSocketId}`}
+            autoPlay
+            playsInline
+            ref={(el) => {
+              if (el && el.srcObject !== stream) {
+                el.srcObject = stream;
+                el.volume = 1.0;
+                el.play().catch(() => {});
+              }
+            }}
+          />
+        ))}
+      </div>
       <audio ref={bgMusicAudioRef} className="hidden" />
       {activeMusicState?.currentTrack?.source === 'youtube' && (
         <div className="fixed -top-96 -left-96 pointer-events-none opacity-0 w-1 h-1 overflow-hidden">
@@ -601,6 +660,7 @@ export default function App() {
           currentVoiceChannel={currentVoiceChannel}
           onJoinVoice={handleJoinVoice}
           onLeaveVoice={handleLeaveVoice}
+          onReconnectVoice={handleReconnectVoice}
           members={members}
           currentUser={currentUser}
           onUpdateProfile={handleUpdateProfile}
@@ -642,6 +702,7 @@ export default function App() {
           onOpenScreenModal={() => setIsScreenModalOpen(true)}
           onStopScreenShare={handleStopScreenShare}
           onLeaveVoice={handleLeaveVoice}
+          onReconnectVoice={handleReconnectVoice}
           musicState={currentVoiceChannel ? musicStates.get(currentVoiceChannel.id) : null}
           onOpenMusicModal={() => setIsMusicModalOpen(true)}
           onToggleMusicPlay={() => {

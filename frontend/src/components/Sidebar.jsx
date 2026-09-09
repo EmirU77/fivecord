@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Hash, Volume2, Monitor, MonitorOff, Video, VideoOff, 
   PhoneOff, ChevronDown, Plus, BadgeCheck, Wifi, SignalHigh, 
-  Radio, Download, Trash2, Edit3, Copy, Check, Info, Settings, MoreVertical
+  Radio, Download, Trash2, Edit3, Copy, Check, Info, Settings, MoreVertical, RotateCw
 } from 'lucide-react';
 import UserControlBar from './UserControlBar';
 
@@ -13,6 +13,7 @@ export default function Sidebar({
   currentVoiceChannel,
   onJoinVoice,
   onLeaveVoice,
+  onReconnectVoice,
   members,
   currentUser,
   onUpdateProfile,
@@ -394,9 +395,20 @@ export default function Sidebar({
               className="cursor-pointer group flex-1 truncate"
               title="Yayın Sahnesini / Odayı Aç"
             >
-              <div className="flex items-center gap-1.5 text-xs font-bold text-[#23a55a]">
-                <SignalHigh className="w-3.5 h-3.5 text-[#23a55a]" />
-                <span>Ses Bağlandı (16ms)</span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-[#23a55a]">
+                  <SignalHigh className="w-3.5 h-3.5 text-[#23a55a]" />
+                  <span>Ses Bağlandı (P2P / HQ)</span>
+                </div>
+                {onReconnectVoice && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onReconnectVoice(); }}
+                    className="p-1 rounded hover:bg-[#35373c] text-[#949ba4] hover:text-white transition-colors cursor-pointer"
+                    title="Sesi Yeniden Başlat / Yenile"
+                  >
+                    <RotateCw className="w-3 h-3 hover:rotate-180 transition-transform" />
+                  </button>
+                )}
               </div>
               <div className="text-[11px] text-[#949ba4] truncate group-hover:text-white transition-colors">
                 {currentVoiceChannel.name}

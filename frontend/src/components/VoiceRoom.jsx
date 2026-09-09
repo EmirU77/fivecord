@@ -404,6 +404,24 @@ export default function VoiceRoom({
                       </div>
                     )}
 
+                    {/* Dedicated in-tile audio player for remote member */}
+                    {!isLocal && !member.isBot && (
+                      <audio
+                        ref={(el) => {
+                          if (el) {
+                            const stream = remoteStreams?.get(member.socketId);
+                            if (stream && el.srcObject !== stream) {
+                              el.srcObject = stream;
+                              el.volume = 1.0;
+                              el.play().catch(() => {});
+                            }
+                          }
+                        }}
+                        autoPlay
+                        playsInline
+                      />
+                    )}
+
                     {/* Discord-style bottom nameplate */}
                     <div className="absolute bottom-3 left-3 bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-lg flex items-center gap-2 max-w-[85%] border border-white/10 z-10">
                       <span className="text-xs font-bold text-white truncate">

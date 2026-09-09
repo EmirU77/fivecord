@@ -1,30 +1,22 @@
-﻿import { socket } from './socket';
+import { socket } from './socket';
 
-// High reliability ICE servers: Google STUN + Cloudflare STUN + OpenRelay (Metered) Free Public TURN
+// High reliability ICE servers: Cloudflare STUN + Google STUN + OpenRelay (Metered) Free Public TURN
 // Essential for NAT traversal (CGNAT, symmetric NATs, cellular hotspot, Turkish ISPs)
 const ICE_SERVERS = {
   iceServers: [
+    { urls: 'stun:stun.cloudflare.com:3478' },
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun3.l.google.com:19302' },
-    { urls: 'stun:stun4.l.google.com:19302' },
-    { urls: 'stun:stun.cloudflare.com:3478' },
-    { urls: 'stun:openrelay.metered.ca:80' },
+    { urls: 'stun:stun.voip.blackberry.com:3478' },
     {
-      urls: 'turn:openrelay.metered.ca:80',
-      username: 'openrelay',
-      credential: 'openrelay'
-    },
-    {
-      urls: 'turn:openrelay.metered.ca:443',
-      username: 'openrelay',
-      credential: 'openrelay'
-    },
-    {
-      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-      username: 'openrelay',
-      credential: 'openrelay'
+      urls: [
+        'turn:openrelay.metered.ca:80',
+        'turn:openrelay.metered.ca:443',
+        'turn:openrelay.metered.ca:443?transport=tcp'
+      ],
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
     }
   ],
   iceCandidatePoolSize: 10
@@ -141,14 +133,15 @@ class WebRTCManager {
     if (this.localStream) {
       this.startVAD(this.localStream);
 
-      // If we already have peer connections open, update their audio tracks
-      this.peers.forEach((pc) => {
+      // If we already have peer connections open, update their audio tracks and renegotiate
+      this.peers.forEach((pc, targetSocketId) => {
         const senders = pc.getSenders();
         const hasAudio = senders.some(s => s.track && s.track.kind === 'audio');
         if (!hasAudio && this.localStream) {
           this.localStream.getAudioTracks().forEach(track => {
             pc.addTrack(track, this.localStream);
           });
+          this.renegotiate(targetSocketId, pc);
         }
       });
     }
