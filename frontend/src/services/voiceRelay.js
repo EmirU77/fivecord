@@ -23,6 +23,8 @@ class VoiceRelayManager {
     this.notchFilter = null;
     this.lpFilter = null;
     this.compressor = null;
+    this.noiseWorkletNode = null;
+    this.workletLoaded = false;
 
     this.setupSocketListeners();
   }
@@ -78,6 +80,11 @@ class VoiceRelayManager {
 
   setNoiseSuppression(enabled) {
     this.isNoiseSuppressionOn = Boolean(enabled);
+    // Update live worklet node if running
+    if (this.noiseWorkletNode) {
+      this.noiseWorkletNode.port.postMessage({ type: 'setEnabled', enabled: this.isNoiseSuppressionOn });
+    }
+    // Update legacy BiquadFilters if still in use (fallback path)
     if (this.hpFilter && this.lpFilter) {
       if (this.isNoiseSuppressionOn) {
         this.hpFilter.frequency.value = 85;
@@ -133,58 +140,92 @@ class VoiceRelayManager {
       this.stopCapture();
 
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      this.captureContext = new AudioCtx();
+      this.captureContext = new AudioCtx({ sampleRate: 48000 });
       if (this.captureContext.state === 'suspended') {
         await this.captureContext.resume();
       }
 
-      this.sampleRate = this.captureContext.sampleRate || 44100;
+      this.sampleRate = this.captureContext.sampleRate || 48000;
       this.micSource = this.captureContext.createMediaStreamSource(mediaStream);
 
-      // --- KRISP STUDIO AI DSP FILTER CHAIN ---
-      // 1. High-Pass Filter (85Hz) removes desk thumps, mic handling, and fan/AC rumble
+      // ---- HIGH-PASS + NOTCH BASE FILTER (removes DC, mains hum) ----
       this.hpFilter = this.captureContext.createBiquadFilter();
       this.hpFilter.type = 'highpass';
-      this.hpFilter.frequency.value = this.isNoiseSuppressionOn ? 85 : 10;
+      this.hpFilter.frequency.value = this.isNoiseSuppressionOn ? 80 : 10;
       this.hpFilter.Q.value = 0.707;
 
-      // 2. Notch Filter (50Hz) removes AC mains electric buzz
       this.notchFilter = this.captureContext.createBiquadFilter();
       this.notchFilter.type = 'notch';
       this.notchFilter.frequency.value = this.isNoiseSuppressionOn ? 50 : 10;
-      this.notchFilter.Q.value = 4.0;
+      this.notchFilter.Q.value = 5.0;
 
-      // 3. Low-Pass Filter (10.5kHz) cuts off coil whine, harsh electronic hiss
       this.lpFilter = this.captureContext.createBiquadFilter();
       this.lpFilter.type = 'lowpass';
       this.lpFilter.frequency.value = this.isNoiseSuppressionOn ? 10500 : 22000;
       this.lpFilter.Q.value = 0.707;
 
-      // 4. Dynamics Compressor for broadcast radio vocal clarity
+      // ---- DYNAMICS COMPRESSOR for vocal clarity ----
       this.compressor = this.captureContext.createDynamicsCompressor();
-      this.compressor.threshold.setValueAtTime(-24, this.captureContext.currentTime);
-      this.compressor.knee.setValueAtTime(15, this.captureContext.currentTime);
-      this.compressor.ratio.setValueAtTime(4, this.captureContext.currentTime);
-      this.compressor.attack.setValueAtTime(0.003, this.captureContext.currentTime);
-      this.compressor.release.setValueAtTime(0.15, this.captureContext.currentTime);
+      this.compressor.threshold.setValueAtTime(-28, this.captureContext.currentTime);
+      this.compressor.knee.setValueAtTime(10, this.captureContext.currentTime);
+      this.compressor.ratio.setValueAtTime(6, this.captureContext.currentTime);
+      this.compressor.attack.setValueAtTime(0.002, this.captureContext.currentTime);
+      this.compressor.release.setValueAtTime(0.12, this.captureContext.currentTime);
 
-      // 5. ScriptProcessor bufferSize 2048 (~42ms at 48kHz, ~46ms at 44.1kHz)
+      // ---- Try to load AudioWorklet for spectral subtraction ----
+      let useWorklet = false;
+      if (this.captureContext.audioWorklet && !this.workletLoaded) {
+        try {
+          await this.captureContext.audioWorklet.addModule('/noise-suppressor-processor.js');
+          this.workletLoaded = true;
+          useWorklet = true;
+          console.log('[VoiceRelay] Spectral subtraction AudioWorklet loaded ✓');
+        } catch (workletErr) {
+          console.warn('[VoiceRelay] AudioWorklet load failed, using ScriptProcessor fallback:', workletErr);
+        }
+      } else if (this.workletLoaded) {
+        useWorklet = true;
+      }
+
+      // ---- BUILD PROCESSING CHAIN ----
+      // Base path: micSource → hpFilter → notchFilter → lpFilter → compressor → [worklet or fallback] → pcmEncoder
+      this.micSource.connect(this.hpFilter);
+      this.hpFilter.connect(this.notchFilter);
+      this.notchFilter.connect(this.lpFilter);
+      this.lpFilter.connect(this.compressor);
+
+      let chainOutput; // The last node before pcmEncoder
+
+      if (useWorklet) {
+        // ---- SPECTRAL SUBTRACTION WORKLET ----
+        this.noiseWorkletNode = new AudioWorkletNode(this.captureContext, 'noise-suppressor-processor', {
+          numberOfInputs: 1,
+          numberOfOutputs: 1,
+          outputChannelCount: [1],
+          channelCount: 1,
+          channelCountMode: 'explicit'
+        });
+        this.noiseWorkletNode.port.postMessage({ type: 'setEnabled', enabled: this.isNoiseSuppressionOn });
+        this.compressor.connect(this.noiseWorkletNode);
+        chainOutput = this.noiseWorkletNode;
+      } else {
+        // Fallback: compressor output feeds directly to PCM encoder
+        chainOutput = this.compressor;
+      }
+
+      // ---- PCM ENCODER (ScriptProcessor) ----
       this.processor = this.captureContext.createScriptProcessor(2048, 1, 1);
       this.hangover = 0;
       this.currentGateGain = 0.0;
       this.targetGateGain = 0.0;
 
-      // Connect DSP Chain
-      this.micSource.connect(this.hpFilter);
-      this.hpFilter.connect(this.notchFilter);
-      this.notchFilter.connect(this.lpFilter);
-      this.lpFilter.connect(this.compressor);
-      this.compressor.connect(this.processor);
+      chainOutput.connect(this.processor);
 
-      // Retain references on window to prevent Chromium V8 GC from killing processor
+      // Retain references on window to prevent Chromium V8 GC
       if (typeof window !== 'undefined') {
         window.__fivecordVoiceProcessor = this.processor;
         window.__fivecordVoiceCapture = this.captureContext;
+        window.__fivecordWorklet = this.noiseWorkletNode;
       }
 
       this.processor.onaudioprocess = (e) => {
@@ -192,16 +233,28 @@ class VoiceRelayManager {
 
         const input = e.inputBuffer.getChannelData(0);
         let maxVal = 0;
+        let sumSq = 0;
         for (let i = 0; i < input.length; i++) {
           const abs = Math.abs(input[i]);
           if (abs > maxVal) maxVal = abs;
+          sumSq += input[i] * input[i];
         }
+        const rms = Math.sqrt(sumSq / input.length);
 
-        // Krisp Studio Gate Threshold:
-        // When Krisp is enabled, filter background keyboard clicks & fan noise
-        const threshold = this.isNoiseSuppressionOn ? 0.0028 : 0.0015;
-        if (maxVal > threshold) {
-          this.hangover = this.isNoiseSuppressionOn ? 12 : 15;
+        // Gate thresholds: when worklet is active, it already suppresses noise,
+        // so we use a tighter gate (only let through clear speech).
+        // Without worklet, use a looser gate to catch softer speech.
+        const rmsThreshold = useWorklet
+          ? (this.isNoiseSuppressionOn ? 0.004 : 0.0015)
+          : (this.isNoiseSuppressionOn ? 0.0028 : 0.0015);
+        const peakThreshold = useWorklet
+          ? (this.isNoiseSuppressionOn ? 0.012 : 0.004)
+          : (this.isNoiseSuppressionOn ? 0.008 : 0.004);
+
+        const voiceDetected = rms > rmsThreshold || maxVal > peakThreshold;
+
+        if (voiceDetected) {
+          this.hangover = this.isNoiseSuppressionOn ? 10 : 15;
           this.targetGateGain = 1.0;
         } else if (this.hangover > 0) {
           this.hangover--;
@@ -210,14 +263,13 @@ class VoiceRelayManager {
           this.targetGateGain = 0.0;
         }
 
-        // Smooth gate transitions to eliminate pops/clicks
+        // Smooth gate transitions
         this.currentGateGain += (this.targetGateGain - this.currentGateGain) * 0.35;
         if (this.currentGateGain < 0.005) {
           this.currentGateGain = 0.0;
-          return; // Dead silent between words, no background noise packets emitted
+          return;
         }
 
-        // Convert Float32 [-1, 1] to Int16 [-32768, 32767] with mic gain and noise gate
         const micGain = (this.getMicVolume() / 100) * this.currentGateGain;
         const pcm16 = new Int16Array(input.length);
         for (let i = 0; i < input.length; i++) {
@@ -232,19 +284,20 @@ class VoiceRelayManager {
         });
       };
 
-      // Mute local loopback to avoid hearing own voice echo
+      // Mute local loopback
       this.muteNode = this.captureContext.createGain();
       this.muteNode.gain.value = 0;
-
       this.processor.connect(this.muteNode);
       this.muteNode.connect(this.captureContext.destination);
 
       this.isBroadcasting = true;
-      console.log(`[VoiceRelay] Broadcasting audio on channel ${channelId} (${this.sampleRate}Hz PCM relay)`);
+      const mode = useWorklet ? 'Spectral Subtraction (AudioWorklet)' : 'Biquad DSP (fallback)';
+      console.log(`[VoiceRelay] Broadcasting on channel ${channelId} — Noise mode: ${mode} @ ${this.sampleRate}Hz`);
     } catch (err) {
       console.warn('[VoiceRelay] Start broadcasting error:', err);
     }
   }
+
 
   playChunk(senderSocketId, sampleRate, buffer) {
     if (this.isDeafened || !buffer) return;
@@ -332,6 +385,10 @@ class VoiceRelayManager {
       try { this.compressor.disconnect(); } catch (e) {}
       this.compressor = null;
     }
+    if (this.noiseWorkletNode) {
+      try { this.noiseWorkletNode.disconnect(); } catch (e) {}
+      this.noiseWorkletNode = null;
+    }
     if (this.muteNode) {
       try { this.muteNode.disconnect(); } catch (e) {}
       this.muteNode = null;
@@ -339,10 +396,12 @@ class VoiceRelayManager {
     if (this.captureContext) {
       try { this.captureContext.close(); } catch (e) {}
       this.captureContext = null;
+      this.workletLoaded = false; // Reset so worklet reloads in new context
     }
     if (typeof window !== 'undefined') {
       delete window.__fivecordVoiceProcessor;
       delete window.__fivecordVoiceCapture;
+      delete window.__fivecordWorklet;
     }
   }
 
