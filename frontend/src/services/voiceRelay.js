@@ -15,6 +15,7 @@ class VoiceRelayManager {
     this.isBroadcasting = false;
     this.sampleRate = 48000;
     this.hangover = 0;
+    this.onPeerSpeaking = null; // Callback (senderSocketId, isSpeaking)
 
     this.setupSocketListeners();
   }
@@ -23,6 +24,9 @@ class VoiceRelayManager {
     socket.on('voice-pcm-chunk', ({ senderSocketId, sampleRate, buffer }) => {
       if (this.isDeafened) return;
       this.playChunk(senderSocketId, sampleRate, buffer);
+      if (this.onPeerSpeaking) {
+        this.onPeerSpeaking(senderSocketId, true);
+      }
     });
 
     socket.on('user-left-voice', ({ socketId }) => {
@@ -59,6 +63,20 @@ class VoiceRelayManager {
     return this.playbackContext;
   }
 
+  async resumeContexts() {
+    try {
+      const pCtx = this.ensurePlaybackContext();
+      if (pCtx && pCtx.state === 'suspended') {
+        await pCtx.resume();
+      }
+      if (this.captureContext && this.captureContext.state === 'suspended') {
+        await this.captureContext.resume();
+      }
+    } catch (e) {
+      console.warn('[VoiceRelay] Error resuming audio contexts:', e);
+    }
+  }
+
   async startBroadcasting(channelId, mediaStream) {
     if (!mediaStream) return;
     this.currentChannelId = channelId;
@@ -79,6 +97,12 @@ class VoiceRelayManager {
       this.processor = this.captureContext.createScriptProcessor(2048, 1, 1);
       this.hangover = 0;
 
+      // Retain references on window to prevent Chromium V8 GC from killing processor
+      if (typeof window !== 'undefined') {
+        window.__fivecordVoiceProcessor = this.processor;
+        window.__fivecordVoiceCapture = this.captureContext;
+      }
+
       this.processor.onaudioprocess = (e) => {
         if (this.isMuted || !this.currentChannelId) return;
 
@@ -89,9 +113,10 @@ class VoiceRelayManager {
           if (abs > maxVal) maxVal = abs;
         }
 
-        // Voice activity threshold (~ -46 dB)
-        if (maxVal > 0.005) {
-          this.hangover = 12; // ~500ms hangover to prevent clipping natural word endings
+        // Sensitive voice activity threshold (~ -56 dBFS)
+        // Picks up quiet laptop mics, built-in headsets, and whispers effortlessly
+        if (maxVal > 0.0015) {
+          this.hangover = 15; // ~600ms hangover to prevent clipping natural word endings
         }
 
         if (this.hangover > 0) {
@@ -133,6 +158,10 @@ class VoiceRelayManager {
     try {
       const ctx = this.ensurePlaybackContext();
       if (!ctx) return;
+
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
 
       // Handle any incoming binary buffer format safely (ArrayBuffer, Buffer, TypedArray)
       let pcm16;
@@ -199,6 +228,10 @@ class VoiceRelayManager {
     if (this.captureContext) {
       try { this.captureContext.close(); } catch (e) {}
       this.captureContext = null;
+    }
+    if (typeof window !== 'undefined') {
+      delete window.__fivecordVoiceProcessor;
+      delete window.__fivecordVoiceCapture;
     }
   }
 

@@ -39,5 +39,37 @@
     "status": "online",
     "entranceSound": "mvp",
     "lastSeen": 1788966387861
+  },
+  {
+    "id": "user-emirtest1",
+    "username": "EmirTest1",
+    "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=EmirTest1",
+    "avatarDecoration": "none",
+    "banner": null,
+    "bio": "",
+    "color": "#5865F2",
+    "nameEffect": "normal",
+    "badges": [],
+    "customStatus": "Fivecord kullanıyor",
+    "statusEmoji": "",
+    "status": "online",
+    "entranceSound": "mvp",
+    "lastSeen": 1788967671602
+  },
+  {
+    "id": "user-emirtest2",
+    "username": "EmirTest2",
+    "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=EmirTest2",
+    "avatarDecoration": "none",
+    "banner": null,
+    "bio": "",
+    "color": "#5865F2",
+    "nameEffect": "normal",
+    "badges": [],
+    "customStatus": "Fivecord kullanıyor",
+    "statusEmoji": "",
+    "status": "online",
+    "entranceSound": "mvp",
+    "lastSeen": 1788967671603
   }
 ]

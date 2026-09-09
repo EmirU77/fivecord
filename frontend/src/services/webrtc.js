@@ -175,16 +175,27 @@ class WebRTCManager {
         if (!this.analyser) return;
         this.analyser.getByteFrequencyData(dataArray);
 
-        let sum = 0;
-        for (let i = 0; i < bufferLength; i++) {
-          sum += dataArray[i];
+        // Speech-band energy analysis (bins 2 to 40, ~180 Hz to ~3800 Hz)
+        // Contains over 90% of human vocal formant energy.
+        const startBin = 2;
+        const endBin = Math.min(40, bufferLength);
+        let speechSum = 0;
+        let speechMax = 0;
+        for (let i = startBin; i < endBin; i++) {
+          const val = dataArray[i];
+          speechSum += val;
+          if (val > speechMax) speechMax = val;
         }
-        const average = sum / bufferLength;
-        const threshold = this.isNoiseSuppressionOn ? 22 : 14;
-        const nowSpeaking = average > threshold;
+        const speechAvg = speechSum / (endBin - startBin);
+
+        // Sensitive speech threshold:
+        // Ambient noise is usually < 8, soft/normal speech is 15-70+.
+        const thresholdAvg = this.isNoiseSuppressionOn ? 14 : 7;
+        const thresholdMax = this.isNoiseSuppressionOn ? 32 : 18;
+        const nowSpeaking = speechAvg > thresholdAvg || speechMax > thresholdMax;
 
         if (nowSpeaking) {
-          speakingCounter = 4;
+          speakingCounter = 5; // ~400ms hangover to prevent blinking between words
         } else if (speakingCounter > 0) {
           speakingCounter--;
         }
@@ -334,16 +345,24 @@ class WebRTCManager {
           }
         };
       } else if (event.track.kind === 'audio') {
+        const screenStreamId = this.peerScreenStreamIds.get(targetSocketId);
+        const isScreenAudio = Boolean(screenStreamId && event.streams && event.streams[0] && event.streams[0].id === screenStreamId);
+
         const stream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
-        this.remoteStreams.set(targetSocketId, stream);
+        if (!isScreenAudio) {
+          this.remoteStreams.set(targetSocketId, stream);
+        }
+
         if (this.onRemoteStreamAdded) {
-          this.onRemoteStreamAdded(targetSocketId, stream, false, event.track);
+          this.onRemoteStreamAdded(targetSocketId, stream, isScreenAudio, event.track);
         }
 
         event.track.onended = () => {
-          this.remoteStreams.delete(targetSocketId);
-          if (this.onRemoteStreamRemoved) {
-            this.onRemoteStreamRemoved(targetSocketId);
+          if (!isScreenAudio) {
+            this.remoteStreams.delete(targetSocketId);
+            if (this.onRemoteStreamRemoved) {
+              this.onRemoteStreamRemoved(targetSocketId);
+            }
           }
         };
       }

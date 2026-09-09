@@ -93,6 +93,7 @@ export default function App() {
   const [remoteScreenStreams, setRemoteScreenStreams] = useState(new Map());
 
   const audioContainerRef = useRef(null);
+  const peerSpeakingTimers = useRef(new Map());
   const activeMusicState = currentVoiceChannel ? musicStates.get(currentVoiceChannel.id) : null;
   const activeWatchTogether = currentVoiceChannel ? watchTogetherRooms.get(currentVoiceChannel.id) : null;
 
@@ -434,6 +435,23 @@ export default function App() {
       setScreenStream(null);
     };
 
+    voiceRelay.onPeerSpeaking = (socketId) => {
+      setMembers(prev => prev.map(m => m.socketId === socketId ? {
+        ...m,
+        voiceState: { ...m.voiceState, isSpeaking: true }
+      } : m));
+
+      const existingTimer = peerSpeakingTimers.current.get(socketId);
+      if (existingTimer) clearTimeout(existingTimer);
+
+      peerSpeakingTimers.current.set(socketId, setTimeout(() => {
+        setMembers(prev => prev.map(m => m.socketId === socketId ? {
+          ...m,
+          voiceState: { ...m.voiceState, isSpeaking: false }
+        } : m));
+      }, 600));
+    };
+
     return () => {
       socket.off('connect');
       socket.off('initial-data');
@@ -454,6 +472,9 @@ export default function App() {
       socket.off('tts-speak');
       socket.off('game-scan-result');
       clearInterval(gameScanInterval);
+      voiceRelay.onPeerSpeaking = null;
+      peerSpeakingTimers.current.forEach(t => clearTimeout(t));
+      peerSpeakingTimers.current.clear();
     };
   }, [currentUser, currentChannel, activeView]);
 
@@ -470,7 +491,10 @@ export default function App() {
   // Global unlock for browser media autoplay policy on any user gesture
   useEffect(() => {
     const unlockAllMedia = () => {
-      voiceRelay.ensurePlaybackContext();
+      voiceRelay.resumeContexts();
+      if (webrtc.audioContext && webrtc.audioContext.state === 'suspended') {
+        webrtc.audioContext.resume().catch(() => {});
+      }
       document.querySelectorAll('audio').forEach(el => {
         if (el.srcObject && el.paused) {
           el.play().catch(() => {});
@@ -491,6 +515,7 @@ export default function App() {
     voiceRelay.stop();
     webrtc.leaveVoice();
     soundEffects.playJoin();
+    await voiceRelay.resumeContexts();
     const stream = await webrtc.initLocalAudio();
     socket.emit('join-voice-channel', { channelId: currentVoiceChannel.id });
     if (stream) {
@@ -550,6 +575,7 @@ export default function App() {
 
   const handleJoinVoice = async (channel) => {
     soundEffects.playJoin();
+    await voiceRelay.resumeContexts();
     const stream = await webrtc.initLocalAudio();
     setCurrentVoiceChannel(channel);
     setCurrentChannel(channel);
