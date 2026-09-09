@@ -103,13 +103,17 @@ class WebRTCManager {
       }
     }
 
+    const savedInputId = typeof localStorage !== 'undefined' ? localStorage.getItem('fivecord_audio_input') : null;
+    const audioConstraint = {
+      echoCancellation: true,
+      noiseSuppression: this.isNoiseSuppressionOn,
+      autoGainControl: true,
+      ...(savedInputId ? { deviceId: { exact: savedInputId } } : {})
+    };
+
     try {
       this.localStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: this.isNoiseSuppressionOn,
-          autoGainControl: true
-        },
+        audio: audioConstraint,
         video: false
       });
       console.log('[WebRTC] Microphone accessed successfully (high fidelity)');
@@ -760,6 +764,66 @@ class WebRTCManager {
     }
     if (this.onScreenStreamRemoved) {
       this.onScreenStreamRemoved(socketId);
+    }
+  }
+
+  async changeAudioInput(deviceId) {
+    if (!deviceId) return null;
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('fivecord_audio_input', deviceId);
+      }
+
+      if (this.localStream) {
+        const newStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            deviceId: { exact: deviceId },
+            echoCancellation: true,
+            noiseSuppression: this.isNoiseSuppressionOn,
+            autoGainControl: true
+          },
+          video: false
+        });
+
+        const oldTrack = this.localStream.getAudioTracks()[0];
+        const newTrack = newStream.getAudioTracks()[0];
+
+        this.peers.forEach(pc => {
+          const senders = pc.getSenders();
+          const audioSender = senders.find(s => s.track && s.track.kind === 'audio');
+          if (audioSender && newTrack) {
+            audioSender.replaceTrack(newTrack).catch(e => console.warn('replaceTrack error:', e));
+          }
+        });
+
+        if (oldTrack) oldTrack.stop();
+        this.localStream = newStream;
+        this.startVAD(this.localStream);
+        return newStream;
+      }
+    } catch (e) {
+      console.warn('[WebRTC] Error switching audio input device:', e);
+    }
+    return null;
+  }
+
+  async changeAudioOutput(deviceId) {
+    if (!deviceId) return;
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('fivecord_audio_output', deviceId);
+      }
+
+      if (typeof document !== 'undefined' && 'setSinkId' in HTMLMediaElement.prototype) {
+        const audioEls = document.querySelectorAll('audio');
+        for (const el of audioEls) {
+          try {
+            await el.setSinkId(deviceId);
+          } catch (e) {}
+        }
+      }
+    } catch (e) {
+      console.warn('[WebRTC] Error switching audio output device:', e);
     }
   }
 

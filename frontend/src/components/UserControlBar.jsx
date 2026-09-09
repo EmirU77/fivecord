@@ -4,9 +4,11 @@ import {
   Mic, MicOff, Headphones, Settings, LogOut, LogIn, X, Check, Smile, 
   Upload, Link2, Sparkles, Palette, Image as ImageIcon, Loader2,
   Crown, Zap, Shield, Flame, User, Info, Hash, Circle, Volume2, Play,
-  Gamepad2, RefreshCw
+  Gamepad2, RefreshCw, Square, ChevronDown, VolumeX, AlertCircle, HelpCircle
 } from 'lucide-react';
 import { soundEffects } from '../services/soundEffects';
+import { webrtc } from '../services/webrtc';
+import { voiceRelay } from '../services/voiceRelay';
 
 const ENTRANCE_SOUNDS = [
   { id: 'mvp', name: 'CS:GO MVP Marşı', icon: '🔫', desc: 'Dombra / Major Şampiyonluk Akorları' },
@@ -323,6 +325,187 @@ export default function UserControlBar({
 
   const avatarFileInputRef = useRef(null);
   const bannerFileInputRef = useRef(null);
+
+  // --- DISCORD VOICE & AUDIO SETTINGS STATES ---
+  const [audioInputs, setAudioInputs] = useState([]);
+  const [audioOutputs, setAudioOutputs] = useState([]);
+  const [selectedMic, setSelectedMic] = useState(() => {
+    return typeof localStorage !== 'undefined' ? localStorage.getItem('fivecord_audio_input') || '' : '';
+  });
+  const [selectedSpeaker, setSelectedSpeaker] = useState(() => {
+    return typeof localStorage !== 'undefined' ? localStorage.getItem('fivecord_audio_output') || '' : '';
+  });
+  const [micVolume, setMicVolume] = useState(() => {
+    return voiceRelay.getMicVolume();
+  });
+  const [speakerVolume, setSpeakerVolume] = useState(() => {
+    return voiceRelay.getMasterOutputVolume();
+  });
+  const [isTestingMic, setIsTestingMic] = useState(false);
+  const [micTestLevel, setMicTestLevel] = useState(0);
+  const [micLoopback, setMicLoopback] = useState(false);
+  const [isKrispEnabled, setIsKrispEnabled] = useState(() => {
+    return typeof localStorage !== 'undefined' ? localStorage.getItem('fivecord_noise_suppressed') === 'true' : false;
+  });
+  const [showTroubleshoot, setShowTroubleshoot] = useState(false);
+
+  const testStreamRef = useRef(null);
+  const testAudioCtxRef = useRef(null);
+  const testAnimRef = useRef(null);
+
+  const refreshAudioDevices = async () => {
+    try {
+      if (typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) return;
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const inputs = devices.filter(d => d.kind === 'audioinput');
+      const outputs = devices.filter(d => d.kind === 'audiooutput');
+      setAudioInputs(inputs);
+      setAudioOutputs(outputs);
+
+      if (!selectedMic && inputs.length > 0) {
+        setSelectedMic(inputs[0].deviceId);
+      }
+      if (!selectedSpeaker && outputs.length > 0) {
+        setSelectedSpeaker(outputs[0].deviceId);
+      }
+    } catch (err) {
+      console.warn('Audio devices enumeration error:', err);
+    }
+  };
+
+  const stopMicTest = () => {
+    setIsTestingMic(false);
+    setMicTestLevel(0);
+    if (testAnimRef.current) {
+      cancelAnimationFrame(testAnimRef.current);
+      testAnimRef.current = null;
+    }
+    if (testStreamRef.current) {
+      testStreamRef.current.getTracks().forEach(t => {
+        try { t.stop(); } catch (e) {}
+      });
+      testStreamRef.current = null;
+    }
+    if (testAudioCtxRef.current) {
+      testAudioCtxRef.current.close().catch(() => {});
+      testAudioCtxRef.current = null;
+    }
+  };
+
+  const startMicTest = async () => {
+    stopMicTest();
+    try {
+      const constraints = {
+        audio: selectedMic ? { deviceId: { exact: selectedMic } } : true,
+        video: false
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      testStreamRef.current = stream;
+
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      const ctx = new AudioCtx();
+      testAudioCtxRef.current = ctx;
+      if (ctx.state === 'suspended') {
+        await ctx.resume();
+      }
+
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.25;
+      source.connect(analyser);
+
+      if (micLoopback) {
+        const loopGain = ctx.createGain();
+        loopGain.gain.value = (speakerVolume / 100) * 0.7;
+        source.connect(loopGain);
+        loopGain.connect(ctx.destination);
+      }
+
+      setIsTestingMic(true);
+
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+
+      const updateMeter = () => {
+        if (!testAudioCtxRef.current) return;
+        analyser.getByteFrequencyData(dataArray);
+
+        let sum = 0;
+        let max = 0;
+        const checkBins = Math.min(30, bufferLength);
+        for (let i = 1; i < checkBins; i++) {
+          const v = dataArray[i];
+          sum += v;
+          if (v > max) max = v;
+        }
+        const avg = sum / (checkBins - 1);
+        const gainMul = (micVolume / 100);
+        const calculated = Math.min(100, Math.max(0, ((max * 0.6 + avg * 0.4) / 1.5) * gainMul));
+
+        setMicTestLevel(prev => Math.round(prev * 0.5 + calculated * 0.5));
+        testAnimRef.current = requestAnimationFrame(updateMeter);
+      };
+
+      testAnimRef.current = requestAnimationFrame(updateMeter);
+    } catch (err) {
+      console.error('Mic test access error:', err);
+      alert('Mikrofonunuza erişilemedi. Lütfen tarayıcı izinlerini kontrol edin.');
+    }
+  };
+
+  useEffect(() => {
+    if (!isSettingsOpen || activeTab !== 'voice') {
+      stopMicTest();
+    } else if (isSettingsOpen && activeTab === 'voice') {
+      refreshAudioDevices();
+    }
+  }, [isSettingsOpen, activeTab]);
+
+  useEffect(() => {
+    if (typeof navigator !== 'undefined' && navigator.mediaDevices?.addEventListener) {
+      const handleDeviceChange = () => refreshAudioDevices();
+      navigator.mediaDevices.addEventListener('devicechange', handleDeviceChange);
+      return () => navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange);
+    }
+  }, []);
+
+  const handleSelectMic = (devId) => {
+    setSelectedMic(devId);
+    webrtc.changeAudioInput(devId);
+    if (isTestingMic) {
+      setTimeout(() => startMicTest(), 100);
+    }
+  };
+
+  const handleSelectSpeaker = (devId) => {
+    setSelectedSpeaker(devId);
+    webrtc.changeAudioOutput(devId);
+  };
+
+  const handleMicVolumeChange = (val) => {
+    const num = Math.max(0, Math.min(200, Number(val) || 0));
+    setMicVolume(num);
+    voiceRelay.setMicVolume(num);
+  };
+
+  const handleSpeakerVolumeChange = (val) => {
+    const num = Math.max(0, Math.min(100, Number(val) || 0));
+    setSpeakerVolume(num);
+    voiceRelay.setMasterOutputVolume(num);
+    if (typeof document !== 'undefined') {
+      document.querySelectorAll('audio').forEach(el => {
+        el.volume = num / 100;
+      });
+    }
+  };
+
+  const handleKrispToggle = () => {
+    const next = !isKrispEnabled;
+    setIsKrispEnabled(next);
+    webrtc.setNoiseSuppression(next);
+    localStorage.setItem('fivecord_noise_suppressed', next ? 'true' : 'false');
+  };
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -667,6 +850,19 @@ export default function UserControlBar({
 
               <button
                 type="button"
+                onClick={() => setActiveTab('voice')}
+                className={`px-4 py-2.5 font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
+                  activeTab === 'voice'
+                    ? 'border-[#5865f2] text-white bg-[#35373c]/50 rounded-t-lg'
+                    : 'border-transparent text-[#949ba4] hover:text-white hover:bg-[#35373c]/30 rounded-t-lg'
+                }`}
+              >
+                <span>🎙️</span>
+                <span>Ses</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setActiveTab('activity')}
                 className={`px-4 py-2.5 font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
                   activeTab === 'activity'
@@ -685,8 +881,8 @@ export default function UserControlBar({
             {/* Modal Body: Two Column Layout */}
             <div className="p-6 overflow-y-auto flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 bg-[#313338]">
               
-              {/* LEFT COLUMN: Controls for Active Tab (7 cols) */}
-              <div className="lg:col-span-7 space-y-5">
+              {/* LEFT COLUMN / FULL WIDTH FOR VOICE: Controls for Active Tab */}
+              <div className={activeTab === 'voice' ? 'lg:col-span-12 space-y-6' : 'lg:col-span-7 space-y-5'}>
 
                 {/* TAB 1: AVATAR & DECORATION */}
                 {activeTab === 'avatar' && (
@@ -1332,9 +1528,264 @@ export default function UserControlBar({
                   </div>
                 )}
 
+                {/* TAB: VOICE & AUDIO (DISCORD STYLE SES AYARLARI) */}
+                {activeTab === 'voice' && (
+                  <div className="space-y-6 animate-in fade-in duration-150 p-1 sm:p-2">
+                    
+                    {/* Header: Ses */}
+                    <div>
+                      <h2 className="text-xl font-bold text-white tracking-tight">Ses</h2>
+                    </div>
+
+                    {/* Device Selectors & Volume Sliders (2 Columns as in Screenshot) */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      
+                      {/* Left: Mikrofon */}
+                      <div className="space-y-4">
+                        <div>
+                          <label className="text-xs font-bold text-[#dbdee1] block mb-2">
+                            Mikrofon
+                          </label>
+                          <div className="relative">
+                            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#949ba4]">
+                              <Mic className="w-4 h-4 text-white" />
+                            </div>
+                            <select
+                              value={selectedMic}
+                              onChange={(e) => handleSelectMic(e.target.value)}
+                              className="w-full pl-10 pr-10 py-2.5 rounded-lg bg-[#1e1f22] border border-[#1e1f22] hover:border-[#383a40] focus:border-[#5865f2] text-white text-xs font-medium focus:outline-hidden appearance-none cursor-pointer transition-colors shadow-inner"
+                            >
+                              {audioInputs.length === 0 ? (
+                                <option value="">Mikrofon Algılanamadı / İzin Bekleniyor</option>
+                              ) : (
+                                audioInputs.map((device, idx) => (
+                                  <option key={device.deviceId || idx} value={device.deviceId}>
+                                    {device.label || `Mikrofon ${idx + 1}`}
+                                  </option>
+                                ))
+                              )}
+                            </select>
+                            <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-[#949ba4]">
+                              <ChevronDown className="w-4 h-4" />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Mikrofon Ses Seviyesi */}
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="text-xs font-bold text-[#dbdee1]">
+                              Mikrofon Ses Seviyesi
+                            </label>
+                            <span className="text-xs font-bold text-white font-mono">
+                              %{micVolume}
+                            </span>
+                          </div>
+                          <div className="relative flex items-center">
+                            <input
+                              type="range"
+                              min="0"
+                              max="200"
+                              value={micVolume}
+                              onChange={(e) => handleMicVolumeChange(Number(e.target.value))}
+                              className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-white transition-all"
+                              style={{
+                                background: `linear-gradient(to right, #5865f2 0%, #5865f2 ${(micVolume / 200) * 100}%, #4e5058 ${(micVolume / 200) * 100}%, #4e5058 100%)`
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right: Konuşmacı (Hoparlör) */}
+                      <div className="space-y-4">
+                        <div>
+                          <label className="text-xs font-bold text-[#dbdee1] block mb-2">
+                            Konuşmacı
+                          </label>
+                          <div className="relative">
+                            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#949ba4]">
+                              <Headphones className="w-4 h-4 text-white" />
+                            </div>
+                            <select
+                              value={selectedSpeaker}
+                              onChange={(e) => handleSelectSpeaker(e.target.value)}
+                              className="w-full pl-10 pr-10 py-2.5 rounded-lg bg-[#1e1f22] border border-[#1e1f22] hover:border-[#383a40] focus:border-[#5865f2] text-white text-xs font-medium focus:outline-hidden appearance-none cursor-pointer transition-colors shadow-inner"
+                            >
+                              {audioOutputs.length === 0 ? (
+                                <option value="">Varsayılan Hoparlör / Kulaklık</option>
+                              ) : (
+                                audioOutputs.map((device, idx) => (
+                                  <option key={device.deviceId || idx} value={device.deviceId}>
+                                    {device.label || `Hoparlör ${idx + 1}`}
+                                  </option>
+                                ))
+                              )}
+                            </select>
+                            <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-[#949ba4]">
+                              <ChevronDown className="w-4 h-4" />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Hoparlör Ses Seviyesi */}
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="text-xs font-bold text-[#dbdee1]">
+                              Hoparlör Ses Seviyesi
+                            </label>
+                            <span className="text-xs font-bold text-white font-mono">
+                              %{speakerVolume}
+                            </span>
+                          </div>
+                          <div className="relative flex items-center">
+                            <input
+                              type="range"
+                              min="0"
+                              max="100"
+                              value={speakerVolume}
+                              onChange={(e) => handleSpeakerVolumeChange(Number(e.target.value))}
+                              className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-white transition-all"
+                              style={{
+                                background: `linear-gradient(to right, #5865f2 0%, #5865f2 ${speakerVolume}%, #4e5058 ${speakerVolume}%, #4e5058 100%)`
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                    </div>
+
+                    {/* Mikrofon Testi (Button + 45 Vertical Bars Visualizer) */}
+                    <div className="pt-2">
+                      <div className="flex flex-col sm:flex-row items-center gap-4">
+                        <button
+                          type="button"
+                          onClick={isTestingMic ? stopMicTest : startMicTest}
+                          className={`w-full sm:w-auto px-5 py-2.5 rounded-md text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer shrink-0 ${
+                            isTestingMic
+                              ? 'bg-[#f23f43] hover:bg-[#da373b] text-white animate-pulse'
+                              : 'bg-[#5865f2] hover:bg-[#4752c4] text-white hover:scale-[1.02]'
+                          }`}
+                        >
+                          {isTestingMic ? (
+                            <>
+                              <Square className="w-3.5 h-3.5 fill-current" />
+                              <span>Testi Durdur</span>
+                            </>
+                          ) : (
+                            <span>Mikrofon Testi</span>
+                          )}
+                        </button>
+
+                        {/* 45 Vertical Level Bars (Discord Style Visualizer) */}
+                        <div className="w-full flex-1 h-8 px-2.5 rounded-md bg-[#1e1f22] border border-[#2b2d31] flex items-center justify-between gap-[3px] overflow-hidden">
+                          {Array.from({ length: 45 }).map((_, i) => {
+                            const activeBars = Math.round((micTestLevel / 100) * 45);
+                            const isLit = isTestingMic && i < activeBars;
+                            return (
+                              <div
+                                key={i}
+                                className={`flex-1 rounded-xs transition-all duration-75 ${
+                                  isLit
+                                    ? i > 37 
+                                      ? 'h-5.5 bg-[#f23f43] shadow-[0_0_5px_#f23f43]' 
+                                      : i > 28 
+                                        ? 'h-4.5 bg-[#fee75c] shadow-[0_0_5px_#fee75c]' 
+                                        : 'h-4 bg-[#23a55a] shadow-[0_0_5px_#23a55a]'
+                                    : isTestingMic
+                                      ? 'h-2 bg-[#35373c]'
+                                      : 'h-2 bg-[#2b2d31]'
+                                }`}
+                              />
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Loopback toggle under test */}
+                      <div className="flex items-center justify-between mt-2 px-1">
+                        <span className="text-[11px] text-[#949ba4]">
+                          {isTestingMic ? 'Mikrofonunuza konuşarak seviye çubuklarını test edin.' : 'Mikrofonunuzun çalıştığından emin olmak için test başlatın.'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setMicLoopback(prev => !prev)}
+                          className={`text-[11px] font-bold transition-colors cursor-pointer ${
+                            micLoopback ? 'text-[#23a55a]' : 'text-[#949ba4] hover:text-white'
+                          }`}
+                        >
+                          {micLoopback ? '✓ Kendi Sesimi Duy (Açık)' : 'Kendi Sesimi Duy (Kapalı)'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Krisp Noise Suppression & Enhanced Processing */}
+                    <div className="p-4 rounded-xl bg-[#2b2d31] border border-[#383a40] space-y-3">
+                      <div className="text-xs font-bold uppercase tracking-wider text-[#b5bac1] flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-[#5865f2]" />
+                        <span>Gelişmiş Ses İşleme</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {/* Krisp */}
+                        <div 
+                          onClick={handleKrispToggle}
+                          className="p-3 rounded-xl bg-[#1e1f22] border border-[#383a40] hover:border-[#5865f2] flex items-center justify-between cursor-pointer transition-all"
+                        >
+                          <div>
+                            <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                              <span>Krisp Gürültü Engelleme</span>
+                              <span className="text-[9px] px-1.5 py-0.2 rounded bg-[#5865f2] text-white font-black">AI</span>
+                            </div>
+                            <div className="text-[11px] text-[#949ba4] mt-0.5">
+                              Klavye tıkırtılarını ve arka plan gürültülerini filtreler
+                            </div>
+                          </div>
+                          <div className={`w-10 h-5 rounded-full transition-colors relative flex items-center px-0.5 ${
+                            isKrispEnabled ? 'bg-[#23a55a]' : 'bg-[#4e5058]'
+                          }`}>
+                            <div className={`w-4 h-4 rounded-full bg-white transition-transform ${
+                              isKrispEnabled ? 'translate-x-5' : 'translate-x-0'
+                            }`} />
+                          </div>
+                        </div>
+
+                        {/* Echo Cancellation & AGC Status */}
+                        <div className="p-3 rounded-xl bg-[#1e1f22] border border-[#383a40] flex items-center justify-between">
+                          <div>
+                            <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                              <span>Yankı ve Kazanç Kontrolü (AEC/AGC)</span>
+                              <span className="text-[9px] px-1.5 py-0.2 rounded bg-[#23a55a]/20 text-[#23a55a] font-bold">AKTİF</span>
+                            </div>
+                            <div className="text-[11px] text-[#949ba4] mt-0.5">
+                              Hoparlör sesinin mikrofona yankı yapmasını önler
+                            </div>
+                          </div>
+                          <Check className="w-5 h-5 text-[#23a55a]" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Footer Help Note as in screenshot */}
+                    <div className="pt-2 text-xs text-[#949ba4] flex items-center gap-1.5">
+                      <span>Yardım mı lazım?</span>
+                      <button
+                        type="button"
+                        onClick={() => setShowTroubleshoot(true)}
+                        className="text-[#00a8fc] hover:underline font-semibold cursor-pointer"
+                      >
+                        Sorun giderme rehberimize göz at.
+                      </button>
+                    </div>
+
+                  </div>
+                )}
+
               </div>
 
               {/* RIGHT COLUMN: REALISTIC STICKY DISCORD PROFILE PREVIEW (5 cols) */}
+              {activeTab !== 'voice' && (
               <div className="lg:col-span-5 flex flex-col">
                 <div className="sticky top-0 space-y-3">
                   <div className="flex items-center justify-between">
@@ -1494,6 +1945,7 @@ export default function UserControlBar({
                   </p>
                 </div>
               </div>
+              )}
 
             </div>
 
@@ -1536,6 +1988,61 @@ export default function UserControlBar({
             </div>
 
           </div>
+
+          {/* TROUBLESHOOTING GUIDE MODAL */}
+          {showTroubleshoot && (
+            <div 
+              onClick={() => setShowTroubleshoot(false)}
+              className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in"
+            >
+              <div 
+                onClick={(e) => e.stopPropagation()}
+                className="w-full max-w-md rounded-2xl bg-[#313338] border border-[#383a40] p-6 shadow-2xl space-y-4"
+              >
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    <AlertCircle className="w-5 h-5 text-[#00a8fc]" />
+                    <span>Ses ve Mikrofon Sorun Giderme</span>
+                  </h3>
+                  <button 
+                    onClick={() => setShowTroubleshoot(false)}
+                    className="p-1 rounded-full text-[#949ba4] hover:text-white bg-[#1e1f22] cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="space-y-3 text-xs text-[#dbdee1] leading-relaxed">
+                  <div className="p-3 rounded-xl bg-[#2b2d31] border border-[#383a40]">
+                    <div className="font-bold text-white mb-1">1. Tarayıcı Mikrofon İzni</div>
+                    <div>Adres çubuğundaki kilit (🔒) simgesine tıklayın ve Mikrofona "İzin Ver"ildiğinden emin olun.</div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-[#2b2d31] border border-[#383a40]">
+                    <div className="font-bold text-white mb-1">2. Doğru Mikrofonu Seçin</div>
+                    <div>Yukarıdaki "Mikrofon" açılır menüsünden kulaklığınızın veya harici mikrofonunuzun seçili olduğunu kontrol edin.</div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-[#2b2d31] border border-[#383a40]">
+                    <div className="font-bold text-white mb-1">3. Windows Gizlilik Ayarları</div>
+                    <div>Windows Ayarları &gt; Gizlilik &gt; Mikrofon bölümünde masaüstü uygulamalarının mikrofona erişiminin açık olduğunu doğrulayın.</div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-[#2b2d31] border border-[#383a40]">
+                    <div className="font-bold text-white mb-1">4. Mikrofon Ses Düzeyi</div>
+                    <div>Mikrofon Ses Seviyesi çubuğunu %100 veya %150'ye getirerek sesinizi güçlendirin.</div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setShowTroubleshoot(false)}
+                  className="w-full py-2.5 rounded-xl bg-[#5865f2] hover:bg-[#4752c4] text-white text-xs font-bold transition-all cursor-pointer"
+                >
+                  Anladım, Teşekkürler
+                </button>
+              </div>
+            </div>
+          )}
         </div>,
         document.body
       )}

@@ -43,6 +43,32 @@ class VoiceRelayManager {
     return this.userVolumes.get(socketId) ?? 1.0;
   }
 
+  setMicVolume(volPercent) {
+    this.micVolume = Math.max(0, Math.min(200, Number(volPercent) || 100));
+    try {
+      localStorage.setItem('fivecord_mic_volume', this.micVolume);
+    } catch (e) {}
+  }
+
+  getMicVolume() {
+    if (this.micVolume !== undefined) return this.micVolume;
+    const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('fivecord_mic_volume') : null;
+    return saved !== null ? Number(saved) : 100;
+  }
+
+  setMasterOutputVolume(volPercent) {
+    this.masterOutputVolume = Math.max(0, Math.min(100, Number(volPercent) || 100));
+    try {
+      localStorage.setItem('fivecord_output_volume', this.masterOutputVolume);
+    } catch (e) {}
+  }
+
+  getMasterOutputVolume() {
+    if (this.masterOutputVolume !== undefined) return this.masterOutputVolume;
+    const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('fivecord_output_volume') : null;
+    return saved !== null ? Number(saved) : 100;
+  }
+
   setMuted(muted) {
     this.isMuted = muted;
   }
@@ -122,10 +148,11 @@ class VoiceRelayManager {
         if (this.hangover > 0) {
           this.hangover--;
 
-          // Convert Float32 [-1, 1] to Int16 [-32768, 32767]
+          // Convert Float32 [-1, 1] to Int16 [-32768, 32767] with mic gain
+          const micGain = this.getMicVolume() / 100;
           const pcm16 = new Int16Array(input.length);
           for (let i = 0; i < input.length; i++) {
-            const s = Math.max(-1, Math.min(1, input[i]));
+            const s = Math.max(-1, Math.min(1, input[i] * micGain));
             pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
           }
 
@@ -188,10 +215,11 @@ class VoiceRelayManager {
       const source = ctx.createBufferSource();
       source.buffer = audioBuffer;
 
-      // Apply individual user volume
+      // Apply individual user volume & master output volume
       const gainNode = ctx.createGain();
       const userVol = this.getUserVolume(senderSocketId);
-      gainNode.gain.value = Math.max(0, userVol);
+      const masterVol = this.getMasterOutputVolume() / 100;
+      gainNode.gain.value = Math.max(0, userVol * masterVol);
 
       source.connect(gainNode);
       gainNode.connect(ctx.destination);
