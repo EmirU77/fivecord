@@ -14,6 +14,7 @@ import DownloadModal from './components/DownloadModal';
 import MusicPlayerModal from './components/MusicPlayerModal';
 import DecisionWheelModal from './components/DecisionWheelModal';
 import WatchTogetherModal from './components/WatchTogetherModal';
+import LoginModal from './components/LoginModal';
 import { socket } from './services/socket';
 import { webrtc } from './services/webrtc';
 import { voiceRelay } from './services/voiceRelay';
@@ -30,8 +31,9 @@ const DEFAULT_USER = {
 export default function App() {
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = localStorage.getItem('fivecord_user');
-    return saved ? JSON.parse(saved) : DEFAULT_USER;
+    return saved ? JSON.parse(saved) : null;
   });
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(!currentUser);
 
   // Views: 'server' (Fivecord VIP) | 'dm' (Direct Messages / Özel Mesajlar)
   const [activeView, setActiveView] = useState('server');
@@ -121,6 +123,24 @@ export default function App() {
     }
   }, [activeMusicState]);
 
+
+  const handleLogin = (userData) => {
+    localStorage.setItem('fivecord_user', JSON.stringify(userData));
+    setCurrentUser(userData);
+    setIsLoginModalOpen(false);
+    socket.emit('user-join', userData);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('fivecord_user');
+    if (currentVoiceChannel) {
+      socket.emit('leave-voice-channel');
+      setCurrentVoiceChannel(null);
+    }
+    setCurrentUser(null);
+    setIsLoginModalOpen(true);
+  };
+
   const handleUpdateProfile = (updated) => {
     const newUser = { ...currentUser, ...updated };
     setCurrentUser(newUser);
@@ -131,7 +151,13 @@ export default function App() {
   // --- SOCKET.IO INITIALIZATION ---
   useEffect(() => {
     socket.on('connect', () => {
-      socket.emit('user-join', currentUser);
+      if (currentUser) {
+        socket.emit('user-join', currentUser);
+      }
+    });
+
+    socket.on('session-replaced', ({ message }) => {
+      alert(message || 'Hesabınıza başka bir sekmeden veya cihazdan giriş yapıldı.');
     });
 
     socket.on('initial-data', ({ channels, stations, watchTogether }) => {
@@ -184,7 +210,7 @@ export default function App() {
         setUnreadDms(prev => new Set(prev).add(msg.sender.id));
       }
 
-      if (msg.sender.id !== currentUser.id) {
+      if (msg.sender.id !== currentUser?.id) {
         soundEffects.playMessage();
       }
     });
@@ -364,7 +390,7 @@ export default function App() {
     };
 
     webrtc.onSpeakingChanged = (speaking) => {
-      setMembers(prev => prev.map(m => m.id === currentUser.id ? {
+      setMembers(prev => prev.map(m => m.id === currentUser?.id ? {
         ...m,
         voiceState: { ...m.voiceState, isSpeaking: speaking }
       } : m));
@@ -385,6 +411,7 @@ export default function App() {
       socket.off('peer-voice-state-updated');
       socket.off('music-state-updated');
       socket.off('watch-together-updated');
+      socket.off('session-replaced');
       socket.off('entrance-sound-played');
       socket.off('tts-speak');
       socket.off('game-scan-result');
@@ -466,7 +493,7 @@ export default function App() {
       next.delete(targetFriend.id);
       return next;
     });
-    const dmChannelId = 'dm-' + [currentUser.id, targetFriend.id].sort().join('-');
+    const dmChannelId = 'dm-' + [(currentUser?.id || 'me'), targetFriend.id].sort().join('-');
     const dmChannel = {
       id: dmChannelId,
       name: targetFriend.username,
@@ -697,7 +724,7 @@ export default function App() {
             handleSelectDmUser(activeDmUser);
             return;
           }
-          const other = members.find(m => m.id !== currentUser.id && !m.isBot);
+          const other = members.find(m => m.id !== currentUser?.id && !m.isBot);
           if (other) {
             handleSelectDmUser(other);
           } else {
@@ -900,6 +927,13 @@ export default function App() {
         isOpen={isWatchTogetherOpen}
         onClose={() => setIsWatchTogetherOpen(false)}
         onStart={handleStartWatchTogether}
+      />
+
+      {/* QUICK LOGIN MODAL */}
+      <LoginModal
+        isOpen={isLoginModalOpen || !currentUser}
+        onLogin={handleLogin}
+        currentUsername={currentUser?.username || ''}
       />
     </div>
   );

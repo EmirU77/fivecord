@@ -17,6 +17,7 @@ export default function Sidebar({
   members,
   currentUser,
   onUpdateProfile,
+  onLogout,
   isMuted,
   setIsMuted,
   isDeafened,
@@ -474,6 +475,7 @@ export default function Sidebar({
         setIsMuted={setIsMuted}
         isDeafened={isDeafened}
         setIsDeafened={setIsDeafened}
+        onLogout={onLogout}
       />
     </div>
   );

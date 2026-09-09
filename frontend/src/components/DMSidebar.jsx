@@ -8,6 +8,7 @@ export default function DMSidebar({
   activeDmUser,
   onSelectDmUser,
   onUpdateProfile,
+  onLogout,
   isMuted,
   setIsMuted,
   isDeafened,
@@ -133,6 +134,7 @@ export default function DMSidebar({
         setIsMuted={setIsMuted}
         isDeafened={isDeafened}
         setIsDeafened={setIsDeafened}
+        onLogout={onLogout}
       />
     </div>
   );

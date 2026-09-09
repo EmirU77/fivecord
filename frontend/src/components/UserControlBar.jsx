@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
-  Mic, MicOff, Headphones, Settings, X, Check, Smile, 
+  Mic, MicOff, Headphones, Settings, LogOut, X, Check, Smile, 
   Upload, Link2, Sparkles, Palette, Image as ImageIcon, Loader2,
   Crown, Zap, Shield, Flame, User, Info, Hash, Circle, Volume2, Play,
   Gamepad2, RefreshCw
@@ -250,7 +250,8 @@ export default function UserControlBar({
   isMuted, 
   setIsMuted, 
   isDeafened, 
-  setIsDeafened 
+  setIsDeafened,
+  onLogout
 }) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('avatar'); // avatar, banner, status, badges, entrance
@@ -477,8 +478,8 @@ export default function UserControlBar({
             <div className="text-[10px] text-[#949ba4] truncate flex items-center gap-1">
               {currentUser?.activity ? (
                 <span className="text-[#23a55a] font-bold truncate flex items-center gap-1">
-                  <span>{currentUser.activityIcon || '🎮'}</span>
-                  <span className="truncate">{currentUser.activity}</span>
+                  <span>{currentUser?.activityIcon || '🎮'}</span>
+                  <span className="truncate">{currentUser?.activity}</span>
                 </span>
               ) : (
                 <>
@@ -519,6 +520,16 @@ export default function UserControlBar({
           >
             <Settings className="w-4 h-4" />
           </button>
+
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              title="Hesap Değiştir / Çıkış Yap"
+              className="p-1.5 rounded hover:bg-[#f23f43]/20 text-[#949ba4] hover:text-[#f23f43] transition-colors cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -1457,8 +1468,23 @@ export default function UserControlBar({
 
             {/* Footer */}
             <div className="px-6 py-3.5 bg-[#2b2d31] border-t border-[#383a40] flex items-center justify-between shrink-0">
-              <div className="text-xs text-[#949ba4] hidden sm:block">
-                ✨ İstediğin zaman profili değiştirebilirsin
+              <div className="flex items-center gap-2">
+                {onLogout && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsSettingsOpen(false);
+                      onLogout();
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-[#f23f43]/15 hover:bg-[#f23f43] text-[#f23f43] hover:text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Hesap Değiştir / Çıkış Yap</span>
+                  </button>
+                )}
+                <div className="text-xs text-[#949ba4] hidden sm:block">
+                  ✨ İstediğin zaman profili değiştirebilirsin
+                </div>
               </div>
 
               <div className="flex items-center gap-3">

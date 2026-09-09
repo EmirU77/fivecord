@@ -127,6 +127,51 @@ const textMessages = new Map();
 const channelMusic = new Map();
 const watchTogetherRooms = new Map();
 
+// Persistent Accounts Store (for easy login & deduplication)
+const ACCOUNTS_FILE = path.join(__dirname, '..', 'data', 'accounts.json');
+
+function loadAccounts() {
+  try {
+    if (fs.existsSync(ACCOUNTS_FILE)) {
+      const data = JSON.parse(fs.readFileSync(ACCOUNTS_FILE, 'utf8'));
+      if (Array.isArray(data)) return data;
+    }
+  } catch (e) {
+    console.warn('[Accounts] Error reading accounts:', e.message);
+  }
+  return [];
+}
+
+function saveAccount(userData) {
+  try {
+    const dir = path.dirname(ACCOUNTS_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    let accounts = loadAccounts();
+    const cleanName = (userData.username || '').trim();
+    if (!cleanName) return;
+
+    const idx = accounts.findIndex(a => a.username.toLowerCase() === cleanName.toLowerCase());
+    const acc = {
+      id: userData.id || ('user-' + cleanName.toLowerCase().replace(/[^a-z0-9_-]/g, '')),
+      username: cleanName,
+      avatar: userData.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanName}`,
+      color: userData.color || '#5865F2',
+      customStatus: userData.customStatus || 'Fivecord kullanıyor',
+      entranceSound: userData.entranceSound || 'mvp',
+      lastSeen: Date.now()
+    };
+    if (idx !== -1) {
+      accounts[idx] = { ...accounts[idx], ...acc };
+    } else {
+      accounts.push(acc);
+    }
+    fs.writeFileSync(ACCOUNTS_FILE, JSON.stringify(accounts, null, 2), 'utf8');
+  } catch (e) {
+    console.warn('[Accounts] Failed to save account:', e.message);
+  }
+}
+
+
 // High Quality Free 24/7 Music Stations
 const MUSIC_STATIONS = [
   {
@@ -409,6 +454,10 @@ function setVoiceChannelMusic(targetVoiceChannelId, track, senderUsername = 'Kul
   return state;
 }
 
+app.get('/api/accounts', (req, res) => {
+  res.json({ accounts: loadAccounts() });
+});
+
 app.get('/api/music/search', async (req, res) => {
   const query = req.query.q;
   const platform = req.query.platform || 'all';
@@ -445,11 +494,44 @@ io.on('connection', (socket) => {
   });
 
   socket.on('user-join', (userData) => {
+    if (!userData) return;
+    const cleanUsername = (userData.username || `Üye-${socket.id.slice(0, 4)}`).trim();
+
+    // DEDUPLICATION: Check if another socket has the exact same username or ID
+    // If so, replace old socket so user NEVER takes up duplicate slots (+1 yer kaplamaz)
+    for (const [existingSocketId, existingUser] of users.entries()) {
+      if (existingSocketId !== socket.id) {
+        const isSameName = existingUser.username.toLowerCase() === cleanUsername.toLowerCase();
+        const isSameId = userData.id && existingUser.id === userData.id;
+
+        if (isSameName || isSameId) {
+          console.log(`[Session Replaced] ${cleanUsername} reconnected from socket ${socket.id}. Removing stale socket ${existingSocketId}.`);
+          
+          // Clean up voice channel if old socket was in voice
+          for (const [chId, membersSet] of voiceChannels.entries()) {
+            if (membersSet.has(existingUser.id) || membersSet.has(existingSocketId)) {
+              membersSet.delete(existingUser.id);
+              membersSet.delete(existingSocketId);
+            }
+          }
+
+          const oldSocket = io.sockets.sockets.get(existingSocketId);
+          if (oldSocket) {
+            oldSocket.emit('session-replaced', { 
+              message: 'Hesabınıza başka bir sekmeden veya cihazdan (Google Chrome vb.) giriş yapıldı.' 
+            });
+          }
+
+          users.delete(existingSocketId);
+        }
+      }
+    }
+
     const user = {
       socketId: socket.id,
-      id: userData.id || socket.id,
-      username: userData.username || `Üye-${socket.id.slice(0, 4)}`,
-      avatar: userData.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${userData.username || socket.id}`,
+      id: userData.id || ('user-' + cleanUsername.toLowerCase().replace(/[^a-z0-9_-]/g, '')),
+      username: cleanUsername,
+      avatar: userData.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanUsername}`,
       color: userData.color || '#5865F2',
       status: userData.status || 'online',
       customStatus: userData.customStatus || 'Fivecord kullanıyor',
@@ -467,8 +549,11 @@ io.on('connection', (socket) => {
         isSpeaking: false
       }
     };
+
     users.set(socket.id, user);
+    saveAccount(user);
     io.emit('members-updated', getAllMembers());
+    console.log(`[User Joined] ${user.username} (${socket.id}) - Toplam Aktif Üye: ${users.size}`);
   });
 
   socket.on('create-channel', ({ name, type }) => {
