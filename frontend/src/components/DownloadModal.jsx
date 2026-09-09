@@ -125,7 +125,7 @@ export default function DownloadModal({ isOpen, onClose, onDownloaded }) {
                   <span>{copied ? 'Kopyalandı!' : 'Linki Kopyala'}</span>
                 </button>
                 <a
-                  href="https://github.com/EmirU77/fivecord/releases/download/v1.0.0/Fivecord-Masaustu-Uygulamasi.zip"
+                  href="https://github.com/EmirU77/fivecord/releases/download/v1.0.0/Synapse-Masaustu-Uygulamasi.zip"
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={() => onDownloaded?.()}

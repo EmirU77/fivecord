@@ -116,9 +116,13 @@ class WebRTCManager {
 
     const savedInputId = typeof localStorage !== 'undefined' ? localStorage.getItem('fivecord_audio_input') : null;
     const audioConstraint = {
-      echoCancellation: false,
-      noiseSuppression: false,
-      autoGainControl: false,
+      echoCancellation: { ideal: true },
+      noiseSuppression: { ideal: true },
+      autoGainControl: { ideal: true },
+      googEchoCancellation: { ideal: true },
+      googAutoGainControl: { ideal: true },
+      googNoiseSuppression: { ideal: true },
+      googHighpassFilter: { ideal: true },
       ...(savedInputId ? { deviceId: { exact: savedInputId } } : {})
     };
 
@@ -629,7 +633,7 @@ class WebRTCManager {
           displaySurface: 'monitor'
         },
         audio: withAudio ? {
-          echoCancellation: false,
+          echoCancellation: true,
           noiseSuppression: false,
           autoGainControl: false,
           channelCount: 2

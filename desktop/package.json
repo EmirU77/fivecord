@@ -1,0 +1,6 @@
+{
+  "name": "synapse-desktop",
+  "version": "1.0.0",
+  "description": "Synapse Desktop",
+  "main": "main.cjs"
+}
