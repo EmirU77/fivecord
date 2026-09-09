@@ -116,9 +116,9 @@ class WebRTCManager {
 
     const savedInputId = typeof localStorage !== 'undefined' ? localStorage.getItem('fivecord_audio_input') : null;
     const audioConstraint = {
-      echoCancellation: { ideal: true },
+      echoCancellation: false,
       noiseSuppression: false,
-      autoGainControl: { ideal: true },
+      autoGainControl: false,
       ...(savedInputId ? { deviceId: { exact: savedInputId } } : {})
     };
 

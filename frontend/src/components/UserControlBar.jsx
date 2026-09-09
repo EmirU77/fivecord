@@ -1720,34 +1720,6 @@ export default function UserControlBar({
                       </div>
                     </div>
 
-                    {/* Audio Processing Info */}
-                    <div className="p-4 rounded-xl bg-[#2b2d31] border border-[#383a40] space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="text-xs font-bold uppercase tracking-wider text-[#b5bac1] flex items-center gap-1.5">
-                          <span className="text-sm">🎙️</span>
-                          <span>Ses İşleme</span>
-                        </div>
-                      </div>
-
-                      {/* Echo Cancellation & AGC Info Bar */}
-                      <div className="p-3 rounded-xl bg-[#1e1f22] border border-[#383a40] flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm">🛡️</span>
-                          <div>
-                            <span className="font-bold text-white">Akustik Yankı & Otomatik Kazanç (AEC/AGC)</span>
-                            <span className="text-[11px] text-[#949ba4] block">Kulaklıksız kullanımda dahi mikrofon hoparlör döngüsünü keser.</span>
-                          </div>
-                        </div>
-                        <span className="text-[10px] font-bold text-[#23a55a] bg-[#23a55a]/15 px-2.5 py-1 rounded-full flex items-center gap-1 shrink-0">
-                          <Check className="w-3.5 h-3.5" />
-                          <span>AKTİF</span>
-                        </span>
-                      </div>
-
-                      <div className="text-[11px] text-[#949ba4]">
-                        Ses doğrudan iletilir — hiçbir filtre veya gürültü engelleme uygulanmaz. Temiz ve doğal ses.
-                      </div>
-                    </div>
 
                     {/* Footer Help Note as in screenshot */}
                     <div className="pt-2 text-xs text-[#949ba4] flex items-center gap-1.5">
