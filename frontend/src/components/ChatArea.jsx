@@ -242,13 +242,13 @@ export default function ChatArea({
           <div className="h-4 w-px bg-[#3f4147] hidden sm:block" />
 
           <span className="text-xs text-[#949ba4] font-medium hidden md:inline truncate max-w-xs">
-            {channel.topic || '5 kişilik özel VIP ana sohbet alanı'}
+            {channel.topic || 'Topluluk ana sohbet alanı'}
           </span>
 
-          {/* VIP Badges */}
+          {/* Badges */}
           <div className="hidden xl:flex items-center gap-2">
             <span className="px-2 py-0.5 rounded-full bg-[#5865f2]/15 border border-[#5865f2]/30 text-[#5865f2] text-[10px] font-bold flex items-center gap-1">
-              <Sparkles className="w-3 h-3" /> 5 Kişilik Özel VIP
+              <Sparkles className="w-3 h-3" /> Sınırsız Topluluk
             </span>
             <span className="px-2 py-0.5 rounded-full bg-[#23a55a]/15 border border-[#23a55a]/30 text-[#23a55a] text-[10px] font-bold flex items-center gap-1">
               <Zap className="w-3 h-3" /> 60 FPS Ultra HQ

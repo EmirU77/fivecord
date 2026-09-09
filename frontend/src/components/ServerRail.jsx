@@ -51,12 +51,12 @@ export default function ServerRail({
           onClick={onSelectServer}
           className={`w-12 h-12 flex items-center justify-center text-white font-black text-lg transition-all duration-200 relative overflow-hidden shadow-lg ${
             isServer 
-              ? 'rounded-2xl bg-gradient-to-br from-[#5865f2] to-[#4752c4] ring-2 ring-[#5865f2]/50 scale-105' 
+              ? 'rounded-2xl bg-gradient-to-br from-[#5865f2] to-[#7950f2] ring-2 ring-[#5865f2]/50 scale-105' 
               : 'rounded-3xl group-hover:rounded-2xl bg-[#313338] hover:bg-[#5865f2] group-hover:scale-105'
           }`}
-          title="Fivecord VIP Sunucusu"
+          title="Synapse Sunucusu"
         >
-          <span className="font-extrabold tracking-tighter">5</span>
+          <span className="font-black tracking-tight text-xl">S</span>
           <div className="absolute -bottom-1 -right-1 p-0.5 bg-[#23a55a] rounded-full">
             <ShieldCheck className="w-2.5 h-2.5 text-white" />
           </div>

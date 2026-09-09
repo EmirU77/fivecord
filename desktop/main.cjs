@@ -103,12 +103,12 @@ const SPLASH_HTML = `<!DOCTYPE html>
 </head>
 <body>
   <div class="card">
-    <div class="logo">5</div>
-    <div class="title">Fivecord VIP</div>
-    <div id="status" class="status">Bulut sunucusuna bağlanılıyor...</div>
+    <div class="logo">S</div>
+    <div class="title">Synapse</div>
+    <div id="status" class="status">Sunucuya bağlanılıyor...</div>
     <div id="spinner" class="spinner"></div>
     <button id="retryBtn" class="retry-btn" onclick="location.reload()">Tekrar Dene</button>
-    <div class="badge">5 KİŞİLİK ÖZEL VIP DISCORD</div>
+    <div class="badge">SESLİ & GÖRÜNTÜLÜ İLETİŞİM PLATFORMU</div>
   </div>
 </body>
 </html>`;
@@ -146,7 +146,7 @@ async function createWindow() {
     minWidth: 940,
     minHeight: 520,
     backgroundColor: '#1e1f22',
-    title: 'Fivecord — 5 Kişilik Özel VIP Discord',
+    title: 'Synapse — Sesli & Görüntülü İletişim Platformu',
     autoHideMenuBar: true,
     show: true,
     webPreferences: {
@@ -173,12 +173,12 @@ async function createWindow() {
     }
   });
 
-  // Identify client as official Fivecord Desktop
+  // Identify client as official Synapse Desktop
   const baseUA = mainWindow.webContents.getUserAgent();
-  mainWindow.webContents.setUserAgent(`${baseUA} FivecordDesktop/1.0.0`);
+  mainWindow.webContents.setUserAgent(`${baseUA} SynapseDesktop/1.0.0`);
 
   mainWindow.webContents.on('dom-ready', () => {
-    mainWindow.webContents.executeJavaScript('window.isFivecordDesktop = true;').catch(() => {});
+    mainWindow.webContents.executeJavaScript('window.isSynapseDesktop = true; window.isFivecordDesktop = true;').catch(() => {});
   });
 
   // Load splash screen immediately

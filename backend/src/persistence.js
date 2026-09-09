@@ -53,7 +53,7 @@ export const DEFAULT_ROLES = [
 ];
 
 export const DEFAULT_CHANNELS = [
-  { id: 'text-genel', name: 'genel-sohbet', type: 'text', topic: '5 kişilik ana sohbet alanı' },
+  { id: 'text-genel', name: 'genel-sohbet', type: 'text', topic: 'Topluluk ana sohbet alanı' },
   { id: 'text-oyun', name: 'oyun-odası', type: 'text', topic: 'Oyun içi paylaşımlar ve taktikler' },
   { id: 'text-medya', name: 'klipler-ve-ss', type: 'text', topic: 'Ekran görüntüleri ve videolar' },
   { id: 'voice-genel', name: '🔊 Ses Odası - Genel', type: 'voice', bitrate: '128kbps' },
@@ -162,7 +162,7 @@ export function saveAccount(userData) {
       color: userData.color || existing?.color || '#5865F2',
       nameEffect: userData.nameEffect || existing?.nameEffect || 'normal',
       badges: Array.isArray(userData.badges) ? userData.badges : (existing?.badges || []),
-      customStatus: userData.customStatus !== undefined ? userData.customStatus : (existing?.customStatus || 'Fivecord kullanıyor'),
+      customStatus: userData.customStatus !== undefined ? userData.customStatus : (existing?.customStatus || 'Synapse kullanıyor'),
       statusEmoji: userData.statusEmoji !== undefined ? userData.statusEmoji : (existing?.statusEmoji || ''),
       status: userData.status || existing?.status || 'online',
       entranceSound: userData.entranceSound || existing?.entranceSound || 'mvp',

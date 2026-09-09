@@ -19,10 +19,10 @@ export default function ServerInfoModal({ isOpen, onClose }) {
       <div className="w-full max-w-md rounded-2xl bg-[#313338] shadow-2xl border border-[#3f4147] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#2b2d31]">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-lg bg-[#5865f2] flex items-center justify-center text-white font-black text-xs">
-              5
+            <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-[#5865f2] to-[#7950f2] flex items-center justify-center text-white font-black text-xs shadow-xs">
+              S
             </div>
-            <h2 className="text-lg font-bold text-white">Fivecord VIP Sunucusu</h2>
+            <h2 className="text-lg font-bold text-white">Synapse Sunucusu</h2>
           </div>
           <button 
             onClick={onClose}
@@ -36,8 +36,8 @@ export default function ServerInfoModal({ isOpen, onClose }) {
           <div className="p-4 rounded-xl bg-[#2b2d31] border border-[#383a40] space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase text-[#b5bac1]">Arkadaş Davet Bağlantısı</span>
-              <span className="text-[10px] bg-[#23a55a]/20 text-[#23a55a] px-2 py-0.5 rounded font-bold border border-[#23a55a]/30">
-                5 KİŞİLİK VIP
+              <span className="text-[10px] bg-[#5865f2]/20 text-[#5865f2] px-2 py-0.5 rounded font-bold border border-[#5865f2]/30">
+                SINIRSIZ TOPLULUK
               </span>
             </div>
 
@@ -52,7 +52,7 @@ export default function ServerInfoModal({ isOpen, onClose }) {
               </button>
             </div>
             <p className="text-[11px] text-[#949ba4]">
-              Bu linki diğer 4 arkadaşınıza göndererek anında odaya katılmalarını sağlayabilirsiniz.
+              Bu linki arkadaşlarınıza göndererek anında sunucuya katılmalarını sağlayabilirsiniz.
             </p>
           </div>
 

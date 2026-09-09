@@ -58,9 +58,9 @@ export default function DownloadModal({ isOpen, onClose, onDownloaded }) {
               <Zap className="w-3 h-3 inline" /> 60 FPS VIP
             </span>
           </div>
-          <h2 className="text-xl font-black tracking-tight">Fivecord Masaüstü Uygulaması</h2>
+          <h2 className="text-xl font-black tracking-tight">Synapse Masaüstü Uygulaması</h2>
           <p className="text-xs text-white/80 mt-1">
-            Discord alternatifi 5 kişilik özel grubunuz için kesintisiz ses ve 60 FPS yayın deneyimi.
+            Yüksek kaliteli ses ve 60 FPS ultra düşük gecikmeli yayın platformu.
           </p>
         </div>
 

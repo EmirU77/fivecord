@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { 
   User, MessageSquare, Volume2, Shield, ShieldCheck, UserMinus, 
-  Ban, MicOff, Mic, Tv, Check, ChevronRight, X
+  Ban, MicOff, Mic, Tv, Check, ChevronRight, X, UserX, Trash2
 } from 'lucide-react';
 import { socket } from '../services/socket';
 import { voiceRelay } from '../services/voiceRelay';
@@ -116,6 +116,14 @@ export default function UserContextMenu({
     const nextMute = !targetMember?.voiceState?.isMuted;
     socket.emit('server-mute-member', { targetUserId: targetMember.id, isMuted: nextMute });
     onClose();
+  };
+
+  const handleRemoveMember = () => {
+    const confirmed = window.confirm(`"${targetMember.username}" adlı kullanıcının sunucu üyelik kaydını kalıcı olarak silmek istediğinize emin misiniz?`);
+    if (confirmed) {
+      socket.emit('remove-member', { targetUserId: targetMember.id });
+      onClose();
+    }
   };
 
   return (
@@ -264,6 +272,14 @@ export default function UserContextMenu({
           >
             <Ban className="w-3.5 h-3.5" />
             <span>Sunucudan Yasakla (Ban)</span>
+          </button>
+          <button
+            onClick={handleRemoveMember}
+            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md hover:bg-[#c93b2b] hover:text-white text-[#f07167] transition-colors cursor-pointer text-left font-medium border-t border-white/5 mt-0.5"
+            title="Kullanıcının sunucu üyelik kaydını kalıcı olarak siler"
+          >
+            <UserX className="w-3.5 h-3.5" />
+            <span>Sunucudan Kaldır / Kaydı Sil</span>
           </button>
         </div>
       )}

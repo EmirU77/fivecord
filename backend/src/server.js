@@ -185,16 +185,16 @@ const MUSIC_STATIONS = [
 
 // Virtual Music Bot User (Always available, doesn't consume human slots)
 const DJ_BOT_USER = {
-  id: 'bot-fivecord-dj',
-  socketId: 'bot-fivecord-dj',
-  username: 'Fivecord DJ',
+  id: 'bot-synapse-dj',
+  socketId: 'bot-synapse-dj',
+  username: 'Synapse DJ',
   tag: 'BOT',
   isBot: true,
   avatar: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150&auto=format&fit=crop&q=80',
   color: '#5865F2',
   status: 'online',
-  customStatus: '🎵 7/24 Müzik Botu',
-  activity: 'Fivecord DJ',
+  customStatus: '🎵 7/24 Müzik & Radyo',
+  activity: 'Synapse DJ',
   role: 'BOT',
   voiceState: {
     channelId: null,
@@ -652,7 +652,7 @@ io.on('connection', (socket) => {
       avatar: userData.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanUsername}`,
       color: userData.color || '#5865F2',
       status: userData.status || 'online',
-      customStatus: userData.customStatus || 'Fivecord kullanıyor',
+      customStatus: userData.customStatus || 'Synapse kullanıyor',
       activity: userData.activity || '',
       activityIcon: userData.activityIcon || '🎮',
       activityDetail: userData.activityDetail || '',
@@ -964,7 +964,7 @@ io.on('connection', (socket) => {
 
       } else if (cmd === '!stop') {
         stopVoiceChannelMusic(targetVoiceChannelId, 'chat-stop');
-        sendBotChatMessage(channelId, `⏹️ **Fivecord DJ**: Müzik durduruldu ve ses odasından ayrıldı.`);
+        sendBotChatMessage(channelId, `⏹️ **Synapse DJ**: Müzik durduruldu ve ses odasından ayrıldı.`);
       } else if (cmd === '!pause') {
         const state = channelMusic.get(targetVoiceChannelId);
         if (state) {
@@ -978,7 +978,7 @@ io.on('connection', (socket) => {
           DJ_BOT_USER.voiceState.isSpeaking = false;
           io.emit('music-state-updated', { channelId: targetVoiceChannelId, state });
           io.emit('members-updated', getAllMembers());
-          sendBotChatMessage(channelId, `⏸️ **Fivecord DJ**: Müzik duraklatıldı. Devam ettirmek için \`!resume\` yazabilirsiniz.`);
+          sendBotChatMessage(channelId, `⏸️ **Synapse DJ**: Müzik duraklatıldı. Devam ettirmek için \`!resume\` yazabilirsiniz.`);
         }
       } else if (cmd === '!resume') {
         const state = channelMusic.get(targetVoiceChannelId);
@@ -988,7 +988,7 @@ io.on('connection', (socket) => {
           DJ_BOT_USER.voiceState.isSpeaking = true;
           io.emit('music-state-updated', { channelId: targetVoiceChannelId, state });
           io.emit('members-updated', getAllMembers());
-          sendBotChatMessage(channelId, `▶️ **Fivecord DJ**: Müzik devam ediyor: **${state.currentTrack.title || state.currentTrack.name}**`);
+          sendBotChatMessage(channelId, `▶️ **Synapse DJ**: Müzik devam ediyor: **${state.currentTrack.title || state.currentTrack.name}**`);
         }
       } else if (cmd === '!seek') {
         const state = channelMusic.get(targetVoiceChannelId);
@@ -1005,7 +1005,7 @@ io.on('connection', (socket) => {
         state.currentTime = Math.max(0, Math.min(targetSec, maxDur));
         state.updatedAt = Date.now();
         io.emit('music-state-updated', { channelId: targetVoiceChannelId, state });
-        sendBotChatMessage(channelId, `⏩ **Fivecord DJ**: Şarkı \`${formatDuration(state.currentTime)}\` konumuna sarıldı.`);
+        sendBotChatMessage(channelId, `⏩ **Synapse DJ**: Şarkı \`${formatDuration(state.currentTime)}\` konumuna sarıldı.`);
       } else if (cmd === '!forward' || cmd === '!ileri') {
         const state = channelMusic.get(targetVoiceChannelId);
         if (!state || !state.currentTrack) {
@@ -1020,7 +1020,7 @@ io.on('connection', (socket) => {
         state.updatedAt = Date.now();
         io.emit('music-state-updated', { channelId: targetVoiceChannelId, state });
         const durStr = state.duration > 0 ? ` / ${formatDuration(state.duration)}` : '';
-        sendBotChatMessage(channelId, `⏩ **Fivecord DJ**: Şarkı \`+${delta}s\` ileri sarıldı (\`${formatDuration(state.currentTime)}${durStr}\`).`);
+        sendBotChatMessage(channelId, `⏩ **Synapse DJ**: Şarkı \`+${delta}s\` ileri sarıldı (\`${formatDuration(state.currentTime)}${durStr}\`).`);
       } else if (cmd === '!rewind' || cmd === '!geri') {
         const state = channelMusic.get(targetVoiceChannelId);
         if (!state || !state.currentTrack) {
@@ -1034,7 +1034,7 @@ io.on('connection', (socket) => {
         state.updatedAt = Date.now();
         io.emit('music-state-updated', { channelId: targetVoiceChannelId, state });
         const durStr = state.duration > 0 ? ` / ${formatDuration(state.duration)}` : '';
-        sendBotChatMessage(channelId, `⏪ **Fivecord DJ**: Şarkı \`-${delta}s\` geri sarıldı (\`${formatDuration(state.currentTime)}${durStr}\`).`);
+        sendBotChatMessage(channelId, `⏪ **Synapse DJ**: Şarkı \`-${delta}s\` geri sarıldı (\`${formatDuration(state.currentTime)}${durStr}\`).`);
       } else if (cmd === '!np' || cmd === '!nowplaying') {
         const state = channelMusic.get(targetVoiceChannelId);
         if (state && state.isPlaying && state.currentTrack) {
@@ -1068,7 +1068,7 @@ io.on('connection', (socket) => {
       } else if (cmd === '!help') {
         sendBotChatMessage(
           channelId,
-          `🎵 **Fivecord DJ Müzik Botu Komutları:**\n` +
+          `🎵 **Synapse DJ Müzik Botu Komutları:**\n` +
           `• \`!play <şarkı adı>\` — YouTube'da arayıp şarkıyı başlatır (Örn: \`!play Ceza Suspus\`)\n` +
           `• \`!play <YouTube linki>\` — Linkteki müziği başlatır\n` +
           `• \`!play lofi\` / \`gaming\` / \`rock\` — 7/24 kesintisiz radyo başlatır\n` +
@@ -1541,6 +1541,40 @@ io.on('connection', (socket) => {
     let bans = persistence.loadBans().filter(b => b.userId !== targetUserId);
     persistence.saveBans(bans);
     io.emit('bans-updated', bans);
+  });
+
+  socket.on('remove-member', ({ targetUserId }) => {
+    const sender = users.get(socket.id);
+    const accounts = persistence.loadAccounts();
+    const targetAcc = accounts.find(a => a.id === targetUserId);
+    const targetUsername = targetAcc ? targetAcc.username : 'Kullanıcı';
+
+    // Remove from accounts.json
+    const updatedAccounts = accounts.filter(a => a.id !== targetUserId);
+    persistence.safeWriteJSON(persistence.ACCOUNTS_FILE, updatedAccounts);
+
+    // If currently connected, disconnect and remove from channels
+    for (const [sId, u] of users.entries()) {
+      if (u.id === targetUserId) {
+        const targetSocket = io.sockets.sockets.get(sId);
+        if (targetSocket) {
+          targetSocket.emit('kicked-from-server', {
+            reason: 'Sunucu üyeliğiniz yetkili tarafından kalıcı olarak silindi.'
+          });
+          if (u.voiceState?.channelId) {
+            const vCh = voiceChannels.get(u.voiceState.channelId);
+            if (vCh) vCh.delete(u.id);
+            targetSocket.leave(`voice-${u.voiceState.channelId}`);
+          }
+          targetSocket.disconnect(true);
+        }
+        users.delete(sId);
+        break;
+      }
+    }
+
+    sendBotChatMessage('text-genel', `🗑️ **${targetUsername}** adlı kullanıcının sunucu üye kaydı silindi. (Yetkili: ${sender?.username || 'Yönetici'})`);
+    io.emit('members-updated', getAllMembers());
   });
 
   socket.on('get-bans', () => {

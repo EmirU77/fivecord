@@ -69,7 +69,7 @@ export default function LoginModal({ isOpen, onLogin, onClose, currentUser = nul
       username: cleanName,
       avatar: avatarUrl || currentAvatarUrl,
       color: color || selectedColor,
-      customStatus: 'Fivecord kullanıyor',
+      customStatus: 'Synapse kullanıyor',
       entranceSound: 'mvp'
     };
     onLogin(user);
@@ -118,9 +118,9 @@ export default function LoginModal({ isOpen, onLogin, onClose, currentUser = nul
           <div className="w-14 h-14 mx-auto rounded-2xl bg-[#5865f2]/15 border border-[#5865f2]/30 flex items-center justify-center text-[#5865f2] mb-3 shadow-inner">
             <LogIn className="w-7 h-7" />
           </div>
-          <h2 className="text-xl font-black text-white tracking-tight">Fivecord VIP Giriş</h2>
+          <h2 className="text-xl font-black text-white tracking-tight">Synapse Giriş</h2>
           <p className="text-xs text-[#949ba4] mt-1">
-            Profilini seç veya kullanıcı adını yazarak tek tıkla bağlan!
+            Profilini seç veya kullanıcı adını yazarak anında bağlan!
           </p>
         </div>
 

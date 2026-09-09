@@ -30,7 +30,7 @@ const DEFAULT_USER = {
   username: 'Gamer-' + Math.floor(1000 + Math.random() * 9000),
   avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${Date.now()}`,
   color: '#5865f2',
-  customStatus: 'Fivecord kullanıyor'
+  customStatus: 'Synapse kullanıyor'
 };
 
 export default function App() {

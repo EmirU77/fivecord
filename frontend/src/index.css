@@ -24,22 +24,32 @@
     overflow: hidden;
   }
 
-  /* Custom Discord-like sleek scrollbars */
+  /* Custom sleek scrollbars */
   ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 6px;
+    height: 6px;
   }
   ::-webkit-scrollbar-track {
-    background: #2b2d31;
-    border-radius: 4px;
+    background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: #1a1b1e;
-    border-radius: 4px;
+    background: #2b2d31;
+    border-radius: 6px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #111214;
+    background: #35373c;
   }
+}
+
+.synapse-glass {
+  background: rgba(30, 31, 34, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.synapse-glow {
+  box-shadow: 0 0 20px -5px rgba(88, 101, 242, 0.35);
 }
 
 @keyframes pulse-ring {

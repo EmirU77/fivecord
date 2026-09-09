@@ -1,6 +1,6 @@
-# 🚀 Fivecord — 5 Kişilik Özel Discord Platformu (Nitro-Tier & Tamamen Ücretsiz)
+# 🚀 Synapse — Sesli & Görüntülü İletişim Platformu (Ultra Düşük Gecikme & 60 FPS)
 
-Discord Nitro'nun sınırlarını (ekran kalitesi, dosya boyutu, soundboard) kaldıran, 5 kişilik arkadaş grubuna özel, sıfır gecikmeli WebRTC tabanlı bağımsız iletişim uygulaması.
+Discord sınırlarını (ekran kalitesi, dosya boyutu, soundboard) kaldıran, sıfır gecikmeli WebRTC ve hibrit ses aktarımı tabanlı bağımsız iletişim platformu.
 
 ---
 
@@ -10,23 +10,19 @@ Discord Nitro'nun sınırlarını (ekran kalitesi, dosya boyutu, soundboard) kal
   - **4K @ 60 FPS, 1080p @ 60 FPS, 720p @ 60 FPS** ve Kaynak Kalite seçenekleri.
   - Sınırsız video bitrate (15 Mbps'e kadar kristal netlik).
   - Masaüstü / Oyun sesini (System Audio) doğrudan aktarma.
-  - Tam ekran ve Tiyatro modu.
-- 🎙️ **Kristal Netliğinde Ses (Opus Stereo):**
-  - WebRTC P2P doğrudan bağlantı (sunucudan geçmez, 20-40ms gecikme).
-  - Konuşuyor göstergesi (Discord tarzı canlı yeşil halka).
-  - Mikrofon susturma (Mute) & Sağırlaştırma (Deafen).
-  - Her arkadaşınızın sesini ayrı ayrı kısabilme/artırabilme (%0 - %200).
+  - Bağımsız yayın ses mikseri ve Picture-in-Picture (PiP) mini oynatıcı.
+- 🎙️ **Kristal Netliğinde Doğal Ses (Opus Direct):**
+  - WebRTC P2P ve Hibrit Relay destekli doğrudan bağlantı.
+  - Canlı konuşuyor göstergesi ve gürültüsüz doğal ses.
+  - Her kullanıcının mikrofon ve yayın sesini ayrı ayrı kısabilme/artırabilme (%0 - %200).
+- 👑 **Roller ve Yetki Hiyerarşisi:**
+  - Kurucu, Moderatör, VIP ve özel roller.
+  - Sağ tık menüsü ile anında rol atama, susturma, atma ve üyelik kaydını silme.
 - 💬 **1-e-1 Özel Mesajlar (DM):**
-  - Arkadaş listenizden dilediğiniz kişiyle doğrudan baş başa özel mesajlaşma.
-  - Özel sohbet geçmişi ve dosya gönderimi.
-- 💬 **Sınırsız Metin Sohbeti & Dosya Paylaşımı:**
-  - Discord'un 8MB sınırına takılmadan **100MB**'a kadar resim, video ve dosya gönderme.
-  - Mesajlara anlık emoji reaksiyonları bırakma.
-  - Canlı yazıyor göstergesi ("Ali yazıyor...").
-- 🎨 **Discord Birebir Karanlık Tema:**
-  - Sol tarafta ses ve metin kanalları.
-  - Sol altta profil ayarları (Avatar değiştirme, kullanıcı adı, özel durum mesajı).
-  - Sağ tarafta 5 kişilik VIP üye listesi.
+  - Dilediğiniz kullanıcıyla doğrudan baş başa özel mesajlaşma.
+  - 100MB'a kadar sınırsız dosya ve medya paylaşımı.
+- 🎨 **Modern ve Profesyonel Arayüz:**
+  - Sol tarafta ses ve metin kanalları, sağ tarafta hiyerarşik üye listesi.
 
 ---
 

@@ -1871,11 +1871,11 @@ export default function UserControlBar({
                         {/* Membership info */}
                         <div className="space-y-1">
                           <span className="text-[10px] font-bold uppercase tracking-wider text-[#949ba4] block">
-                            FIVECORD ÜYELİĞİ
+                            SYNAPSE ÜYELİĞİ
                           </span>
                           <div className="flex items-center gap-2 text-xs text-[#dbdee1]">
                             <span className="w-2 h-2 rounded-full bg-[#5865f2]" />
-                            <span>Özel VIP Grup Üyesi (1/5)</span>
+                            <span>Doğrulanmış Sunucu Üyesi</span>
                           </div>
                         </div>
 

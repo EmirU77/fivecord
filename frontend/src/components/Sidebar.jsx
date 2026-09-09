@@ -103,11 +103,11 @@ export default function Sidebar({
         <div 
           onClick={() => setIsServerMenuOpen(prev => !prev)}
           className="h-12 border-b border-[#1f2023] px-4 flex items-center justify-between shadow-xs hover:bg-[#35373c]/60 cursor-pointer transition-colors group"
-          title="Fivecord VIP Sunucu Menüsü"
+          title="Synapse Sunucu Menüsü"
         >
           <div className="flex items-center gap-2">
             <span className="font-bold text-sm text-white tracking-wide flex items-center gap-1.5">
-              Fivecord VIP
+              Synapse
               <BadgeCheck className="w-4 h-4 text-[#5865f2] inline fill-[#5865f2]/20" />
             </span>
           </div>
