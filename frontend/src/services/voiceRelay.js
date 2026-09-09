@@ -15,8 +15,18 @@ class VoiceRelayManager {
     this.isBroadcasting = false;
     this.sampleRate = 48000;
     this.onPeerSpeaking = null;
+    this.suppressedPeers = new Set();
 
     this.setupSocketListeners();
+  }
+
+  suppressPeer(socketId, shouldSuppress) {
+    if (shouldSuppress) {
+      this.suppressedPeers.add(socketId);
+      this.peerPlayTimes.delete(socketId);
+    } else {
+      this.suppressedPeers.delete(socketId);
+    }
   }
 
   setupSocketListeners() {
@@ -68,7 +78,6 @@ class VoiceRelayManager {
     return saved !== null ? Number(saved) : 100;
   }
 
-  // No-op: noise suppression removed entirely
   setNoiseSuppression(enabled) {
     // Kept as no-op so UI code doesn't break
   }
@@ -115,7 +124,7 @@ class VoiceRelayManager {
       this.stopCapture();
 
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      this.captureContext = new AudioCtx({ sampleRate: 48000 });
+      this.captureContext = new AudioCtx();
       if (this.captureContext.state === 'suspended') {
         await this.captureContext.resume();
       }
@@ -123,13 +132,12 @@ class VoiceRelayManager {
       this.sampleRate = this.captureContext.sampleRate || 48000;
       this.micSource = this.captureContext.createMediaStreamSource(mediaStream);
 
-      // Clean, direct path: micSource → ScriptProcessor (PCM encoder) → mute loopback
-      // No filters, no compressor, no worklets — pure voice passthrough
+      // Clean, direct audio path:
+      // micSource → ScriptProcessor (PCM 16-bit encoder) → mute loopback
+      // No gating, no frequency filtering, no compression. Natural voice.
       this.processor = this.captureContext.createScriptProcessor(2048, 1, 1);
-
       this.micSource.connect(this.processor);
 
-      // Retain references to prevent Chromium GC
       if (typeof window !== 'undefined') {
         window.__fivecordVoiceProcessor = this.processor;
         window.__fivecordVoiceCapture = this.captureContext;
@@ -140,15 +148,7 @@ class VoiceRelayManager {
 
         const input = e.inputBuffer.getChannelData(0);
 
-        // Simple silence detection — don't send truly silent frames
-        let maxVal = 0;
-        for (let i = 0; i < input.length; i++) {
-          const abs = Math.abs(input[i]);
-          if (abs > maxVal) maxVal = abs;
-        }
-        if (maxVal < 0.001) return; // Hardware silence floor
-
-        // Convert Float32 → Int16 with mic volume gain
+        // Continuous linear stream with mic volume gain (no dropouts or stutter)
         const micGain = this.getMicVolume() / 100;
         const pcm16 = new Int16Array(input.length);
         for (let i = 0; i < input.length; i++) {
@@ -163,21 +163,21 @@ class VoiceRelayManager {
         });
       };
 
-      // Mute local loopback to avoid hearing own voice
+      // Mute local loopback to avoid hearing own voice echo
       this.muteNode = this.captureContext.createGain();
       this.muteNode.gain.value = 0;
       this.processor.connect(this.muteNode);
       this.muteNode.connect(this.captureContext.destination);
 
       this.isBroadcasting = true;
-      console.log(`[VoiceRelay] Broadcasting on channel ${channelId} — Clean passthrough @ ${this.sampleRate}Hz`);
+      console.log(`[VoiceRelay] Clean audio broadcasting started on channel ${channelId} @ ${this.sampleRate}Hz`);
     } catch (err) {
       console.warn('[VoiceRelay] Start broadcasting error:', err);
     }
   }
 
   playChunk(senderSocketId, sampleRate, buffer) {
-    if (this.isDeafened || !buffer) return;
+    if (this.isDeafened || !buffer || this.suppressedPeers.has(senderSocketId)) return;
 
     try {
       const ctx = this.ensurePlaybackContext();
@@ -187,7 +187,6 @@ class VoiceRelayManager {
         ctx.resume().catch(() => {});
       }
 
-      // Handle any incoming binary buffer format safely
       let pcm16;
       if (buffer instanceof ArrayBuffer) {
         pcm16 = new Int16Array(buffer);
@@ -199,10 +198,17 @@ class VoiceRelayManager {
 
       if (pcm16.length === 0) return;
 
-      // Convert Int16 → Float32
       const float32 = new Float32Array(pcm16.length);
       for (let i = 0; i < pcm16.length; i++) {
         float32[i] = pcm16[i] / (pcm16[i] < 0 ? 0x8000 : 0x7FFF);
+      }
+
+      // Micro-fade (32 samples) at chunk boundaries eliminates square-edge clicks/pops
+      const ramp = Math.min(32, Math.floor(float32.length / 4));
+      for (let i = 0; i < ramp; i++) {
+        const factor = i / ramp;
+        float32[i] *= factor;
+        float32[float32.length - 1 - i] *= factor;
       }
 
       const inSampleRate = sampleRate || 48000;
@@ -212,7 +218,6 @@ class VoiceRelayManager {
       const source = ctx.createBufferSource();
       source.buffer = audioBuffer;
 
-      // Apply individual user volume & master output volume
       const gainNode = ctx.createGain();
       const userVol = this.getUserVolume(senderSocketId);
       const masterVol = this.getMasterOutputVolume() / 100;
@@ -224,9 +229,11 @@ class VoiceRelayManager {
       const now = ctx.currentTime;
       let nextPlay = this.peerPlayTimes.get(senderSocketId) || 0;
 
-      // If next scheduled playback has fallen behind or drifted > 150ms, resync
-      if (nextPlay < now || nextPlay > now + 0.15) {
-        nextPlay = now + 0.025;
+      // Jitter buffer: smooth out network arrival variations without gaps
+      if (nextPlay < now) {
+        nextPlay = now + 0.045; // 45ms stable buffer
+      } else if (nextPlay > now + 0.20) {
+        nextPlay = now + 0.050; // smooth catch-up if drifted
       }
 
       source.start(nextPlay);

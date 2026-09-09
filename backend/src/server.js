@@ -1205,6 +1205,12 @@ io.on('connection', (socket) => {
     });
   });
 
+  socket.on('request-screen-frame', ({ channelId }) => {
+    socket.to(`voice-${channelId}`).emit('request-screen-frame', {
+      requesterSocketId: socket.id
+    });
+  });
+
   socket.on('update-voice-state', (newVoiceState) => {
     const user = users.get(socket.id);
     if (!user) return;

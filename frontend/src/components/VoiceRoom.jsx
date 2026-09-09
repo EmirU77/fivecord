@@ -7,6 +7,7 @@ import {
 import { soundEffects } from '../services/soundEffects';
 import { webrtc } from '../services/webrtc';
 import { screenRelay } from '../services/screenRelay';
+import { socket } from '../services/socket';
 import SharedCinemaPlayer from './SharedCinemaPlayer';
 
 function formatTime(seconds) {
@@ -170,8 +171,15 @@ function StreamPlayer({ streamItem, isFocused = false, onFocus, onRetry }) {
     };
   }, [streamItem.socketId, streamItem.isLocal]);
 
+  // Request fresh frame immediately when viewer joins or mounts player
+  useEffect(() => {
+    if (!streamItem.isLocal) {
+      socket.emit('request-screen-frame', { channelId: streamItem.channelId });
+    }
+  }, [streamItem.socketId, streamItem.isLocal]);
+
   // Has live frames from either WebRTC or WebSocket Relay (or local display stream)
-  const isRendering = isWebRtcPlaying || isRelayPlaying || streamItem.isLocal;
+  const isRendering = isWebRtcPlaying || isRelayPlaying || streamItem.isLocal || Boolean(streamItem?.stream);
 
   useEffect(() => {
     if (isRendering) {
@@ -201,7 +209,11 @@ function StreamPlayer({ streamItem, isFocused = false, onFocus, onRetry }) {
         playsInline
         muted
         className={`w-full h-full object-contain transition-opacity duration-300 ${
-          isWebRtcPlaying || streamItem.isLocal ? 'opacity-100 z-10' : 'opacity-0 absolute -z-10'
+          streamItem.isLocal || (streamItem.stream && (!isRelayPlaying || isWebRtcPlaying))
+            ? 'opacity-100 z-10'
+            : isRelayPlaying
+            ? 'opacity-0 absolute -z-10'
+            : 'opacity-100 z-10'
         }`}
       />
 
@@ -356,6 +368,7 @@ export default function VoiceRoom({
           socketId: member.socketId,
           username: member.username,
           avatar: member.avatar,
+          channelId: channel.id,
           stream,
           isLocal: false
         });
@@ -372,6 +385,7 @@ export default function VoiceRoom({
             socketId,
             username: peer?.username || 'Arkadaşın',
             avatar: peer?.avatar,
+            channelId: channel.id,
             stream,
             isLocal: false
           });

@@ -387,11 +387,12 @@ export default function App() {
           audioEl.srcObject = stream;
         }
 
-        // Screen audio stays unmuted for game/video stream audio.
-        // Microphone audio is handled with 100% reliability via voiceRelay WebSocket
-        // (mute here to prevent duplicate echo if WebRTC direct audio connects).
-        audioEl.muted = !isScreen;
-        audioEl.volume = 1.0;
+        // Screen audio and microphone audio both stay unmuted for high-fidelity Opus playback.
+        // (voiceRelay coordinates via suppressPeer to prevent duplicate echo when WebRTC connects).
+        audioEl.muted = false;
+        const userVol = voiceRelay.getUserVolume(socketId);
+        const masterVol = voiceRelay.getMasterOutputVolume() / 100;
+        audioEl.volume = Math.max(0, Math.min(1, userVol * masterVol));
 
         const playPromise = audioEl.play();
         if (playPromise !== undefined) {

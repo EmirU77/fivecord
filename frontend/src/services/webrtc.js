@@ -1,7 +1,7 @@
 import { voiceRelay } from './voiceRelay';
 import { socket } from './socket';
 
-// High reliability Google + Cloudflare STUN servers (resolve in <10ms, no rate limits, works across LAN/NAT)
+// High reliability Google + Cloudflare STUN + Metered TURN servers (resolves across symmetric CGNAT/NAT)
 const ICE_SERVERS = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
@@ -9,8 +9,18 @@ const ICE_SERVERS = {
     { urls: 'stun:stun2.l.google.com:19302' },
     { urls: 'stun:stun3.l.google.com:19302' },
     { urls: 'stun:stun4.l.google.com:19302' },
-    { urls: 'stun:stun.cloudflare.com:3478' }
-  ]
+    { urls: 'stun:stun.cloudflare.com:3478' },
+    {
+      urls: [
+        'turn:openrelay.metered.ca:80',
+        'turn:openrelay.metered.ca:443',
+        'turn:openrelay.metered.ca:443?transport=tcp'
+      ],
+      username: 'openrelay',
+      credential: 'openrelay'
+    }
+  ],
+  iceCandidatePoolSize: 10
 };
 
 export const QUALITY_PRESETS = {
@@ -372,6 +382,11 @@ class WebRTCManager {
     // 6. Connection state changes
     pc.onconnectionstatechange = () => {
       console.log(`[WebRTC] Peer ${targetSocketId} connectionState -> ${pc.connectionState}`);
+      if (pc.connectionState === 'connected') {
+        voiceRelay.suppressPeer(targetSocketId, true);
+      } else if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
+        voiceRelay.suppressPeer(targetSocketId, false);
+      }
       if (this.onConnectionStateChange) {
         this.onConnectionStateChange(targetSocketId, pc.connectionState);
       }
@@ -383,6 +398,11 @@ class WebRTCManager {
 
     pc.oniceconnectionstatechange = () => {
       console.log(`[WebRTC] Peer ${targetSocketId} iceConnectionState -> ${pc.iceConnectionState}`);
+      if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+        voiceRelay.suppressPeer(targetSocketId, true);
+      } else if (['disconnected', 'failed', 'closed'].includes(pc.iceConnectionState)) {
+        voiceRelay.suppressPeer(targetSocketId, false);
+      }
       if (pc.iceConnectionState === 'failed') {
         this.restartIce(targetSocketId);
       }
@@ -448,18 +468,22 @@ class WebRTCManager {
           const vTransceivers = pc.getTransceivers().filter(t => t.receiver?.track?.kind === 'video');
           for (const vt of vTransceivers) {
             const vTrack = vt.receiver.track;
-            if (vTrack && vTrack.readyState === 'live') {
+            if (vTrack) {
               let screenStream = this.remoteScreenStreams.get(senderSocketId);
               if (!screenStream || !screenStream.getVideoTracks().includes(vTrack)) {
                 screenStream = new MediaStream([vTrack]);
                 this.remoteScreenStreams.set(senderSocketId, screenStream);
               }
-              if (this.onScreenStreamAdded) {
-                this.onScreenStreamAdded(senderSocketId, screenStream);
-              }
-              if (this.onRemoteStreamAdded) {
-                this.onRemoteStreamAdded(senderSocketId, screenStream, true, vTrack);
-              }
+              const notify = () => {
+                if (this.onScreenStreamAdded) {
+                  this.onScreenStreamAdded(senderSocketId, screenStream);
+                }
+                if (this.onRemoteStreamAdded) {
+                  this.onRemoteStreamAdded(senderSocketId, screenStream, true, vTrack);
+                }
+              };
+              notify();
+              vTrack.onunmute = notify;
             }
           }
         }
@@ -555,11 +579,19 @@ class WebRTCManager {
     try {
       if (pc.signalingState !== 'stable') {
         console.log(`[WebRTC] Delaying renegotiate for ${targetSocketId} (state: ${pc.signalingState})`);
+        const onStable = () => {
+          if (pc.signalingState === 'stable') {
+            pc.removeEventListener('signalingstatechange', onStable);
+            this.renegotiate(targetSocketId, pc, streamType, screenStreamId);
+          }
+        };
+        pc.addEventListener('signalingstatechange', onStable);
         setTimeout(() => {
+          pc.removeEventListener('signalingstatechange', onStable);
           if (pc.signalingState === 'stable') {
             this.renegotiate(targetSocketId, pc, streamType, screenStreamId);
           }
-        }, 300);
+        }, 500);
         return;
       }
       const offer = await pc.createOffer({
