@@ -33,6 +33,23 @@ export default function UserContextMenu({
     }
   });
 
+  const liveTarget = members?.find(m => 
+    (targetMember?.id && m.id === targetMember.id) ||
+    (targetMember?.username && m.username?.toLowerCase() === targetMember.username.toLowerCase())
+  ) || targetMember;
+
+  const [currentRoles, setCurrentRoles] = useState(() => {
+    return Array.isArray(liveTarget?.roles) && liveTarget.roles.length > 0 
+      ? liveTarget.roles 
+      : ['role-member'];
+  });
+
+  useEffect(() => {
+    if (liveTarget && Array.isArray(liveTarget.roles)) {
+      setCurrentRoles(liveTarget.roles);
+    }
+  }, [liveTarget]);
+
   const isSelf = targetMember?.id === currentUser?.id || (currentUser?.username && targetMember?.username?.toLowerCase() === currentUser?.username?.toLowerCase());
   const isBot = targetMember?.isBot;
 
@@ -104,9 +121,19 @@ export default function UserContextMenu({
   };
 
   const handleToggleRole = (roleId) => {
-    const hasRole = targetMember?.roles?.includes(roleId);
+    const hasRole = currentRoles.includes(roleId);
+    let nextRoles;
+    if (hasRole) {
+      nextRoles = currentRoles.filter(id => id !== roleId);
+      if (nextRoles.length === 0) nextRoles = ['role-member'];
+    } else {
+      nextRoles = [...currentRoles.filter(id => id !== 'role-member'), roleId];
+    }
+    setCurrentRoles(nextRoles);
+
     socket.emit('assign-role', {
       targetUserId: targetMember.id,
+      targetUsername: targetMember.username,
       roleId,
       action: hasRole ? 'remove' : 'add'
     });
@@ -322,7 +349,7 @@ export default function UserContextMenu({
               {showRoleSubmenu && (
                 <div className="mt-1 p-1 bg-[#1e1f22] rounded-lg border border-[#383a40] space-y-1">
                   {roles.map(r => {
-                    const hasRole = targetMember?.roles?.includes(r.id);
+                    const hasRole = currentRoles.includes(r.id);
                     return (
                       <div
                         key={r.id}

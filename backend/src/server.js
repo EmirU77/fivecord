@@ -1550,28 +1550,85 @@ io.on('connection', (socket) => {
     io.emit('members-updated', getAllMembers());
   });
 
-  socket.on('assign-role', ({ targetUserId, roleId, action }) => {
-    const accounts = persistence.loadAccounts();
-    const target = accounts.find(a => a.id === targetUserId);
-    if (!target) return;
+  socket.on('assign-role', ({ targetUserId, targetUsername, roleId, action }) => {
+    let accounts = persistence.loadAccounts();
+    let target = accounts.find(a => 
+      (targetUserId && a.id === targetUserId) ||
+      (targetUsername && a.username && a.username.toLowerCase() === targetUsername.toLowerCase())
+    );
 
-    if (!Array.isArray(target.roles)) target.roles = [];
-    if (action === 'add' && !target.roles.includes(roleId)) {
-      target.roles.push(roleId);
-    } else if (action === 'remove') {
-      target.roles = target.roles.filter(r => r !== roleId);
-    }
-    persistence.safeWriteJSON(persistence.ACCOUNTS_FILE, accounts);
-
-    // Update in-memory active user
-    for (const u of users.values()) {
-      if (u.id === targetUserId) {
-        u.roles = target.roles;
-        break;
+    // If target is not in accounts.json, check active live users and create entry
+    if (!target) {
+      for (const u of users.values()) {
+        if (
+          (targetUserId && u.id === targetUserId) ||
+          (targetUsername && u.username && u.username.toLowerCase() === targetUsername.toLowerCase())
+        ) {
+          target = {
+            id: u.id,
+            username: u.username,
+            avatar: u.avatar,
+            color: u.color,
+            roles: ['role-member'],
+            lastSeen: Date.now()
+          };
+          accounts.push(target);
+          break;
+        }
       }
     }
 
-    io.emit('members-updated', getAllMembers());
+    if (!target) {
+      console.warn(`[Assign Role Error] User not found: ${targetUserId} / ${targetUsername}`);
+      return;
+    }
+
+    if (!Array.isArray(target.roles)) target.roles = ['role-member'];
+
+    if (action === 'add') {
+      const allRoles = persistence.loadRoles();
+      const targetRoleObj = allRoles.find(r => r.id === roleId);
+      if (targetRoleObj && targetRoleObj.id !== 'role-member') {
+        target.roles = target.roles.filter(r => r !== 'role-member');
+      }
+      if (!target.roles.includes(roleId)) {
+        target.roles.push(roleId);
+      }
+    } else if (action === 'remove') {
+      target.roles = target.roles.filter(r => r !== roleId);
+      if (target.roles.length === 0) {
+        target.roles = ['role-member'];
+      }
+    }
+
+    const allRoles = persistence.loadRoles();
+    const highestRole = allRoles
+      .filter(r => target.roles.includes(r.id))
+      .sort((a, b) => a.position - b.position)[0] || null;
+
+    if (highestRole?.color) {
+      target.color = highestRole.color;
+    }
+
+    persistence.safeWriteJSON(persistence.ACCOUNTS_FILE, accounts);
+
+    // Update in-memory active users
+    for (const u of users.values()) {
+      if (
+        (target.id && u.id === target.id) ||
+        (target.username && u.username && u.username.toLowerCase() === target.username.toLowerCase())
+      ) {
+        u.roles = target.roles;
+        u.highestRole = highestRole;
+        if (highestRole?.color) {
+          u.color = highestRole.color;
+        }
+      }
+    }
+
+    const updatedMembers = getAllMembers();
+    io.emit('members-updated', updatedMembers);
+    console.log(`[Role Updated] ${target.username} (${action} ${roleId}) -> Current roles:`, target.roles);
   });
 
   // --- MODERATION: KICK, BAN, SERVER-MUTE ---
