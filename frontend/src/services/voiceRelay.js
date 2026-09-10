@@ -15,27 +15,30 @@ class VoiceRelayManager {
     this.isBroadcasting = false;
     this.sampleRate = 48000;
     this.onPeerSpeaking = null;
-    this.suppressedPeers = new Set();
 
     this.setupSocketListeners();
+    this.setupGestureUnlock();
+  }
+
+  setupGestureUnlock() {
+    if (typeof window === 'undefined') return;
+    const unlock = () => {
+      this.resumeContexts();
+    };
+    window.addEventListener('click', unlock, { passive: true });
+    window.addEventListener('keydown', unlock, { passive: true });
+    window.addEventListener('pointerdown', unlock, { passive: true });
+    window.addEventListener('touchstart', unlock, { passive: true });
   }
 
   suppressPeer(socketId, shouldSuppress) {
-    if (shouldSuppress) {
-      this.suppressedPeers.add(socketId);
-      this.peerPlayTimes.delete(socketId);
-    } else {
-      this.suppressedPeers.delete(socketId);
-    }
+    // No-op: Never suppress voice audio to prevent total silence across CGNAT/firewalls
   }
 
   setupSocketListeners() {
     socket.on('voice-pcm-chunk', ({ senderSocketId, sampleRate, buffer }) => {
-      if (this.isDeafened) return;
+      if (this.isDeafened || !buffer) return;
       this.playChunk(senderSocketId, sampleRate, buffer);
-      if (this.onPeerSpeaking) {
-        this.onPeerSpeaking(senderSocketId, true);
-      }
     });
 
     socket.on('user-left-voice', ({ socketId }) => {
@@ -79,22 +82,29 @@ class VoiceRelayManager {
   }
 
   setNoiseSuppression(enabled) {
-    // Kept as no-op so UI code doesn't break
+    // Kept as no-op for UI code compatibility
   }
 
   setMuted(muted) {
-    this.isMuted = muted;
+    this.isMuted = Boolean(muted);
   }
 
   setDeafened(deafened) {
-    this.isDeafened = deafened;
-    this.isMuted = deafened;
+    this.isDeafened = Boolean(deafened);
+    this.isMuted = Boolean(deafened);
   }
 
   ensurePlaybackContext() {
+    if (typeof window === 'undefined') return null;
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return null;
+
     if (!this.playbackContext || this.playbackContext.state === 'closed') {
-      this.playbackContext = new AudioCtx();
+      try {
+        this.playbackContext = new AudioCtx({ latencyHint: 'interactive' });
+      } catch (e) {
+        this.playbackContext = new AudioCtx();
+      }
     }
     if (this.playbackContext.state === 'suspended') {
       this.playbackContext.resume().catch(() => {});
@@ -106,10 +116,10 @@ class VoiceRelayManager {
     try {
       const pCtx = this.ensurePlaybackContext();
       if (pCtx && pCtx.state === 'suspended') {
-        await pCtx.resume();
+        await pCtx.resume().catch(() => {});
       }
       if (this.captureContext && this.captureContext.state === 'suspended') {
-        await this.captureContext.resume();
+        await this.captureContext.resume().catch(() => {});
       }
     } catch (e) {
       console.warn('[VoiceRelay] Error resuming audio contexts:', e);
@@ -124,17 +134,17 @@ class VoiceRelayManager {
       this.stopCapture();
 
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      this.captureContext = new AudioCtx();
+      if (!this.captureContext || this.captureContext.state === 'closed') {
+        this.captureContext = new AudioCtx({ latencyHint: 'interactive' });
+      }
       if (this.captureContext.state === 'suspended') {
-        await this.captureContext.resume();
+        await this.captureContext.resume().catch(() => {});
       }
 
       this.sampleRate = this.captureContext.sampleRate || 48000;
       this.micSource = this.captureContext.createMediaStreamSource(mediaStream);
 
-      // Clean, direct audio path:
-      // micSource → ScriptProcessor (PCM 16-bit encoder) → mute loopback
-      // No gating, no frequency filtering, no compression. Natural voice.
+      // Clean, uncompressed high-fidelity voice transmission
       this.processor = this.captureContext.createScriptProcessor(2048, 1, 1);
       this.micSource.connect(this.processor);
 
@@ -147,10 +157,9 @@ class VoiceRelayManager {
         if (this.isMuted || !this.currentChannelId) return;
 
         const input = e.inputBuffer.getChannelData(0);
-
-        // Continuous linear stream with mic volume gain (no dropouts or stutter)
         const micGain = this.getMicVolume() / 100;
         const pcm16 = new Int16Array(input.length);
+        
         for (let i = 0; i < input.length; i++) {
           const s = Math.max(-1, Math.min(1, input[i] * micGain));
           pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
@@ -177,7 +186,7 @@ class VoiceRelayManager {
   }
 
   playChunk(senderSocketId, sampleRate, buffer) {
-    if (this.isDeafened || !buffer || this.suppressedPeers.has(senderSocketId)) return;
+    if (this.isDeafened || !buffer) return;
 
     try {
       const ctx = this.ensurePlaybackContext();
@@ -187,24 +196,34 @@ class VoiceRelayManager {
         ctx.resume().catch(() => {});
       }
 
+      // Safe multi-format binary buffer decoding (immune to unaligned byteOffset RangeErrors)
       let pcm16;
       if (buffer instanceof ArrayBuffer) {
         pcm16 = new Int16Array(buffer);
       } else if (ArrayBuffer.isView(buffer)) {
-        pcm16 = new Int16Array(buffer.buffer, buffer.byteOffset, buffer.byteLength / 2);
+        if (buffer.byteOffset % 2 === 0) {
+          pcm16 = new Int16Array(buffer.buffer, buffer.byteOffset, Math.floor(buffer.byteLength / 2));
+        } else {
+          const cleanU8 = new Uint8Array(buffer.byteLength);
+          cleanU8.set(new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength));
+          pcm16 = new Int16Array(cleanU8.buffer);
+        }
+      } else if (buffer && typeof buffer === 'object' && Array.isArray(buffer.data)) {
+        const cleanU8 = new Uint8Array(buffer.data);
+        pcm16 = new Int16Array(cleanU8.buffer);
       } else {
-        pcm16 = new Int16Array(buffer);
+        return;
       }
 
-      if (pcm16.length === 0) return;
+      if (!pcm16 || pcm16.length === 0) return;
 
       const float32 = new Float32Array(pcm16.length);
       for (let i = 0; i < pcm16.length; i++) {
         float32[i] = pcm16[i] / (pcm16[i] < 0 ? 0x8000 : 0x7FFF);
       }
 
-      // Micro-fade (32 samples) at chunk boundaries eliminates square-edge clicks/pops
-      const ramp = Math.min(32, Math.floor(float32.length / 4));
+      // Micro-fade (16 samples) at chunk boundaries eliminates square-edge clicks/pops
+      const ramp = Math.min(16, Math.floor(float32.length / 4));
       for (let i = 0; i < ramp; i++) {
         const factor = i / ramp;
         float32[i] *= factor;
@@ -229,15 +248,23 @@ class VoiceRelayManager {
       const now = ctx.currentTime;
       let nextPlay = this.peerPlayTimes.get(senderSocketId) || 0;
 
-      // Jitter buffer: smooth out network arrival variations without gaps
-      if (nextPlay < now) {
-        nextPlay = now + 0.045; // 45ms stable buffer
-      } else if (nextPlay > now + 0.20) {
-        nextPlay = now + 0.050; // smooth catch-up if drifted
+      // Stable low-latency jitter buffer (35ms): smooth playback without drift or stutter
+      if (nextPlay < now || nextPlay > now + 0.35) {
+        nextPlay = now + 0.035;
       }
 
       source.start(nextPlay);
       this.peerPlayTimes.set(senderSocketId, nextPlay + audioBuffer.duration);
+
+      // Real-time speaking indicator trigger when peer audio contains voice energy
+      let sumSq = 0;
+      for (let i = 0; i < float32.length; i++) {
+        sumSq += float32[i] * float32[i];
+      }
+      const rms = Math.sqrt(sumSq / float32.length);
+      if (rms > 0.008 && this.onPeerSpeaking) {
+        this.onPeerSpeaking(senderSocketId);
+      }
     } catch (err) {
       console.warn('[VoiceRelay] Playback chunk error:', err);
     }
@@ -257,7 +284,7 @@ class VoiceRelayManager {
       try { this.muteNode.disconnect(); } catch (e) {}
       this.muteNode = null;
     }
-    if (this.captureContext) {
+    if (this.captureContext && this.captureContext.state !== 'closed') {
       try { this.captureContext.close(); } catch (e) {}
       this.captureContext = null;
     }
@@ -275,3 +302,4 @@ class VoiceRelayManager {
 }
 
 export const voiceRelay = new VoiceRelayManager();
+

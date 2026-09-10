@@ -1438,7 +1438,9 @@ io.on('connection', (socket) => {
   socket.on('voice-pcm-chunk', ({ channelId, sampleRate, buffer }) => {
     const user = users.get(socket.id);
     if (!user || user.voiceState?.isMuted) return;
-    socket.to(`voice-${channelId}`).emit('voice-pcm-chunk', {
+    const targetRoom = channelId || user.voiceState?.channelId;
+    if (!targetRoom) return;
+    socket.to(`voice-${targetRoom}`).emit('voice-pcm-chunk', {
       senderSocketId: socket.id,
       userId: user.id,
       username: user.username,

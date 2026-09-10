@@ -643,7 +643,7 @@ export default function App() {
         if (!container) {
           container = document.createElement('div');
           container.id = 'fivecord-audio-container';
-          container.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0.001;pointer-events:none;';
+          container.style.cssText = 'position:fixed;bottom:0;right:0;width:1px;height:1px;opacity:0.01;pointer-events:none;z-index:-1;';
           document.body.appendChild(container);
         }
 
@@ -663,17 +663,16 @@ export default function App() {
           audioEl.srcObject = stream;
         }
 
-        // Screen audio and microphone audio both stay unmuted for high-fidelity Opus playback.
-        // (voiceRelay coordinates via suppressPeer to prevent duplicate echo when WebRTC connects).
-        audioEl.muted = false;
         if (isScreen) {
           const savedStreamVol = localStorage.getItem(`stream_vol_${socketId}`);
           const streamVolumeFactor = savedStreamVol !== null ? Number(savedStreamVol) / 100 : 1.0;
           audioEl.volume = Math.max(0, Math.min(1, streamVolumeFactor));
+          audioEl.muted = false;
         } else {
-          const userVol = voiceRelay.getUserVolume(socketId);
-          const masterVol = voiceRelay.getMasterOutputVolume() / 100;
-          audioEl.volume = Math.max(0, Math.min(1, userVol * masterVol));
+          // Microphones are transmitted with 100% reliability via VoiceRelay (Web Audio API destination).
+          // We mute the redundant WebRTC mic DOM audio to avoid dual-playback / echo across network types.
+          audioEl.muted = true;
+          audioEl.volume = 0;
         }
 
         const playPromise = audioEl.play();

@@ -408,9 +408,6 @@ class WebRTCManager {
           this.remoteStreams.set(targetSocketId, stream);
         }
 
-        // WebRTC audio arrived, suppress WebSocket PCM fallback for this peer
-        voiceRelay.suppressPeer(targetSocketId, true);
-
         if (this.onRemoteStreamAdded) {
           this.onRemoteStreamAdded(targetSocketId, stream, isScreenAudio, event.track);
         }
@@ -433,11 +430,6 @@ class WebRTCManager {
     // 6. Connection state changes
     pc.onconnectionstatechange = () => {
       console.log(`[WebRTC] Peer ${targetSocketId} connectionState -> ${pc.connectionState}`);
-      if (pc.connectionState === 'connected') {
-        voiceRelay.suppressPeer(targetSocketId, true);
-      } else if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
-        voiceRelay.suppressPeer(targetSocketId, false);
-      }
       if (this.onConnectionStateChange) {
         this.onConnectionStateChange(targetSocketId, pc.connectionState);
       }
@@ -449,11 +441,6 @@ class WebRTCManager {
 
     pc.oniceconnectionstatechange = () => {
       console.log(`[WebRTC] Peer ${targetSocketId} iceConnectionState -> ${pc.iceConnectionState}`);
-      if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
-        voiceRelay.suppressPeer(targetSocketId, true);
-      } else if (['disconnected', 'failed', 'closed'].includes(pc.iceConnectionState)) {
-        voiceRelay.suppressPeer(targetSocketId, false);
-      }
       if (pc.iceConnectionState === 'failed') {
         this.restartIce(targetSocketId);
       }
