@@ -653,12 +653,12 @@ export default function UserControlBar({
 
   return (
     <>
-      {/* BOTTOM LEFT DISCORD USER BAR */}
-      <div className="h-14 bg-[#111214] px-2 flex items-center justify-between border-t border-[#1f2023] select-none">
+      {/* BOTTOM LEFT SYNAPSE USER BAR */}
+      <div className="h-14 bg-[#0a0c14]/95 backdrop-blur-2xl px-2.5 flex items-center justify-between border-t border-white/5 select-none">
         {/* User Info (Clickable to open settings) */}
         <div 
           onClick={openModal}
-          className="flex items-center gap-2.5 p-1.5 -ml-1 rounded-md hover:bg-[#232428] cursor-pointer transition-colors max-w-[145px] group"
+          className="flex items-center gap-2.5 p-1.5 -ml-1 rounded-xl hover:bg-white/5 cursor-pointer transition-all max-w-[150px] group"
           title="Profili, Banner'ı ve Fotoğrafı Özelleştir"
         >
           <div className="relative shrink-0 w-8 h-8">
@@ -669,7 +669,7 @@ export default function UserControlBar({
                 e.currentTarget.onerror = null;
                 e.currentTarget.src = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(currentUser?.username || 'user')}`;
               }}
-              className="w-8 h-8 rounded-full bg-[#2b2d31] object-cover border border-[#383a40]"
+              className="w-8 h-8 rounded-full bg-[#141829] object-cover border border-white/10 group-hover:border-indigo-500/50 transition-colors"
             />
             {/* Live decoration */}
             <AvatarDecorationRenderer decoration={currentUser?.avatarDecoration} size="sm" />
@@ -679,15 +679,15 @@ export default function UserControlBar({
 
           <div className="overflow-hidden">
             <div 
-              className="text-xs font-semibold truncate flex items-center gap-1"
+              className="text-xs font-bold truncate flex items-center gap-1"
               style={getNameEffectStyle(currentUser?.nameEffect, currentUser?.color)}
             >
-              <span>{currentUser?.username || 'Kullanıcı'}</span>
+              <span className="truncate">{currentUser?.username || 'Kullanıcı'}</span>
               {currentUser?.badges?.includes('owner') && <span className="text-[10px]">👑</span>}
             </div>
-            <div className="text-[10px] text-[#949ba4] truncate flex items-center gap-1">
+            <div className="text-[10px] text-[#64748b] truncate flex items-center gap-1 font-medium">
               {currentUser?.activity ? (
-                <span className="text-[#23a55a] font-bold truncate flex items-center gap-1">
+                <span className="text-emerald-400 font-semibold truncate flex items-center gap-1">
                   <span>{currentUser?.activityIcon || '🎮'}</span>
                   <span className="truncate">{currentUser?.activity}</span>
                 </span>
@@ -702,12 +702,12 @@ export default function UserControlBar({
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-0.5 text-[#b5bac1]">
+        <div className="flex items-center gap-1 text-[#94a3b8]">
           <button
             onClick={toggleMute}
             title={isMuted ? 'Mikrofonu Aç' : 'Mikrofonu Kapat'}
-            className={`p-1.5 rounded hover:bg-[#232428] hover:text-white transition-colors cursor-pointer ${
-              isMuted ? 'text-[#f23f43] hover:text-[#f23f43]' : ''
+            className={`p-1.5 rounded-lg hover:bg-white/10 hover:text-white transition-all cursor-pointer ${
+              isMuted ? 'bg-rose-500/15 text-rose-400 hover:bg-rose-500 hover:text-white' : ''
             }`}
           >
             {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
@@ -716,8 +716,8 @@ export default function UserControlBar({
           <button
             onClick={toggleDeafen}
             title={isDeafened ? 'Sağırlaştırmayı Kaldır' : 'Kulaklığı Kapat'}
-            className={`p-1.5 rounded hover:bg-[#232428] hover:text-white transition-colors cursor-pointer ${
-              isDeafened ? 'text-[#f23f43] hover:text-[#f23f43]' : ''
+            className={`p-1.5 rounded-lg hover:bg-white/10 hover:text-white transition-all cursor-pointer ${
+              isDeafened ? 'bg-rose-500/15 text-rose-400 hover:bg-rose-500 hover:text-white' : ''
             }`}
           >
             <Headphones className="w-4 h-4" />
@@ -726,7 +726,7 @@ export default function UserControlBar({
           <button
             onClick={openModal}
             title="Kullanıcı Ayarları & Profil Stüdyosu"
-            className="p-1.5 rounded hover:bg-[#232428] hover:text-white transition-colors cursor-pointer group-hover:rotate-45"
+            className="p-1.5 rounded-lg hover:bg-white/10 hover:text-white transition-all cursor-pointer group-hover:rotate-45"
           >
             <Settings className="w-4 h-4" />
           </button>
@@ -735,7 +735,7 @@ export default function UserControlBar({
             <button
               onClick={onOpenLogin || onLogout}
               title="Hesap Değiştir / Giriş Yap"
-              className="p-1.5 rounded hover:bg-[#5865f2]/20 text-[#949ba4] hover:text-[#5865f2] transition-colors cursor-pointer"
+              className="p-1.5 rounded-lg hover:bg-indigo-500/20 text-[#94a3b8] hover:text-indigo-400 transition-colors cursor-pointer"
             >
               <LogIn className="w-4 h-4" />
             </button>

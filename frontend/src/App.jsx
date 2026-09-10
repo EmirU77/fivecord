@@ -1127,7 +1127,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#1e1f22]">
+    <div className="flex h-screen w-screen overflow-hidden bg-[#0a0c14] text-[#e2e8f0]">
       {/* Declarative global voice audio players for all active remote peers */}
       <div style={{ position: 'fixed', top: -9999, left: -9999, width: 1, height: 1, opacity: 0.001, pointerEvents: 'none' }}>
         <div ref={audioContainerRef} />

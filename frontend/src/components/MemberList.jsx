@@ -110,18 +110,18 @@ export default function MemberList({
   }
 
   return (
-    <div className="w-60 bg-[#2b2d31] flex flex-col shrink-0 select-none border-l border-[#1f2023] p-2.5 overflow-y-auto font-sans">
+    <div className="w-60 bg-[#0f1322]/90 backdrop-blur-2xl flex flex-col shrink-0 select-none border-l border-white/5 p-3 overflow-y-auto font-sans custom-scrollbar">
       {/* Top Header with Role Manager Button for Admins */}
       {canManageRoles && onOpenRoleManager && (
         <button
           onClick={onOpenRoleManager}
-          className="mb-2 w-full flex items-center justify-between px-3 py-1.5 rounded-xl bg-[#1e1f22] hover:bg-[#35373c] text-xs font-bold text-[#dbdee1] border border-white/5 cursor-pointer transition-colors"
+          className="mb-3 w-full flex items-center justify-between px-3 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-xs font-bold text-[#e2e8f0] border border-white/10 cursor-pointer transition-all shadow-sm hover:scale-[1.02]"
         >
           <span className="flex items-center gap-1.5 text-amber-400">
             <Shield className="w-3.5 h-3.5" />
             <span>Rolleri Yönet</span>
           </span>
-          <Settings className="w-3.5 h-3.5 text-[#949ba4]" />
+          <Settings className="w-3.5 h-3.5 text-[#94a3b8]" />
         </button>
       )}
 
@@ -132,11 +132,11 @@ export default function MemberList({
             {/* Category Header */}
             <div className="flex items-center justify-between px-2 py-0.5">
               <span 
-                className="text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5"
-                style={{ color: group.color || '#949ba4' }}
+                className="text-[10px] font-extrabold uppercase tracking-widest flex items-center gap-1.5"
+                style={{ color: group.color || '#94a3b8' }}
               >
                 <span>{group.name}</span>
-                <span className="opacity-70">— {group.count}</span>
+                <span className="opacity-70 font-mono">— {group.count}</span>
               </span>
             </div>
 
@@ -162,8 +162,8 @@ export default function MemberList({
                         onOpenDM(member);
                       }
                     }}
-                    className={`flex items-center gap-2.5 px-2 py-1.5 rounded-xl hover:bg-[#35373c] cursor-pointer transition-all duration-150 group border border-transparent hover:border-[#383a40] ${
-                      isOffline ? 'opacity-50 hover:opacity-100' : ''
+                    className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-white/[0.04] cursor-pointer transition-all duration-150 group border border-transparent hover:border-white/5 ${
+                      isOffline ? 'opacity-40 hover:opacity-100' : ''
                     }`}
                     title={isOffline ? `${member.username} (Çevrimdışı)` : `${member.username} (Sağ tıkla seçenekler)`}
                   >
@@ -176,8 +176,8 @@ export default function MemberList({
                           e.currentTarget.onerror = null;
                           e.currentTarget.src = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(member.username || 'user')}`;
                         }}
-                        className={`w-8 h-8 rounded-full bg-[#1e1f22] object-cover border transition-all ${
-                          isSpeaking ? 'border-[#23a55a] scale-105 shadow-md shadow-[#23a55a]/40' : 'border-[#383a40]'
+                        className={`w-8 h-8 rounded-full bg-[#141829] object-cover border transition-all ${
+                          isSpeaking ? 'border-emerald-400 scale-105 shadow-[0_0_10px_rgba(16,185,129,0.7)]' : 'border-white/10 group-hover:border-indigo-500/40'
                         }`}
                       />
                       <AvatarDecorationRenderer decoration={member.avatarDecoration} size="sm" />
@@ -195,28 +195,28 @@ export default function MemberList({
                         </span>
 
                         {member.badges?.includes('owner') && <span className="text-[10px]">👑</span>}
-                        {isCurrent && <span className="text-[9px] text-[#949ba4] font-normal shrink-0">(Sen)</span>}
+                        {isCurrent && <span className="text-[9px] text-[#64748b] font-normal shrink-0">(Sen)</span>}
                         {member.isBot && (
-                          <span className="text-[9px] bg-[#5865f2] text-white px-1 py-0.2 rounded font-bold shrink-0">
+                          <span className="text-[9px] bg-gradient-to-r from-indigo-500 to-purple-600 text-white px-1.5 py-0.2 rounded font-black shrink-0 tracking-wider shadow-[0_0_6px_rgba(99,102,241,0.5)]">
                             BOT
                           </span>
                         )}
                       </div>
 
                       {/* Status / Activity or Live stream badge */}
-                      <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-[#949ba4] truncate">
+                      <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-[#64748b] truncate">
                         {isStreaming ? (
-                          <span className="flex items-center gap-1 text-[10px] font-bold text-[#f23f43] bg-[#f23f43]/15 px-1.5 py-0.2 rounded">
+                          <span className="flex items-center gap-1 text-[9px] font-bold text-rose-400 bg-rose-500/15 px-1.5 py-0.2 rounded-md">
                             <Radio className="w-2.5 h-2.5 animate-pulse" />
                             <span>YAYINDA</span>
                           </span>
                         ) : member.gameActivity ? (
-                          <span className="flex items-center gap-1 truncate text-[10px] text-[#23a55a]">
+                          <span className="flex items-center gap-1 truncate text-[10px] text-emerald-400 font-medium">
                             <Gamepad2 className="w-3 h-3 shrink-0" />
                             <span className="truncate">{member.gameActivity}</span>
                           </span>
                         ) : member.customStatus ? (
-                          <span className="truncate text-[10px] text-[#949ba4]">
+                          <span className="truncate text-[10px] text-[#64748b]">
                             {member.statusEmoji} {member.customStatus}
                           </span>
                         ) : null}

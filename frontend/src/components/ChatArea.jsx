@@ -225,47 +225,50 @@ export default function ChatArea({
   const firstVoice = voiceChannels[0] || { id: 'voice-genel', name: 'Ses Odası - Genel' };
 
   return (
-    <div className="flex-1 flex flex-col bg-[#313338] overflow-hidden relative select-text">
+    <div className="flex-1 flex flex-col bg-[#131728] overflow-hidden relative select-text">
+      {/* Ambient background glow accents */}
+      <div className="absolute top-0 left-1/4 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-10 right-1/4 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
       
-      {/* 1. ULTRA-POLISHED DISCORD TOP BAR */}
-      <div className="h-13 bg-[#313338] border-b border-[#232428] px-4 flex items-center justify-between shadow-xs z-20 shrink-0 select-none">
+      {/* 1. ULTRA-POLISHED SYNAPSE TOP BAR */}
+      <div className="h-13 bg-[#0f1322]/80 backdrop-blur-2xl border-b border-white/5 px-4 flex items-center justify-between shadow-lg z-20 shrink-0 select-none">
         
         {/* Channel Info */}
         <div className="flex items-center gap-3 overflow-hidden">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-[#5865f2]/15 flex items-center justify-center text-[#5865f2] border border-[#5865f2]/30 font-bold text-sm">
+            <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 font-bold text-sm shadow-[0_0_10px_rgba(99,102,241,0.2)]">
               {channel.type === 'dm' ? '@' : <Hash className="w-4 h-4 stroke-[2.5]" />}
             </div>
-            <span className="font-black text-sm text-white tracking-tight">
+            <span className="font-extrabold text-sm text-white tracking-tight">
               {channel.name}
             </span>
           </div>
 
-          <div className="h-4 w-px bg-[#3f4147] hidden sm:block" />
+          <div className="h-4 w-px bg-white/10 hidden sm:block" />
 
-          <span className="text-xs text-[#949ba4] font-medium hidden md:inline truncate max-w-xs">
+          <span className="text-xs text-[#94a3b8] font-medium hidden md:inline truncate max-w-xs">
             {channel.topic || 'Topluluk ana sohbet alanı'}
           </span>
 
           {/* Badges */}
           <div className="hidden xl:flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded-full bg-[#5865f2]/15 border border-[#5865f2]/30 text-[#5865f2] text-[10px] font-bold flex items-center gap-1">
-              <Sparkles className="w-3 h-3" /> Sınırsız Topluluk
+            <span className="px-2 py-0.5 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 text-[10px] font-bold flex items-center gap-1 shadow-[0_0_8px_rgba(99,102,241,0.2)]">
+              <Sparkles className="w-3 h-3 text-cyan-400" /> Sınırsız Topluluk
             </span>
-            <span className="px-2 py-0.5 rounded-full bg-[#23a55a]/15 border border-[#23a55a]/30 text-[#23a55a] text-[10px] font-bold flex items-center gap-1">
-              <Zap className="w-3 h-3" /> 60 FPS Ultra HQ
+            <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-bold flex items-center gap-1 shadow-[0_0_8px_rgba(16,185,129,0.2)]">
+              <Zap className="w-3 h-3 text-emerald-400" /> 60 FPS Ultra HQ
             </span>
           </div>
         </div>
 
         {/* Action Controls on Right */}
-        <div className="flex items-center gap-2 text-[#b5bac1]">
+        <div className="flex items-center gap-1.5 text-[#94a3b8]">
           
           {/* Windows Download button (Only on Web) */}
           {!isAppInstalled && (
             <button
               onClick={onOpenDownload}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#23a55a] hover:bg-[#1f934f] text-white text-xs font-bold transition-all shadow-xs hover:scale-105 cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white text-xs font-bold transition-all shadow-md hover:scale-105 cursor-pointer"
               title="Windows Masaüstü Uygulamasını İndir (.zip)"
             >
               <Download className="w-4 h-4 animate-bounce" />
@@ -276,10 +279,10 @@ export default function ChatArea({
           {/* Universal Music Bot Button */}
           <button
             onClick={onOpenMusicModal}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-[#5865f2]/20 via-[#1db954]/20 to-[#fc3c44]/20 hover:from-[#5865f2] hover:to-[#1db954] text-white text-xs font-bold transition-all shadow-xs border border-[#5865f2]/40 hover:border-transparent hover:scale-105 cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-emerald-500/20 hover:from-indigo-600 hover:to-emerald-600 text-white text-xs font-bold transition-all shadow-md border border-indigo-500/30 hover:border-transparent hover:scale-105 cursor-pointer"
             title="Fivecord DJ - Müzik Çaları Aç"
           >
-            <Disc3 className="w-4 h-4 text-[#1db954] animate-spin" />
+            <Disc3 className="w-4 h-4 text-emerald-400 animate-spin" />
             <span className="hidden sm:inline">Fivecord DJ</span>
           </button>
 
@@ -287,7 +290,7 @@ export default function ChatArea({
           {currentVoiceChannel && (
             <button
               onClick={() => onSwitchToVoiceStage?.(currentVoiceChannel)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#23a55a]/20 hover:bg-[#23a55a] text-[#23a55a] hover:text-white text-xs font-bold transition-all shadow-xs border border-[#23a55a]/40 hover:border-transparent hover:scale-105 cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-600 text-emerald-400 hover:text-white text-xs font-bold transition-all shadow-md border border-emerald-500/30 hover:border-transparent hover:scale-105 cursor-pointer"
               title="Aktif Ses Sahnesine Dön"
             >
               <Volume2 className="w-4 h-4 animate-pulse" />
@@ -301,8 +304,8 @@ export default function ChatArea({
               setShowSearch(!showSearch);
               if (showSearch) setSearchQuery('');
             }}
-            className={`p-2 rounded-lg transition-colors cursor-pointer ${
-              showSearch ? 'bg-[#35373c] text-white' : 'hover:text-white hover:bg-[#35373c]'
+            className={`p-2 rounded-xl transition-all cursor-pointer ${
+              showSearch ? 'bg-white/10 text-white' : 'hover:text-white hover:bg-white/10'
             }`} 
             title="Mesajlarda Ara"
           >
@@ -312,21 +315,21 @@ export default function ChatArea({
           {/* Pinned Messages Toggle */}
           <button 
             onClick={() => setShowPinsDrawer(!showPinsDrawer)}
-            className={`p-2 rounded-lg transition-colors cursor-pointer relative ${
-              showPinsDrawer ? 'bg-[#35373c] text-[#f0b232]' : 'hover:text-white hover:bg-[#35373c]'
+            className={`p-2 rounded-xl transition-all cursor-pointer relative ${
+              showPinsDrawer ? 'bg-white/10 text-amber-400' : 'hover:text-white hover:bg-white/10'
             }`} 
             title="Sabitlenen Mesajlar"
           >
             <Pin className="w-4 h-4" />
             {pinnedMessages.length > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-[#f0b232] text-black text-[9px] font-black flex items-center justify-center">
+              <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-amber-400 text-black text-[9px] font-black flex items-center justify-center">
                 {pinnedMessages.length}
               </span>
             )}
           </button>
 
           {/* Notification Bell */}
-          <button className="p-2 hover:text-white rounded-lg hover:bg-[#35373c] transition-colors cursor-pointer" title="Bildirimler">
+          <button className="p-2 hover:text-white rounded-xl hover:bg-white/10 transition-all cursor-pointer" title="Bildirimler">
             <Bell className="w-4 h-4" />
           </button>
         </div>
@@ -334,20 +337,20 @@ export default function ChatArea({
 
       {/* SEARCH BAR POPDOWN */}
       {showSearch && (
-        <div className="px-4 py-2 bg-[#2b2d31] border-b border-[#383a40] flex items-center gap-2 animate-in slide-in-from-top duration-150 select-none">
-          <Search className="w-4 h-4 text-[#949ba4]" />
+        <div className="px-4 py-2.5 bg-[#0f1322]/90 backdrop-blur-xl border-b border-white/5 flex items-center gap-2 animate-in slide-in-from-top duration-150 select-none">
+          <Search className="w-4 h-4 text-[#94a3b8]" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Bu kanaldaki mesajlarda veya kullanıcılarda ara..."
-            className="flex-1 bg-transparent text-white text-xs focus:outline-hidden placeholder-[#80848e]"
+            className="flex-1 bg-transparent text-white text-xs focus:outline-hidden placeholder-[#64748b]"
             autoFocus
           />
           {searchQuery && (
             <button 
               onClick={() => setSearchQuery('')}
-              className="text-xs text-[#949ba4] hover:text-white px-2 py-0.5 rounded bg-[#1e1f22]"
+              className="text-xs text-[#94a3b8] hover:text-white px-2 py-0.5 rounded-lg bg-white/10"
             >
               Temizle
             </button>
@@ -357,7 +360,7 @@ export default function ChatArea({
               setShowSearch(false);
               setSearchQuery('');
             }}
-            className="text-xs text-[#949ba4] hover:text-white p-1"
+            className="text-xs text-[#94a3b8] hover:text-white p-1 rounded-lg hover:bg-white/10"
           >
             <X className="w-4 h-4" />
           </button>
@@ -365,21 +368,21 @@ export default function ChatArea({
       )}
 
       {/* 2. MAIN CHAT AREA (HERO HUB + MESSAGES) */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 custom-scrollbar">
         
-        {/* NATIVE DISCORD-STYLE MINIMAL CHANNEL START */}
+        {/* NATIVE SYNAPSE-STYLE MODERN CHANNEL START */}
         {channel.id === 'dm-empty' ? (
           <div className="flex-1 flex flex-col items-center justify-center p-12 text-center select-none my-auto">
-            <div className="w-16 h-16 rounded-3xl bg-[#5865f2]/20 flex items-center justify-center text-[#5865f2] mb-4 shadow-lg shadow-[#5865f2]/20">
+            <div className="w-18 h-18 rounded-3xl bg-gradient-to-tr from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 mb-4 shadow-xl">
               <Users className="w-8 h-8" />
             </div>
             <h2 className="text-xl font-black text-white mb-2">Henüz Bir Arkadaş Seçilmedi</h2>
-            <p className="text-sm text-[#949ba4] max-w-md">
+            <p className="text-sm text-[#94a3b8] max-w-md">
               Özel mesajlaşmak için sol taraftaki listeden bir arkadaşını seç.
             </p>
           </div>
         ) : channel.type === 'dm' ? (
-          <div className="pt-6 pb-2 px-2 select-none">
+          <div className="pt-6 pb-4 px-2 select-none">
             <div className="relative inline-block mb-3">
               <img
                 src={channel.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${channel.name}`}
@@ -388,28 +391,62 @@ export default function ChatArea({
                   e.currentTarget.onerror = null;
                   e.currentTarget.src = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(channel.name || 'chat')}`;
                 }}
-                className="w-20 h-20 rounded-full bg-[#1e1f22] object-cover border-4 border-[#313338] shadow-lg"
+                className="w-20 h-20 rounded-full bg-[#141829] object-cover border-4 border-[#141829] shadow-2xl"
               />
-              <div className="absolute bottom-1 right-1 w-5 h-5 rounded-full bg-[#23a55a] border-3 border-[#313338]" />
+              <div className="absolute bottom-1 right-1 w-5 h-5 rounded-full bg-emerald-500 border-3 border-[#141829] shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
             </div>
             <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
               @{channel.name}
             </h1>
-            <p className="text-xs sm:text-sm text-[#949ba4] mt-1 max-w-xl leading-relaxed">
+            <p className="text-xs sm:text-sm text-[#94a3b8] mt-1 max-w-xl leading-relaxed">
               Bu, <strong>@{channel.name}</strong> ile olan doğrudan özel mesajlaşma geçmişinizin başlangıcıdır.
             </p>
           </div>
         ) : (
-          <div className="pt-6 pb-2 px-2 select-none">
-            <div className="w-16 h-16 rounded-full bg-[#5865f2]/20 flex items-center justify-center text-[#5865f2] mb-3">
-              <Hash className="w-8 h-8 stroke-[2.5]" />
+          /* FUTURISTIC SYNAPSE CHANNEL WELCOME HUB */
+          <div className="pt-8 pb-4 px-4 select-none rounded-3xl bg-gradient-to-b from-white/[0.03] to-transparent border border-white/5 shadow-xl mb-4">
+            <div className="relative inline-flex items-center justify-center mb-4">
+              <div className="absolute inset-0 rounded-3xl bg-gradient-to-tr from-indigo-500 to-cyan-400 blur-xl opacity-35 animate-pulse" />
+              <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-600 via-purple-600 to-cyan-500 border border-white/25 shadow-2xl flex items-center justify-center text-white">
+                <Hash className="w-8 h-8 stroke-[2.5]" />
+              </div>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight bg-gradient-to-r from-white via-[#f1f5f9] to-indigo-200 bg-clip-text text-transparent">
               #{channel.name} kanalına hoş geldiniz!
             </h1>
-            <p className="text-xs sm:text-sm text-[#949ba4] mt-1 max-w-xl leading-relaxed">
-              Burası #{channel.name} kanalının başlangıcıdır.
+            <p className="text-xs sm:text-sm text-[#94a3b8] mt-1.5 max-w-xl leading-relaxed">
+              Burası <strong>#{channel.name}</strong> kanalının başlangıcıdır. Mesaj gönderin, dosya paylaşın veya ses odalarına bağlanın.
             </p>
+
+            {/* Quick Action Chips */}
+            <div className="flex items-center gap-2 pt-4 flex-wrap">
+              <button
+                type="button"
+                onClick={() => inputRef.current?.focus()}
+                className="px-3 py-1.5 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 text-indigo-300 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs hover:scale-105"
+              >
+                <MessageSquare className="w-3.5 h-3.5 text-indigo-400" />
+                <span>İlk Mesajı Yaz</span>
+              </button>
+              
+              <button
+                type="button"
+                onClick={onOpenMusicModal}
+                className="px-3 py-1.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/30 text-purple-300 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs hover:scale-105"
+              >
+                <Disc3 className="w-3.5 h-3.5 text-purple-400" />
+                <span>Fivecord DJ Müzik Aç</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={onOpenWheel}
+                className="px-3 py-1.5 rounded-xl bg-pink-500/15 hover:bg-pink-500/25 border border-pink-500/30 text-pink-300 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs hover:scale-105"
+              >
+                <Dices className="w-3.5 h-3.5 text-pink-400" />
+                <span>Karar Çarkını Çevir</span>
+              </button>
+            </div>
           </div>
         )}
 
@@ -722,37 +759,37 @@ export default function ChatArea({
         ) : (
           <form 
             onSubmit={handleSend}
-            className="bg-[#383a40] rounded-2xl px-4 py-2.5 flex items-center gap-2.5 border border-transparent focus-within:border-[#5865f2]/50 shadow-lg transition-all relative"
+            className="bg-[#161a2e]/90 backdrop-blur-2xl rounded-2xl px-4 py-2.5 flex items-center gap-2.5 border border-white/10 focus-within:border-indigo-500/60 focus-within:shadow-[0_0_25px_rgba(99,102,241,0.25)] shadow-xl transition-all relative"
           >
           {/* Plus Action Menu Button */}
           <div className="relative">
             <button
               type="button"
               onClick={() => setShowPlusMenu(!showPlusMenu)}
-              className={`p-1.5 rounded-full transition-all cursor-pointer ${
+              className={`p-2 rounded-xl transition-all cursor-pointer ${
                 showPlusMenu 
-                  ? 'bg-[#5865f2] text-white rotate-45' 
-                  : 'bg-[#4e5058] hover:bg-[#5865f2] text-[#dbdee1] hover:text-white'
+                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white rotate-45 shadow-md' 
+                  : 'bg-white/10 hover:bg-gradient-to-r hover:from-indigo-600 hover:to-purple-600 text-[#cbd5e1] hover:text-white'
               }`}
               title="Ek Seçenekler & Dosya Gönder"
             >
-              <PlusCircle className={`w-5 h-5 ${isUploading ? 'animate-spin' : ''}`} />
+              <PlusCircle className={`w-4 h-4 ${isUploading ? 'animate-spin' : ''}`} />
             </button>
 
             {/* Plus Action Dropdown */}
             {showPlusMenu && (
-              <div className="absolute bottom-12 left-0 w-64 rounded-2xl bg-[#2b2d31] border border-[#3f4147] shadow-2xl p-2 z-30 space-y-1 animate-in slide-in-from-bottom-2 duration-150">
+              <div className="absolute bottom-12 left-0 w-64 rounded-2xl bg-[#13172a]/95 backdrop-blur-2xl border border-white/10 shadow-2xl p-2 z-30 space-y-1 animate-in slide-in-from-bottom-2 duration-150">
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="w-full p-2.5 rounded-xl hover:bg-[#35373c] text-left flex items-center gap-3 text-white text-xs font-bold transition-colors cursor-pointer"
+                  className="w-full p-2.5 rounded-xl hover:bg-white/10 text-left flex items-center gap-3 text-white text-xs font-bold transition-all cursor-pointer"
                 >
-                  <div className="w-8 h-8 rounded-lg bg-[#5865f2]/20 text-[#5865f2] flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
                     <Upload className="w-4 h-4" />
                   </div>
                   <div>
                     <div>Dosya / Fotoğraf Gönder</div>
-                    <div className="text-[10px] text-[#949ba4] font-normal">100MB Limitsiz Paylaşım</div>
+                    <div className="text-[10px] text-[#94a3b8] font-normal">100MB Limitsiz Paylaşım</div>
                   </div>
                 </button>
 
@@ -762,28 +799,28 @@ export default function ChatArea({
                     handleInsertCommand('!play');
                     setShowPlusMenu(false);
                   }}
-                  className="w-full p-2.5 rounded-xl hover:bg-[#35373c] text-left flex items-center gap-3 text-white text-xs font-bold transition-colors cursor-pointer"
+                  className="w-full p-2.5 rounded-xl hover:bg-white/10 text-left flex items-center gap-3 text-white text-xs font-bold transition-all cursor-pointer"
                 >
-                  <div className="w-8 h-8 rounded-lg bg-[#1db954]/20 text-[#1db954] flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
                     <Disc3 className="w-4 h-4" />
                   </div>
                   <div>
                     <div>Müzik Çal Komutu</div>
-                    <div className="text-[10px] text-[#949ba4] font-normal">!play &lt;şarkı adı&gt;</div>
+                    <div className="text-[10px] text-[#94a3b8] font-normal">!play &lt;şarkı adı&gt;</div>
                   </div>
                 </button>
 
                 <button
                   type="button"
                   onClick={handleRollDice}
-                  className="w-full p-2.5 rounded-xl hover:bg-[#35373c] text-left flex items-center gap-3 text-white text-xs font-bold transition-colors cursor-pointer"
+                  className="w-full p-2.5 rounded-xl hover:bg-white/10 text-left flex items-center gap-3 text-white text-xs font-bold transition-all cursor-pointer"
                 >
                   <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center">
                     <Dices className="w-4 h-4" />
                   </div>
                   <div>
                     <div>Zar At (1-100)</div>
-                    <div className="text-[10px] text-[#949ba4] font-normal">Rastgele şans oyunu</div>
+                    <div className="text-[10px] text-[#94a3b8] font-normal">Rastgele şans oyunu</div>
                   </div>
                 </button>
 
@@ -793,14 +830,14 @@ export default function ChatArea({
                     onOpenWheel && onOpenWheel();
                     setShowPlusMenu(false);
                   }}
-                  className="w-full p-2.5 rounded-xl hover:bg-[#35373c] text-left flex items-center gap-3 text-white text-xs font-bold transition-colors cursor-pointer"
+                  className="w-full p-2.5 rounded-xl hover:bg-white/10 text-left flex items-center gap-3 text-white text-xs font-bold transition-all cursor-pointer"
                 >
-                  <div className="w-8 h-8 rounded-lg bg-[#eb459e]/20 text-[#eb459e] flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-lg bg-pink-500/20 text-pink-400 flex items-center justify-center">
                     <Dices className="w-4 h-4" />
                   </div>
                   <div>
                     <div>Karar Çarkı ("Ne Oynuyoruz?")</div>
-                    <div className="text-[10px] text-[#949ba4] font-normal">Ekip için oyun & yemek çarkı</div>
+                    <div className="text-[10px] text-[#94a3b8] font-normal">Ekip için oyun & yemek çarkı</div>
                   </div>
                 </button>
               </div>
@@ -831,14 +868,14 @@ export default function ChatArea({
                 ? `@${channel.name} kullanıcısına özel mesaj gönder...`
                 : `#${channel.name} kanalına mesaj gönder... (/tts veya /cark yazabilirsin)`
             }
-            className="flex-1 bg-transparent text-white text-sm focus:outline-hidden placeholder-[#80848e] font-normal"
+            className="flex-1 bg-transparent text-white text-sm focus:outline-hidden placeholder-[#64748b] font-normal"
           />
 
           {/* Quick Decision Wheel Button */}
           <button
             type="button"
             onClick={onOpenWheel}
-            className="p-1.5 text-[#b5bac1] hover:text-[#eb459e] hover:bg-[#35373c] rounded-lg transition-all cursor-pointer"
+            className="p-2 text-[#94a3b8] hover:text-pink-400 hover:bg-white/10 rounded-xl transition-all cursor-pointer"
             title="🎯 Karar Çarkı ('Ne Oynuyoruz?')"
           >
             <Dices className="w-5 h-5" />
@@ -852,8 +889,8 @@ export default function ChatArea({
                 setShowGifPicker(!showGifPicker);
                 setShowEmojiPicker(false);
               }}
-              className={`px-2 py-1 rounded-md text-[11px] font-black transition-all cursor-pointer ${
-                showGifPicker ? 'bg-[#5865f2] text-white' : 'bg-[#4e5058]/80 hover:bg-[#5865f2] text-[#dbdee1] hover:text-white'
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-black transition-all cursor-pointer ${
+                showGifPicker ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md' : 'bg-white/10 hover:bg-gradient-to-r hover:from-indigo-600 hover:to-purple-600 text-[#cbd5e1] hover:text-white'
               }`}
               title="Popüler Gamer GIF'i Gönder"
             >
@@ -862,22 +899,22 @@ export default function ChatArea({
 
             {/* GIF Picker Popup */}
             {showGifPicker && (
-              <div className="absolute bottom-12 right-0 w-80 bg-[#2b2d31] border border-[#3f4147] rounded-2xl p-3 shadow-2xl z-30 space-y-2 animate-in slide-in-from-bottom-2 duration-150">
-                <div className="flex items-center justify-between pb-1 border-b border-[#383a40]">
+              <div className="absolute bottom-12 right-0 w-80 bg-[#13172a]/95 backdrop-blur-2xl border border-white/10 rounded-2xl p-3 shadow-2xl z-30 space-y-2 animate-in slide-in-from-bottom-2 duration-150">
+                <div className="flex items-center justify-between pb-1.5 border-b border-white/5">
                   <span className="text-xs font-bold text-white flex items-center gap-1.5">
                     <span>🎬 Popüler Gamer GIF'leri</span>
                   </span>
-                  <button onClick={() => setShowGifPicker(false)} className="text-[#949ba4] hover:text-white">
+                  <button onClick={() => setShowGifPicker(false)} className="text-[#94a3b8] hover:text-white p-1 rounded-lg hover:bg-white/10">
                     <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
+                <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
                   {PRESET_GIFS.map(gif => (
                     <div
                       key={gif.name}
                       onClick={() => handleSendGif(gif.url)}
-                      className="relative h-24 rounded-xl overflow-hidden border border-[#383a40] hover:border-[#5865f2] cursor-pointer group transition-all"
+                      className="relative h-24 rounded-xl overflow-hidden border border-white/10 hover:border-indigo-500 cursor-pointer group transition-all"
                     >
                       <img src={gif.url} alt={gif.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                       <div className="absolute inset-0 bg-black/40 flex items-end p-1.5">
@@ -898,8 +935,8 @@ export default function ChatArea({
                 setShowEmojiPicker(!showEmojiPicker);
                 setShowGifPicker(false);
               }}
-              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                showEmojiPicker ? 'text-[#f0b232]' : 'text-[#b5bac1] hover:text-[#f0b232]'
+              className={`p-2 rounded-xl transition-all cursor-pointer ${
+                showEmojiPicker ? 'text-amber-400 bg-white/10' : 'text-[#94a3b8] hover:text-amber-400 hover:bg-white/10'
               }`}
               title="Emoji Seçici"
             >
@@ -908,18 +945,18 @@ export default function ChatArea({
 
             {/* Categorized Emoji Picker Popup */}
             {showEmojiPicker && (
-              <div className="absolute bottom-12 right-0 w-72 bg-[#2b2d31] border border-[#3f4147] rounded-2xl p-3 shadow-2xl z-30 space-y-2.5 animate-in slide-in-from-bottom-2 duration-150">
-                <div className="flex items-center justify-between pb-1 border-b border-[#383a40]">
+              <div className="absolute bottom-12 right-0 w-72 bg-[#13172a]/95 backdrop-blur-2xl border border-white/10 rounded-2xl p-3 shadow-2xl z-30 space-y-2.5 animate-in slide-in-from-bottom-2 duration-150">
+                <div className="flex items-center justify-between pb-1.5 border-b border-white/5">
                   <span className="text-xs font-bold text-white">Emojiler</span>
-                  <button onClick={() => setShowEmojiPicker(false)} className="text-[#949ba4] hover:text-white">
+                  <button onClick={() => setShowEmojiPicker(false)} className="text-[#94a3b8] hover:text-white p-1 rounded-lg hover:bg-white/10">
                     <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
 
-                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1 custom-scrollbar">
                   {EMOJI_CATEGORIES.map(cat => (
                     <div key={cat.category} className="space-y-1">
-                      <div className="text-[10px] font-bold uppercase text-[#949ba4]">{cat.category}</div>
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-[#94a3b8]">{cat.category}</div>
                       <div className="grid grid-cols-5 gap-1">
                         {cat.emojis.map(em => (
                           <button
@@ -930,7 +967,7 @@ export default function ChatArea({
                               setShowEmojiPicker(false);
                               inputRef.current?.focus();
                             }}
-                            className="p-1.5 hover:bg-[#35373c] rounded-lg text-lg hover:scale-125 transition-transform flex items-center justify-center cursor-pointer"
+                            className="p-1.5 hover:bg-white/10 rounded-xl text-lg hover:scale-125 transition-transform flex items-center justify-center cursor-pointer"
                           >
                             {em}
                           </button>
@@ -947,7 +984,7 @@ export default function ChatArea({
           <button
             type="submit"
             disabled={!inputText.trim()}
-            className="p-2 text-white bg-[#5865f2] hover:bg-[#4752c4] disabled:opacity-30 rounded-xl transition-all hover:scale-105 shrink-0 cursor-pointer shadow-sm"
+            className="p-2.5 text-white bg-gradient-to-r from-indigo-500 via-purple-600 to-cyan-500 hover:from-indigo-600 hover:to-cyan-600 disabled:opacity-30 rounded-xl transition-all hover:scale-105 shrink-0 cursor-pointer shadow-[0_0_15px_rgba(99,102,241,0.4)]"
             title="Gönder (Enter)"
           >
             <Send className="w-4 h-4" />

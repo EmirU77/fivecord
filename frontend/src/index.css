@@ -2,54 +2,68 @@
 
 @layer base {
   :root {
-    --bg-darkest: #1e1f22;
-    --bg-darker: #2b2d31;
-    --bg-main: #313338;
-    --bg-input: #383a40;
-    --bg-hover: #35373c;
-    --blurple: #5865f2;
-    --blurple-hover: #4752c4;
-    --green-status: #23a55a;
-    --red-status: #f23f43;
-    --yellow-status: #f0b232;
+    --bg-darkest: #0a0c14;
+    --bg-darker: #0f1322;
+    --bg-main: #131728;
+    --bg-input: #1a2035;
+    --bg-hover: #1f253e;
+    --blurple: #6366f1;
+    --blurple-hover: #4f46e5;
+    --green-status: #10b981;
+    --red-status: #f43f5e;
+    --yellow-status: #f59e0b;
+    --synapse-cyan: #06b6d4;
+    --synapse-purple: #a855f7;
   }
 
   body {
     margin: 0;
     padding: 0;
-    background-color: #1e1f22;
-    color: #dbdee1;
-    font-family: 'gg sans', 'Noto Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    background-color: #0a0c14;
+    color: #e2e8f0;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Inter', sans-serif;
     user-select: none;
     overflow: hidden;
+    letter-spacing: -0.01em;
   }
 
-  /* Custom sleek scrollbars */
+  /* Custom ultra-sleek scrollbars */
   ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 5px;
+    height: 5px;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: #2b2d31;
-    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 9999px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #35373c;
+    background: rgba(99, 102, 241, 0.5);
   }
 }
 
 .synapse-glass {
-  background: rgba(30, 31, 34, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(15, 19, 34, 0.82);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.synapse-card {
+  background: rgba(20, 25, 45, 0.65);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .synapse-glow {
-  box-shadow: 0 0 20px -5px rgba(88, 101, 242, 0.35);
+  box-shadow: 0 0 25px -5px rgba(99, 102, 241, 0.35);
+}
+
+.synapse-glow-cyan {
+  box-shadow: 0 0 25px -5px rgba(6, 182, 212, 0.35);
 }
 
 @keyframes pulse-ring {
