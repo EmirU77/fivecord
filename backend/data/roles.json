@@ -1,0 +1,47 @@
+[
+  {
+    "id": "role-founder",
+    "name": "👑 Kurucu",
+    "color": "#f1c40f",
+    "position": 1,
+    "hoist": true,
+    "permissions": [
+      "admin",
+      "kick",
+      "ban",
+      "manage_roles",
+      "manage_channels",
+      "mute_members"
+    ]
+  },
+  {
+    "id": "role-mod",
+    "name": "🛡️ Moderatör",
+    "color": "#3498db",
+    "position": 2,
+    "hoist": true,
+    "permissions": [
+      "kick",
+      "ban",
+      "mute_members"
+    ]
+  },
+  {
+    "id": "role-vip",
+    "name": "⭐ VIP",
+    "color": "#9b59b6",
+    "position": 3,
+    "hoist": true,
+    "permissions": [
+      "priority_speaker"
+    ]
+  },
+  {
+    "id": "role-member",
+    "name": "Üye",
+    "color": "#99aab5",
+    "position": 4,
+    "hoist": false,
+    "permissions": []
+  }
+]

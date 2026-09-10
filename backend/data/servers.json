@@ -1,0 +1,98 @@
+[
+  {
+    "id": "server-main",
+    "name": "Synapse Topluluğu",
+    "icon": "S",
+    "avatar": null,
+    "ownerId": "user-emir",
+    "description": "Resmi Synapse Ana Topluluk Sunucusu",
+    "isPublic": true,
+    "channels": [
+      {
+        "id": "text-genel",
+        "name": "genel-sohbet",
+        "type": "text",
+        "topic": "Topluluk ana sohbet alanı"
+      },
+      {
+        "id": "text-oyun",
+        "name": "oyun-odası",
+        "type": "text",
+        "topic": "Oyun içi paylaşımlar ve taktikler"
+      },
+      {
+        "id": "text-medya",
+        "name": "klipler-ve-ss",
+        "type": "text",
+        "topic": "Ekran görüntüleri ve videolar"
+      },
+      {
+        "id": "voice-genel",
+        "name": "🔊 Ses Odası - Genel",
+        "type": "voice",
+        "bitrate": "128kbps"
+      },
+      {
+        "id": "voice-oyun",
+        "name": "🎮 Ses Odası - Oyun & Pro",
+        "type": "voice",
+        "bitrate": "256kbps"
+      },
+      {
+        "id": "voice-sinema",
+        "name": "🍿 4K Ekran / Sinema",
+        "type": "voice",
+        "bitrate": "Ultra HQ"
+      }
+    ],
+    "roles": [
+      {
+        "id": "role-founder",
+        "name": "👑 Kurucu",
+        "color": "#f1c40f",
+        "position": 1,
+        "hoist": true,
+        "permissions": [
+          "admin",
+          "kick",
+          "ban",
+          "manage_roles",
+          "manage_channels",
+          "mute_members"
+        ]
+      },
+      {
+        "id": "role-mod",
+        "name": "🛡️ Moderatör",
+        "color": "#3498db",
+        "position": 2,
+        "hoist": true,
+        "permissions": [
+          "kick",
+          "ban",
+          "mute_members"
+        ]
+      },
+      {
+        "id": "role-vip",
+        "name": "⭐ VIP",
+        "color": "#9b59b6",
+        "position": 3,
+        "hoist": true,
+        "permissions": [
+          "priority_speaker"
+        ]
+      },
+      {
+        "id": "role-member",
+        "name": "Üye",
+        "color": "#99aab5",
+        "position": 4,
+        "hoist": false,
+        "permissions": []
+      }
+    ],
+    "members": [],
+    "createdAt": 1700000000000
+  }
+]

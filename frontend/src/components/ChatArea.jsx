@@ -4,7 +4,7 @@ import {
   FileText, Download, Heart, Flame, ThumbsUp, Laugh,
   Monitor, MonitorOff, Video, Sparkles, Volume2, Radio,
   Bell, Pin, Users, Search, Disc3, Mic, X, Check, Copy,
-  Trash2, ExternalLink, Dices, Gift, MessageSquare, Zap, Upload
+  Trash2, ExternalLink, Dices, Gift, MessageSquare, Zap, Upload, Ban
 } from 'lucide-react';
 import { socket } from '../services/socket';
 import { soundEffects } from '../services/soundEffects';
@@ -56,7 +56,9 @@ export default function ChatArea({
   voiceChannels = [],
   members = [],
   isAppInstalled,
-  onOpenWheel
+  onOpenWheel,
+  isBlocked = false,
+  onUnblock
 }) {
   const [inputText, setInputText] = useState('');
   const [typingUsers, setTypingUsers] = useState([]);
@@ -701,10 +703,27 @@ export default function ChatArea({
 
       {/* 6. ADVANCED DISCORD MESSAGE INPUT BAR */}
       <div className="px-4 pb-4 pt-1 shrink-0 select-none">
-        <form 
-          onSubmit={handleSend}
-          className="bg-[#383a40] rounded-2xl px-4 py-2.5 flex items-center gap-2.5 border border-transparent focus-within:border-[#5865f2]/50 shadow-lg transition-all relative"
-        >
+        {isBlocked ? (
+          <div className="bg-[#111214]/85 border border-[#da373c]/40 rounded-2xl px-5 py-3.5 flex items-center justify-between text-xs text-[#f23f43] shadow-lg">
+            <div className="flex items-center gap-2.5">
+              <Ban className="w-5 h-5 text-[#da373c] shrink-0" />
+              <span className="font-medium text-[#dbdee1]">
+                Bu kullanıcıyı engellediniz. Kendisine özel mesaj gönderemez ve kendisinden mesaj alamazsınız.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={onUnblock}
+              className="px-3.5 py-1.5 bg-[#23a55a] hover:bg-[#23a55a]/80 text-white rounded-xl font-bold text-xs cursor-pointer transition-colors shadow-sm shrink-0"
+            >
+              Engeli Kaldır
+            </button>
+          </div>
+        ) : (
+          <form 
+            onSubmit={handleSend}
+            className="bg-[#383a40] rounded-2xl px-4 py-2.5 flex items-center gap-2.5 border border-transparent focus-within:border-[#5865f2]/50 shadow-lg transition-all relative"
+          >
           {/* Plus Action Menu Button */}
           <div className="relative">
             <button
@@ -934,6 +953,7 @@ export default function ChatArea({
             <Send className="w-4 h-4" />
           </button>
         </form>
+        )}
       </div>
     </div>
   );

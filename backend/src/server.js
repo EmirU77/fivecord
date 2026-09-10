@@ -1575,47 +1575,56 @@ io.on('connection', (socket) => {
   });
 
   // --- MODERATION: KICK, BAN, SERVER-MUTE ---
-  socket.on('kick-member', ({ targetUserId, reason }) => {
+  socket.on('kick-member', ({ targetUserId, targetUsername, reason }) => {
     const sender = users.get(socket.id);
     let targetSocket = null;
     let targetUser = null;
 
     for (const [sId, u] of users.entries()) {
-      if (u.id === targetUserId) {
+      if (
+        (targetUserId && u.id === targetUserId) ||
+        (targetUsername && u.username && u.username.toLowerCase() === targetUsername.toLowerCase())
+      ) {
         targetSocket = io.sockets.sockets.get(sId);
         targetUser = u;
         break;
       }
     }
 
-    if (targetSocket && targetUser) {
+    const kickedName = targetUser?.username || targetUsername || 'Kullanıcı';
+
+    if (targetSocket) {
       targetSocket.emit('kicked-from-server', {
         reason: reason || 'Sunucu yetkilisi tarafından sunucudan atıldınız.'
       });
-      if (targetUser.voiceState?.channelId) {
+      if (targetUser?.voiceState?.channelId) {
         const vCh = voiceChannels.get(targetUser.voiceState.channelId);
         if (vCh) vCh.delete(targetUser.id);
         targetSocket.leave(`voice-${targetUser.voiceState.channelId}`);
       }
       users.delete(targetSocket.id);
       targetSocket.disconnect(true);
-
-      sendBotChatMessage('text-genel', `👞 **${targetUser.username}** sunucudan atıldı. (Yetkili: ${sender?.username || 'Yönetici'})`);
-      io.emit('members-updated', getAllMembers());
     }
+
+    sendBotChatMessage('text-genel', `👞 **${kickedName}** sunucudan atıldı. (Yetkili: ${sender?.username || 'Yönetici'}) (Sebep: ${reason || 'Belirtilmedi'})`);
+    io.emit('members-updated', getAllMembers());
   });
 
-  socket.on('ban-member', ({ targetUserId, reason }) => {
+  socket.on('ban-member', ({ targetUserId, targetUsername, reason }) => {
     const sender = users.get(socket.id);
     const accounts = persistence.loadAccounts();
-    const acc = accounts.find(a => a.id === targetUserId);
-    const targetUsername = acc ? acc.username : 'Kullanıcı';
+    const acc = accounts.find(a => 
+      (targetUserId && a.id === targetUserId) || 
+      (targetUsername && a.username && a.username.toLowerCase() === targetUsername.toLowerCase())
+    );
+    const finalUsername = targetUsername || acc?.username || 'Kullanıcı';
+    const finalUserId = targetUserId || acc?.id || ('user-' + finalUsername.toLowerCase());
 
     const bans = persistence.loadBans();
-    if (!bans.some(b => b.userId === targetUserId)) {
+    if (!bans.some(b => (finalUserId && b.userId === finalUserId) || (finalUsername && b.username && b.username.toLowerCase() === finalUsername.toLowerCase()))) {
       bans.push({
-        userId: targetUserId,
-        username: targetUsername,
+        userId: finalUserId,
+        username: finalUsername,
         reason: reason || 'Sunucudan yasaklandı.',
         bannedBy: sender?.username || 'Yönetici',
         bannedAt: Date.now()
@@ -1624,20 +1633,27 @@ io.on('connection', (socket) => {
     }
 
     for (const [sId, u] of users.entries()) {
-      if (u.id === targetUserId) {
+      if (
+        (finalUserId && u.id === finalUserId) ||
+        (finalUsername && u.username && u.username.toLowerCase() === finalUsername.toLowerCase())
+      ) {
         const targetSocket = io.sockets.sockets.get(sId);
         if (targetSocket) {
           targetSocket.emit('banned-from-server', {
             reason: reason || 'Sunucudan kalıcı olarak yasaklandınız.'
           });
+          if (u.voiceState?.channelId) {
+            const vCh = voiceChannels.get(u.voiceState.channelId);
+            if (vCh) vCh.delete(u.id);
+            targetSocket.leave(`voice-${u.voiceState.channelId}`);
+          }
           targetSocket.disconnect(true);
         }
         users.delete(sId);
-        break;
       }
     }
 
-    sendBotChatMessage('text-genel', `⛔ **${targetUsername}** sunucudan kalıcı olarak yasaklandı! (Sebep: ${reason || 'Belirtilmedi'})`);
+    sendBotChatMessage('text-genel', `⛔ **${finalUsername}** sunucudan kalıcı olarak yasaklandı! (Yetkili: ${sender?.username || 'Yönetici'}) (Sebep: ${reason || 'Belirtilmedi'})`);
     io.emit('bans-updated', bans);
     io.emit('members-updated', getAllMembers());
   });
@@ -1648,19 +1664,28 @@ io.on('connection', (socket) => {
     io.emit('bans-updated', bans);
   });
 
-  socket.on('remove-member', ({ targetUserId }) => {
+  socket.on('remove-member', ({ targetUserId, targetUsername }) => {
     const sender = users.get(socket.id);
     const accounts = persistence.loadAccounts();
-    const targetAcc = accounts.find(a => a.id === targetUserId);
-    const targetUsername = targetAcc ? targetAcc.username : 'Kullanıcı';
+    const targetAcc = accounts.find(a => 
+      (targetUserId && a.id === targetUserId) ||
+      (targetUsername && a.username && a.username.toLowerCase() === targetUsername.toLowerCase())
+    );
+    const finalUsername = targetUsername || targetAcc?.username || 'Kullanıcı';
 
     // Remove from accounts.json
-    const updatedAccounts = accounts.filter(a => a.id !== targetUserId);
+    const updatedAccounts = accounts.filter(a => 
+      !(targetUserId && a.id === targetUserId) &&
+      !(targetUsername && a.username && a.username.toLowerCase() === targetUsername.toLowerCase())
+    );
     persistence.safeWriteJSON(persistence.ACCOUNTS_FILE, updatedAccounts);
 
     // If currently connected, disconnect and remove from channels
     for (const [sId, u] of users.entries()) {
-      if (u.id === targetUserId) {
+      if (
+        (targetUserId && u.id === targetUserId) ||
+        (targetUsername && u.username && u.username.toLowerCase() === targetUsername.toLowerCase())
+      ) {
         const targetSocket = io.sockets.sockets.get(sId);
         if (targetSocket) {
           targetSocket.emit('kicked-from-server', {
@@ -1674,12 +1699,19 @@ io.on('connection', (socket) => {
           targetSocket.disconnect(true);
         }
         users.delete(sId);
-        break;
       }
     }
 
-    sendBotChatMessage('text-genel', `🗑️ **${targetUsername}** adlı kullanıcının sunucu üye kaydı silindi. (Yetkili: ${sender?.username || 'Yönetici'})`);
+    sendBotChatMessage('text-genel', `🗑️ **${finalUsername}** adlı kullanıcının sunucu üye kaydı silindi. (Yetkili: ${sender?.username || 'Yönetici'})`);
     io.emit('members-updated', getAllMembers());
+  });
+
+  socket.on('clear-dm-history', ({ channelId }) => {
+    if (!channelId || !channelId.startsWith('dm-')) return;
+    textMessages.set(channelId, []);
+    persistence.scheduleSaveMessages(textMessages);
+    io.emit('messages-history', { channelId, messages: [] });
+    console.log(`[DM History Cleared] ${channelId}`);
   });
 
   socket.on('get-bans', () => {

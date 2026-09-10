@@ -66,8 +66,23 @@ export default function App() {
 
   const [channels, setChannels] = useState([]);
   const [currentChannel, setCurrentChannel] = useState(null);
-  const currentChannelRef = useRef(null);
   const [unreadDms, setUnreadDms] = useState(new Set());
+  const [closedDms, setClosedDms] = useState(() => {
+    try {
+      const saved = localStorage.getItem('synapse_closed_dms');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch (e) {
+      return new Set();
+    }
+  });
+  const [blockedUsers, setBlockedUsers] = useState(() => {
+    try {
+      const saved = localStorage.getItem('synapse_blocked_users');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch (e) {
+      return new Set();
+    }
+  });
   const [currentVoiceChannel, setCurrentVoiceChannel] = useState(null);
   const [members, setMembers] = useState([]);
   const [messages, setMessages] = useState([]);
@@ -289,6 +304,15 @@ export default function App() {
       } else if (msg.channelId && msg.channelId.startsWith('dm-')) {
         // Incoming DM for a chat that is not currently open
         setUnreadDms(prev => new Set(prev).add(msg.sender.id));
+        setClosedDms(prev => {
+          if (prev.has(msg.sender.id)) {
+            const next = new Set(prev);
+            next.delete(msg.sender.id);
+            try { localStorage.setItem('synapse_closed_dms', JSON.stringify(Array.from(next))); } catch (e) {}
+            return next;
+          }
+          return prev;
+        });
       }
 
       if (msg.sender.id !== currentUser?.id) {
@@ -747,6 +771,18 @@ export default function App() {
       next.delete(targetFriend.id);
       return next;
     });
+
+    // Automatically unclose DM if it was previously closed
+    setClosedDms(prev => {
+      if (prev.has(targetFriend.id)) {
+        const next = new Set(prev);
+        next.delete(targetFriend.id);
+        try { localStorage.setItem('synapse_closed_dms', JSON.stringify(Array.from(next))); } catch (e) {}
+        return next;
+      }
+      return prev;
+    });
+
     const dmChannelId = 'dm-' + [(currentUser?.id || 'me'), targetFriend.id].sort().join('-');
     const dmChannel = {
       id: dmChannelId,
@@ -759,6 +795,51 @@ export default function App() {
     currentChannelRef.current = dmChannel;
     setMessages([]);
     socket.emit('fetch-messages', dmChannelId);
+  };
+
+  const handleCloseDM = (targetFriend) => {
+    if (!targetFriend) return;
+    setClosedDms(prev => {
+      const next = new Set(prev).add(targetFriend.id);
+      try { localStorage.setItem('synapse_closed_dms', JSON.stringify(Array.from(next))); } catch (e) {}
+      return next;
+    });
+
+    if (activeDmUser?.id === targetFriend.id) {
+      const nextFriend = members.find(m => m.id !== currentUser?.id && !m.isBot && !closedDms.has(m.id) && m.id !== targetFriend.id);
+      if (nextFriend) {
+        handleSelectDmUser(nextFriend);
+      } else {
+        setActiveDmUser(null);
+        const emptyCh = { id: 'dm-empty', name: 'Arkadaşlar', type: 'dm', topic: 'Özel Mesajlar' };
+        setCurrentChannel(emptyCh);
+        currentChannelRef.current = emptyCh;
+        setMessages([]);
+      }
+    }
+  };
+
+  const handleClearDMHistory = (targetFriend) => {
+    if (!targetFriend) return;
+    const dmChannelId = 'dm-' + [(currentUser?.id || 'me'), targetFriend.id].sort().join('-');
+    socket.emit('clear-dm-history', { channelId: dmChannelId });
+    if (currentChannelRef.current?.id === dmChannelId) {
+      setMessages([]);
+    }
+  };
+
+  const handleToggleBlock = (targetFriend) => {
+    if (!targetFriend) return;
+    setBlockedUsers(prev => {
+      const next = new Set(prev);
+      if (next.has(targetFriend.id)) {
+        next.delete(targetFriend.id);
+      } else {
+        next.add(targetFriend.id);
+      }
+      try { localStorage.setItem('synapse_blocked_users', JSON.stringify(Array.from(next))); } catch (e) {}
+      return next;
+    });
   };
 
   const handleOpenContextMenu = (e, targetMember) => {
@@ -848,6 +929,11 @@ export default function App() {
 
     if (!chId || chId === 'dm-empty') {
       console.warn('[Chat] Mesaj gönderilemedi: Geçerli bir kanal veya arkadaş seçili değil.');
+      return;
+    }
+
+    if (activeView === 'dm' && activeDmUser && blockedUsers.has(activeDmUser.id)) {
+      alert('Bu kullanıcıyı engellediniz. Mesaj göndermek için kullanıcıya sağ tıklayıp "Engeli Kaldır" seçeneğini kullanın.');
       return;
     }
 
@@ -1060,6 +1146,11 @@ export default function App() {
           isDeafened={isDeafened}
           setIsDeafened={setIsDeafened}
           unreadDms={unreadDms}
+          closedDms={closedDms}
+          blockedUsers={blockedUsers}
+          onCloseDM={handleCloseDM}
+          onClearHistory={handleClearDMHistory}
+          onToggleBlock={handleToggleBlock}
         />
       ) : (
         <Sidebar
@@ -1156,6 +1247,8 @@ export default function App() {
           members={members}
           isAppInstalled={isAppInstalled}
           onOpenWheel={() => setIsWheelOpen(true)}
+          isBlocked={currentChannel?.type === 'dm' && activeDmUser ? blockedUsers.has(activeDmUser.id) : false}
+          onUnblock={() => activeDmUser && handleToggleBlock(activeDmUser)}
         />
       ) : (
         <div className="flex-1 flex items-center justify-center text-[#949ba4]">

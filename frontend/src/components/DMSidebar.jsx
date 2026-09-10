@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Users, Plus, MessageCircle, X, Search, Sparkles } from 'lucide-react';
+import { Users, Plus, MessageCircle, X, Search, Sparkles, Ban } from 'lucide-react';
 import UserControlBar from './UserControlBar';
+import DMUserContextMenu from './DMUserContextMenu';
 
 export default function DMSidebar({
   members,
@@ -14,15 +15,37 @@ export default function DMSidebar({
   setIsMuted,
   isDeafened,
   setIsDeafened,
-  unreadDms
+  unreadDms,
+  closedDms = new Set(),
+  blockedUsers = new Set(),
+  onCloseDM,
+  onClearHistory,
+  onToggleBlock
 }) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [dmContextMenu, setDmContextMenu] = useState(null); // { x, y, targetUser }
 
   // Other human members excluding current user and bots
   const otherMembers = members.filter(m => m.id !== currentUser?.id && !m.isBot);
-  const filteredMembers = otherMembers.filter(m => 
-    m.username.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Filter other members: show search results, or if no search, filter out closed unless active/unread
+  const filteredMembers = otherMembers.filter(m => {
+    const matchesSearch = m.username.toLowerCase().includes(searchTerm.toLowerCase());
+    if (searchTerm.trim()) return matchesSearch;
+    const isClosed = closedDms.has(m.id);
+    const isCurrentActive = activeDmUser?.id === m.id;
+    const hasUnread = unreadDms?.has(m.id);
+    return matchesSearch && (!isClosed || isCurrentActive || hasUnread);
+  });
+
+  const handleUserContextMenu = (e, member) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDmContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      targetUser: member
+    });
+  };
 
   return (
     <div className="w-60 bg-[#2b2d31] flex flex-col shrink-0 select-none border-r border-[#1f2023] z-10 shadow-sm">
@@ -72,17 +95,19 @@ export default function DMSidebar({
             {filteredMembers.length === 0 ? (
               <div className="px-3 py-4 text-center text-xs text-[#949ba4]">
                 {otherMembers.length === 0 
-                  ? 'Diğer 4 arkadaşınız henüz bağlanmadı. Bağlandıklarında burada özel mesajlaşabilirsiniz.'
-                  : 'Aramanıza uygun arkadaş bulunamadı.'}
+                  ? 'Diğer arkadaşlarınız henüz bağlanmadı. Bağlandıklarında burada özel mesajlaşabilirsiniz.'
+                  : (searchTerm ? 'Aramanıza uygun arkadaş bulunamadı.' : 'Açık direkt mesajınız yok. Yukarıdaki "Arkadaşlar" butonundan bir sohbet başlatabilirsiniz.')}
               </div>
             ) : (
               filteredMembers.map(member => {
                 const isActive = activeDmUser?.id === member.id;
+                const isBlocked = blockedUsers.has(member.id);
                 return (
                   <div
                     key={member.id}
                     onClick={() => onSelectDmUser(member)}
-                    className={`flex items-center justify-between px-2.5 py-2 rounded-xl text-sm transition-all cursor-pointer group ${
+                    onContextMenu={(e) => handleUserContextMenu(e, member)}
+                    className={`flex items-center justify-between px-2.5 py-2 rounded-xl text-sm transition-all cursor-pointer group relative ${
                       isActive 
                         ? 'bg-[#35373c] text-white font-semibold shadow-xs' 
                         : 'text-[#949ba4] hover:bg-[#313338] hover:text-[#dbdee1]'
@@ -99,29 +124,47 @@ export default function DMSidebar({
                           }}
                           className="w-8 h-8 rounded-full bg-[#1e1f22] object-cover border border-[#383a40]"
                         />
-                        <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-[#23a55a] border-2 border-[#2b2d31]" />
+                        <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#2b2d31] ${
+                          isBlocked ? 'bg-[#da373c]' : 'bg-[#23a55a]'
+                        }`} />
                       </div>
 
                       <div className="truncate text-left">
                         <div 
-                          className="text-xs font-bold truncate group-hover:underline"
+                          className="text-xs font-bold truncate group-hover:underline flex items-center gap-1.5"
                           style={{ color: member.color || '#dbdee1' }}
                         >
-                          {member.username}
+                          <span className="truncate">{member.username}</span>
+                          {isBlocked && (
+                            <span className="text-[9px] bg-[#da373c]/20 text-[#f23f43] px-1 py-0.2 rounded font-bold shrink-0">
+                              Engellendi
+                            </span>
+                          )}
                         </div>
                         <div className="text-[10px] text-[#949ba4] truncate">
-                          {member.customStatus || 'Çevrimiçi'}
+                          {isBlocked ? 'Engellendi' : (member.customStatus || 'Çevrimiçi')}
                         </div>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1.5 shrink-0">
+                    <div className="flex items-center gap-1 shrink-0">
                       {unreadDms?.has(member.id) && (
                         <span className="px-1.5 py-0.5 rounded-full bg-[#f23f43] text-white text-[9px] font-black animate-pulse shadow-xs">
                           YENİ
                         </span>
                       )}
-                      <MessageCircle className={`w-3.5 h-3.5 opacity-0 group-hover:opacity-100 ${isActive ? 'text-[#5865f2] opacity-100' : 'text-[#949ba4]'}`} />
+                      
+                      {/* Close DM quick button on hover */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onCloseDM?.(member);
+                        }}
+                        className="p-1 rounded-md text-[#949ba4] hover:text-white hover:bg-[#2b2d31] opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                        title="Sohbeti Kapat"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
                 );
@@ -142,6 +185,22 @@ export default function DMSidebar({
         onLogout={onLogout}
         onOpenLogin={onOpenLogin}
       />
+
+      {/* Right-click Context Menu for DM Users */}
+      {dmContextMenu && (
+        <DMUserContextMenu
+          x={dmContextMenu.x}
+          y={dmContextMenu.y}
+          targetUser={dmContextMenu.targetUser}
+          currentUser={currentUser}
+          isBlocked={blockedUsers.has(dmContextMenu.targetUser?.id)}
+          onClose={() => setDmContextMenu(null)}
+          onSelectDM={onSelectDmUser}
+          onCloseDM={onCloseDM}
+          onClearHistory={onClearHistory}
+          onToggleBlock={onToggleBlock}
+        />
+      )}
     </div>
   );
 }
