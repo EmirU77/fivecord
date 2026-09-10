@@ -74,9 +74,11 @@ class WebRTCManager {
     this.cameraTrack = null;
     this.cameraStream = null;
     this.screenStream = null;
-    this.remoteStreams = new Map(); // socketId -> MediaStream (Voice audio)
+    this.remoteStreams = new Map(); // socketId -> MediaStream (Voice microphone audio)
     this.remoteScreenStreams = new Map(); // socketId -> MediaStream (Dedicated Screen Video)
+    this.remoteScreenAudioStreams = new Map(); // socketId -> MediaStream (Dedicated Screen/System Audio)
     this.peerScreenStreamIds = new Map(); // socketId -> screenStreamId
+    this.peerScreenAudioTrackIds = new Map(); // socketId -> screenAudioTrackId
 
     this.audioContext = null;
     this.analyser = null;
@@ -97,8 +99,28 @@ class WebRTCManager {
   }
 
   setupSocketListeners() {
-    socket.on('signal', async ({ senderSocketId, signal, streamType, screenStreamId }) => {
-      await this.handleSignal(senderSocketId, signal, streamType, screenStreamId);
+    socket.on('signal', async ({ senderSocketId, signal, streamType, screenStreamId, screenAudioTrackId, screenVideoTrackId }) => {
+      await this.handleSignal(senderSocketId, signal, streamType, screenStreamId, screenAudioTrackId, screenVideoTrackId);
+    });
+
+    socket.on('peer-voice-state-updated', ({ socketId, voiceState }) => {
+      if (voiceState) {
+        if (voiceState.screenStreamId) {
+          this.peerScreenStreamIds.set(socketId, voiceState.screenStreamId);
+        }
+        if (voiceState.screenAudioTrackId) {
+          this.peerScreenAudioTrackIds.set(socketId, voiceState.screenAudioTrackId);
+        }
+        if (voiceState.isScreenSharing === false) {
+          this.remoteScreenStreams.delete(socketId);
+          this.remoteScreenAudioStreams.delete(socketId);
+          this.peerScreenStreamIds.delete(socketId);
+          this.peerScreenAudioTrackIds.delete(socketId);
+          if (this.onScreenStreamRemoved) {
+            this.onScreenStreamRemoved(socketId);
+          }
+        }
+      }
     });
 
     socket.on('user-left-voice', ({ socketId }) => {
@@ -361,19 +383,44 @@ class WebRTCManager {
         };
       } else if (event.track.kind === 'audio') {
         const screenStreamId = this.peerScreenStreamIds.get(targetSocketId);
-        const isScreenAudio = Boolean(screenStreamId && event.streams && event.streams[0] && event.streams[0].id === screenStreamId);
+        const screenAudioTrackId = this.peerScreenAudioTrackIds.get(targetSocketId);
+        const streamId = event.streams && event.streams[0]?.id;
+
+        // Check if track is screen audio:
+        // 1. Matches known screenAudioTrackId
+        // 2. Matches known screenStreamId
+        // 3. Or peer already has a registered voice audio track, and this is an additional audio track arriving during screen share
+        const existingVoice = this.remoteStreams.get(targetSocketId);
+        const hasExistingVoiceTrack = existingVoice && existingVoice.getAudioTracks().some(t => t.readyState === 'live' && t.id !== event.track.id);
+
+        const isScreenAudio = Boolean(
+          (screenAudioTrackId && event.track.id === screenAudioTrackId) ||
+          (screenStreamId && streamId && streamId === screenStreamId) ||
+          (hasExistingVoiceTrack && (this.peerScreenStreamIds.has(targetSocketId) || this.peerScreenAudioTrackIds.has(targetSocketId)))
+        );
 
         const stream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
-        if (!isScreenAudio) {
+        if (isScreenAudio) {
+          console.log(`[WebRTC] Identified SCREEN/SYSTEM AUDIO track for ${targetSocketId} (${event.track.id})`);
+          this.remoteScreenAudioStreams.set(targetSocketId, stream);
+        } else {
+          console.log(`[WebRTC] Identified USER MICROPHONE track for ${targetSocketId} (${event.track.id})`);
           this.remoteStreams.set(targetSocketId, stream);
         }
+
+        // WebRTC audio arrived, suppress WebSocket PCM fallback for this peer
+        voiceRelay.suppressPeer(targetSocketId, true);
 
         if (this.onRemoteStreamAdded) {
           this.onRemoteStreamAdded(targetSocketId, stream, isScreenAudio, event.track);
         }
 
         event.track.onended = () => {
-          if (!isScreenAudio) {
+          if (isScreenAudio) {
+            console.log(`[WebRTC] Screen audio track ended for ${targetSocketId}`);
+            this.remoteScreenAudioStreams.delete(targetSocketId);
+          } else {
+            console.log(`[WebRTC] User mic audio track ended for ${targetSocketId}`);
             this.remoteStreams.delete(targetSocketId);
             if (this.onRemoteStreamRemoved) {
               this.onRemoteStreamRemoved(targetSocketId);
@@ -427,11 +474,15 @@ class WebRTCManager {
         offerToReceiveVideo: true
       });
       await pc.setLocalDescription(offer);
+      const localScreenAudio = this.screenStream ? this.screenStream.getAudioTracks()[0] : null;
+      const localScreenVideo = this.screenStream ? this.screenStream.getVideoTracks()[0] : null;
       socket.emit('signal', {
         targetSocketId,
         signal: { sdp: pc.localDescription },
         streamType: this.screenStream ? 'screen' : 'user',
-        screenStreamId: this.screenStream ? this.screenStream.id : null
+        screenStreamId: this.screenStream ? this.screenStream.id : null,
+        screenAudioTrackId: localScreenAudio ? localScreenAudio.id : null,
+        screenVideoTrackId: localScreenVideo ? localScreenVideo.id : null
       });
       console.log(`[WebRTC] Initiator sent SDP offer to ${targetSocketId}`);
     } catch (err) {
@@ -439,7 +490,7 @@ class WebRTCManager {
     }
   }
 
-  async handleSignal(senderSocketId, signal, streamType = 'user', screenStreamId = null) {
+  async handleSignal(senderSocketId, signal, streamType = 'user', screenStreamId = null, screenAudioTrackId = null, screenVideoTrackId = null) {
     let pc = this.peers.get(senderSocketId);
     if (!pc) {
       pc = this.createPeerConnection(senderSocketId, false);
@@ -447,6 +498,9 @@ class WebRTCManager {
 
     if (screenStreamId) {
       this.peerScreenStreamIds.set(senderSocketId, screenStreamId);
+    }
+    if (screenAudioTrackId) {
+      this.peerScreenAudioTrackIds.set(senderSocketId, screenAudioTrackId);
     }
 
     try {
@@ -490,13 +544,31 @@ class WebRTCManager {
               vTrack.onunmute = notify;
             }
           }
+
+          // Check for incoming screen audio tracks from transceivers
+          const aTransceivers = pc.getTransceivers().filter(t => t.receiver?.track?.kind === 'audio');
+          for (const at of aTransceivers) {
+            const aTrack = at.receiver?.track;
+            if (aTrack && ((screenAudioTrackId && aTrack.id === screenAudioTrackId) || aTransceivers.length > 1)) {
+              let aStream = this.remoteScreenAudioStreams.get(senderSocketId);
+              if (!aStream || !aStream.getAudioTracks().includes(aTrack)) {
+                aStream = new MediaStream([aTrack]);
+                this.remoteScreenAudioStreams.set(senderSocketId, aStream);
+                if (this.onRemoteStreamAdded) {
+                  this.onRemoteStreamAdded(senderSocketId, aStream, true, aTrack);
+                }
+              }
+            }
+          }
         }
 
         // If screen share stopped
         if (streamType === 'user' && !screenStreamId) {
           if (this.remoteScreenStreams.has(senderSocketId)) {
             this.remoteScreenStreams.delete(senderSocketId);
+            this.remoteScreenAudioStreams.delete(senderSocketId);
             this.peerScreenStreamIds.delete(senderSocketId);
+            this.peerScreenAudioTrackIds.delete(senderSocketId);
             if (this.onScreenStreamRemoved) {
               this.onScreenStreamRemoved(senderSocketId);
             }
@@ -533,11 +605,15 @@ class WebRTCManager {
 
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
+          const localScreenAudio = this.screenStream ? this.screenStream.getAudioTracks()[0] : null;
+          const localScreenVideo = this.screenStream ? this.screenStream.getVideoTracks()[0] : null;
           socket.emit('signal', {
             targetSocketId: senderSocketId,
             signal: { sdp: pc.localDescription },
             streamType: this.screenStream ? 'screen' : 'user',
-            screenStreamId: this.screenStream ? this.screenStream.id : null
+            screenStreamId: this.screenStream ? this.screenStream.id : null,
+            screenAudioTrackId: localScreenAudio ? localScreenAudio.id : null,
+            screenVideoTrackId: localScreenVideo ? localScreenVideo.id : null
           });
           console.log(`[WebRTC] Sent SDP answer to ${senderSocketId}`);
         }
@@ -578,7 +654,7 @@ class WebRTCManager {
     this.restartIce(targetSocketId);
   }
 
-  async renegotiate(targetSocketId, pc, streamType = 'user', screenStreamId = null) {
+  async renegotiate(targetSocketId, pc, streamType = 'user', screenStreamId = null, screenAudioTrackId = null, screenVideoTrackId = null) {
     if (!pc || pc.connectionState === 'closed') return;
     try {
       if (pc.signalingState !== 'stable') {
@@ -586,14 +662,14 @@ class WebRTCManager {
         const onStable = () => {
           if (pc.signalingState === 'stable') {
             pc.removeEventListener('signalingstatechange', onStable);
-            this.renegotiate(targetSocketId, pc, streamType, screenStreamId);
+            this.renegotiate(targetSocketId, pc, streamType, screenStreamId, screenAudioTrackId, screenVideoTrackId);
           }
         };
         pc.addEventListener('signalingstatechange', onStable);
         setTimeout(() => {
           pc.removeEventListener('signalingstatechange', onStable);
           if (pc.signalingState === 'stable') {
-            this.renegotiate(targetSocketId, pc, streamType, screenStreamId);
+            this.renegotiate(targetSocketId, pc, streamType, screenStreamId, screenAudioTrackId, screenVideoTrackId);
           }
         }, 500);
         return;
@@ -607,7 +683,9 @@ class WebRTCManager {
         targetSocketId,
         signal: { sdp: pc.localDescription },
         streamType,
-        screenStreamId
+        screenStreamId,
+        screenAudioTrackId,
+        screenVideoTrackId
       });
       console.log(`[WebRTC] Renegotiation offer sent to ${targetSocketId} (${streamType})`);
     } catch (err) {
@@ -636,7 +714,9 @@ class WebRTCManager {
           echoCancellation: true,
           noiseSuppression: false,
           autoGainControl: false,
-          channelCount: 2
+          channelCount: 2,
+          suppressLocalAudioPlayback: true,
+          systemAudio: 'include'
         } : false
       });
 
@@ -648,6 +728,8 @@ class WebRTCManager {
       }
 
       this.screenStream = displayStream;
+      const screenAudioTrack = displayStream.getAudioTracks()[0] || null;
+      const screenVideoTrack = displayStream.getVideoTracks()[0] || null;
 
       this.peers.forEach((pc, targetSocketId) => {
         displayStream.getTracks().forEach((track) => {
@@ -656,17 +738,27 @@ class WebRTCManager {
             this.preferVP8Codec(pc, sender);
           }
         });
-        this.renegotiate(targetSocketId, pc, 'screen', displayStream.id);
+        this.renegotiate(
+          targetSocketId, 
+          pc, 
+          'screen', 
+          displayStream.id,
+          screenAudioTrack ? screenAudioTrack.id : null,
+          screenVideoTrack ? screenVideoTrack.id : null
+        );
       });
 
-      const videoTrack = displayStream.getVideoTracks()[0];
-      if (videoTrack) {
-        videoTrack.onended = () => {
+      if (screenVideoTrack) {
+        screenVideoTrack.onended = () => {
           this.stopScreenShare();
         };
       }
 
-      socket.emit('update-voice-state', { isScreenSharing: true, screenStreamId: displayStream.id });
+      socket.emit('update-voice-state', { 
+        isScreenSharing: true, 
+        screenStreamId: displayStream.id,
+        screenAudioTrackId: screenAudioTrack ? screenAudioTrack.id : null
+      });
       return { success: true, stream: displayStream, preset };
     } catch (err) {
       console.error('Screen sharing error:', err);
@@ -689,11 +781,11 @@ class WebRTCManager {
           try { pc.removeTrack(sender); } catch (e) {}
         }
       });
-      this.renegotiate(targetSocketId, pc, 'user', null);
+      this.renegotiate(targetSocketId, pc, 'user', null, null, null);
     });
 
     this.screenStream = null;
-    socket.emit('update-voice-state', { isScreenSharing: false, screenStreamId: null });
+    socket.emit('update-voice-state', { isScreenSharing: false, screenStreamId: null, screenAudioTrackId: null });
     if (this.onScreenShareEnded) {
       this.onScreenShareEnded();
     }
@@ -777,6 +869,11 @@ class WebRTCManager {
         track.enabled = !deafened;
       });
     });
+    this.remoteScreenAudioStreams.forEach((stream) => {
+      stream.getAudioTracks().forEach(track => {
+        track.enabled = !deafened;
+      });
+    });
     this.setMicrophoneMuted(deafened);
     socket.emit('update-voice-state', { isDeafened: deafened, isMuted: deafened });
   }
@@ -790,7 +887,9 @@ class WebRTCManager {
     this.pendingCandidates.delete(socketId);
     this.remoteStreams.delete(socketId);
     this.remoteScreenStreams.delete(socketId);
+    this.remoteScreenAudioStreams.delete(socketId);
     this.peerScreenStreamIds.delete(socketId);
+    this.peerScreenAudioTrackIds.delete(socketId);
 
     if (this.onRemoteStreamRemoved) {
       this.onRemoteStreamRemoved(socketId);

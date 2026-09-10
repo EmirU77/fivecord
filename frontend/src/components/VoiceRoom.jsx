@@ -262,10 +262,20 @@ function StreamPlayer({ streamItem, isFocused = false, onFocus, onRetry }) {
 
       {/* Top Right: Actions & Stream Audio Mixer */}
       <div className="absolute top-3.5 right-3.5 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
-        {/* Stream Audio Mixer Slider */}
+        {/* Stream Audio Mixer Slider (Dedicated System/Game Audio) */}
         {!streamItem.isLocal && (
           <div className="flex items-center bg-black/80 backdrop-blur-xs rounded-xl px-2.5 py-1.5 border border-white/10 gap-2">
-            <Volume2 className="w-3.5 h-3.5 text-[#23a55a] shrink-0" />
+            <button
+              onClick={() => handleStreamVolChange(streamVol === 0 ? 100 : 0)}
+              className="text-[#23a55a] hover:opacity-80 transition-opacity cursor-pointer flex items-center"
+              title={streamVol === 0 ? "Yayın Sesini Aç (100%)" : "Yayın Sesini Kapat (Mute)"}
+            >
+              {streamVol === 0 ? (
+                <VolumeX className="w-3.5 h-3.5 text-[#f23f43] shrink-0" />
+              ) : (
+                <Volume2 className="w-3.5 h-3.5 text-[#23a55a] shrink-0" />
+              )}
+            </button>
             <input
               type="range"
               min="0"
@@ -273,7 +283,7 @@ function StreamPlayer({ streamItem, isFocused = false, onFocus, onRetry }) {
               value={streamVol}
               onChange={(e) => handleStreamVolChange(Number(e.target.value))}
               className="w-16 accent-[#23a55a] h-1.5 bg-[#2b2d31] rounded cursor-pointer"
-              title={`Yayın Sesi: ${streamVol}%`}
+              title={`Sistem / Oyun Sesi: ${streamVol}%`}
             />
             <span className="text-[10px] font-mono text-white font-bold min-w-[28px]">{streamVol}%</span>
           </div>

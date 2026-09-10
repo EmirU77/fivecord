@@ -374,6 +374,11 @@ export default function App() {
     };
 
     webrtc.onRemoteStreamAdded = (socketId, stream, isScreen) => {
+      if (socketId === socket.id || socketId === currentUser?.id || socketId === 'local') {
+        // Never play our own stream back into our own ears
+        return;
+      }
+
       console.log(`[Audio Debug] Remote stream added for ${socketId}:`, {
         isScreen,
         audioTracks: stream.getAudioTracks().length,
@@ -469,6 +474,20 @@ export default function App() {
         ...m,
         voiceState: { ...m.voiceState, isSpeaking: speaking }
       } : m));
+
+      // Anti-Echo Self-Voice Protection:
+      // When local user speaks, duck incoming screen streams by 85% to eliminate own voice echo
+      const screenAudios = document.querySelectorAll('[id^="audio-screen-"]');
+      screenAudios.forEach(el => {
+        const peerSocketId = el.id.replace('audio-screen-', '');
+        const savedStreamVol = localStorage.getItem(`stream_vol_${peerSocketId}`);
+        const normalVol = savedStreamVol !== null ? Number(savedStreamVol) / 100 : 1.0;
+        if (speaking) {
+          el.volume = Math.max(0, normalVol * 0.15);
+        } else {
+          el.volume = Math.max(0, Math.min(1.0, normalVol));
+        }
+      });
     };
 
     webrtc.onScreenShareEnded = () => {

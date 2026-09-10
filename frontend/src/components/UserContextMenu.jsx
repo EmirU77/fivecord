@@ -177,15 +177,15 @@ export default function UserContextMenu({
         </button>
       )}
 
-      {/* Volume Controls (for other users) */}
+      {/* Volume Controls (Separated Microphone vs System/Stream Audio) */}
       {!isSelf && !isBot && (
-        <div className="p-2 my-1 bg-[#1e1f22]/70 rounded-lg space-y-2 border border-white/5">
+        <div className="p-2 my-1 bg-[#1e1f22]/70 rounded-lg space-y-2.5 border border-white/5">
           {/* Mic Volume */}
           <div>
             <div className="flex items-center justify-between text-[11px] mb-1">
-              <span className="flex items-center gap-1 text-[#949ba4]">
-                <Volume2 className="w-3.5 h-3.5 text-[#5865f2]" />
-                <span>Kullanıcı Sesi</span>
+              <span className="flex items-center gap-1.5 text-[#949ba4] font-medium">
+                <Mic className="w-3.5 h-3.5 text-[#5865f2]" />
+                <span>Mikrofon Sesi</span>
               </span>
               <span className="font-mono font-bold text-white">{userVolume}%</span>
             </div>
@@ -196,18 +196,19 @@ export default function UserContextMenu({
               value={userVolume}
               onChange={(e) => handleMicVolumeChange(Number(e.target.value))}
               className="w-full accent-[#5865f2] h-1.5 bg-[#2b2d31] rounded-lg cursor-pointer"
+              title="Kullanıcı Mikrofon Sesi Seviyesi"
             />
           </div>
 
-          {/* Stream Volume (if streaming) */}
+          {/* Stream / Game Audio Volume (if streaming) */}
           {targetMember.voiceState?.isScreenSharing && (
-            <div className="pt-1 border-t border-white/5">
+            <div className="pt-2 border-t border-white/5">
               <div className="flex items-center justify-between text-[11px] mb-1">
-                <span className="flex items-center gap-1 text-[#949ba4]">
+                <span className="flex items-center gap-1.5 text-[#949ba4] font-medium">
                   <Tv className="w-3.5 h-3.5 text-[#23a55a]" />
-                  <span>Yayın/Oyun Sesi</span>
+                  <span>Sistem / Oyun Sesi</span>
                 </span>
-                <span className="font-mono font-bold text-white">{streamVolume}%</span>
+                <span className="font-mono font-bold text-[#23a55a]">{streamVolume}%</span>
               </div>
               <input
                 type="range"
@@ -216,6 +217,7 @@ export default function UserContextMenu({
                 value={streamVolume}
                 onChange={(e) => handleStreamVolumeChange(Number(e.target.value))}
                 className="w-full accent-[#23a55a] h-1.5 bg-[#2b2d31] rounded-lg cursor-pointer"
+                title="Ekran Yayını Oyun & Sistem Sesi Seviyesi"
               />
             </div>
           )}

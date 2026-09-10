@@ -113,6 +113,14 @@ const SPLASH_HTML = `<!DOCTYPE html>
 </body>
 </html>`;
 
+// Suppress uncaught exception alert dialogs on user machines
+process.on('uncaughtException', (err) => {
+  console.warn('[Desktop] Handled uncaught exception:', err.message);
+});
+
+// Prevent Chromium / Windows from auto-adjusting microphone volume (AGC bug)
+app.commandLine.appendSwitch('disable-features', 'WebRtcAllowInputVolumeAdjustment');
+
 async function checkCloudServer() {
   try {
     const controller = new AbortController();
@@ -126,16 +134,31 @@ async function checkCloudServer() {
 }
 
 async function ensureLocalBackend() {
+  const fs = require('fs');
+  const serverPath = path.join(__dirname, '..', 'backend', 'src', 'server.js');
+  if (!fs.existsSync(serverPath)) {
+    // Normal client user distribution without local backend files; connects to cloud
+    return;
+  }
+
   try {
     const res = await fetch('http://localhost:3001/api/health');
     if (res.ok) return;
   } catch (e) {
-    console.log('[Desktop] Starting local backend...');
-    const serverPath = path.join(__dirname, '..', 'backend', 'src', 'server.js');
-    backendProcess = spawn('node', [serverPath], {
-      cwd: path.join(__dirname, '..', 'backend'),
-      stdio: 'ignore'
-    });
+    try {
+      console.log('[Desktop] Starting local backend...');
+      backendProcess = spawn('node', [serverPath], {
+        cwd: path.join(__dirname, '..', 'backend'),
+        stdio: 'ignore',
+        windowsHide: true
+      });
+      backendProcess.on('error', (err) => {
+        // Silently handle if node is not in system PATH
+        console.warn('[Desktop] Local node backend spawn skipped:', err.message);
+      });
+    } catch (spawnErr) {
+      console.warn('[Desktop] Cannot spawn local backend:', spawnErr.message);
+    }
   }
 }
 

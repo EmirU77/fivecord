@@ -1230,12 +1230,14 @@ io.on('connection', (socket) => {
     io.emit('members-updated', getAllMembers());
   });
 
-  socket.on('signal', ({ targetSocketId, signal, streamType, screenStreamId }) => {
+  socket.on('signal', ({ targetSocketId, signal, streamType, screenStreamId, screenAudioTrackId, screenVideoTrackId }) => {
     io.to(targetSocketId).emit('signal', {
       senderSocketId: socket.id,
       signal,
       streamType: streamType || 'user',
-      screenStreamId: screenStreamId || null
+      screenStreamId: screenStreamId || null,
+      screenAudioTrackId: screenAudioTrackId || null,
+      screenVideoTrackId: screenVideoTrackId || null
     });
   });
 
