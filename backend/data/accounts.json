@@ -6,8 +6,18 @@
     "color": "#23a55a",
     "customStatus": "Synapse kullanıyor",
     "entranceSound": "mvp",
-    "roles": ["role-founder"],
-    "lastSeen": 1788956754529
+    "roles": [
+      "role-founder"
+    ],
+    "lastSeen": 1789032831626,
+    "avatarDecoration": "none",
+    "banner": null,
+    "bio": "",
+    "nameEffect": "normal",
+    "badges": [],
+    "statusEmoji": "",
+    "status": "online",
+    "gameActivity": null
   },
   {
     "id": "user-tester1",

@@ -64,9 +64,16 @@ export const DEFAULT_CHANNELS = [
 
 export function safeWriteJSON(filePath, data) {
   try {
+    const jsonStr = JSON.stringify(data, null, 2);
     const tempPath = filePath + '.tmp';
-    fs.writeFileSync(tempPath, JSON.stringify(data, null, 2), 'utf8');
-    fs.renameSync(tempPath, filePath);
+    fs.writeFileSync(tempPath, jsonStr, 'utf8');
+    try {
+      fs.renameSync(tempPath, filePath);
+    } catch (renameErr) {
+      // Fallback direct write if atomic rename fails on Windows/container filesystem
+      fs.writeFileSync(filePath, jsonStr, 'utf8');
+      try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch (_) {}
+    }
   } catch (err) {
     console.error('[Persistence] Error writing ' + path.basename(filePath) + ':', err.message);
   }
@@ -76,7 +83,7 @@ export function loadChannels() {
   try {
     if (fs.existsSync(CHANNELS_FILE)) {
       const parsed = JSON.parse(fs.readFileSync(CHANNELS_FILE, 'utf8'));
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         return parsed;
       }
     }
@@ -112,19 +119,23 @@ export function loadMessages() {
   return map;
 }
 
+export function saveMessagesNow(messagesMap) {
+  try {
+    const obj = {};
+    for (const [chId, list] of messagesMap.entries()) {
+      obj[chId] = list.slice(-500);
+    }
+    safeWriteJSON(MESSAGES_FILE, obj);
+  } catch (e) {
+    console.error('[Persistence] Failed saving messages immediately:', e.message);
+  }
+}
+
 export function scheduleSaveMessages(messagesMap) {
   if (saveMessagesTimeout) clearTimeout(saveMessagesTimeout);
   saveMessagesTimeout = setTimeout(() => {
-    try {
-      const obj = {};
-      for (const [chId, list] of messagesMap.entries()) {
-        obj[chId] = list.slice(-500);
-      }
-      safeWriteJSON(MESSAGES_FILE, obj);
-    } catch (e) {
-      console.error('[Persistence] Failed saving messages:', e.message);
-    }
-  }, 500);
+    saveMessagesNow(messagesMap);
+  }, 100);
 }
 
 export function loadAccounts() {
@@ -139,30 +150,48 @@ export function loadAccounts() {
   return [];
 }
 
+export function getAccount(identifier) {
+  if (!identifier) return null;
+  const accounts = loadAccounts();
+  const clean = String(identifier).trim().toLowerCase();
+  return accounts.find(a => 
+    (a.id && a.id.toLowerCase() === clean) || 
+    (a.username && a.username.toLowerCase() === clean)
+  ) || null;
+}
+
 export function saveAccount(userData) {
   try {
     let accounts = loadAccounts();
     const cleanName = (userData.username || '').trim();
-    if (!cleanName) return;
+    if (!cleanName) return null;
 
-    const idx = accounts.findIndex(a => a.username.toLowerCase() === cleanName.toLowerCase());
+    const idx = accounts.findIndex(a => 
+      (userData.id && a.id === userData.id) || 
+      (a.username && a.username.toLowerCase() === cleanName.toLowerCase())
+    );
     const existing = idx !== -1 ? accounts[idx] : null;
-    let roles = Array.isArray(userData.roles) ? userData.roles : (existing?.roles || []);
-    // If no roles assigned yet and this is the first user, make them founder, otherwise member
+
+    let roles = Array.isArray(userData.roles) && userData.roles.length > 0 
+      ? userData.roles 
+      : (existing?.roles || []);
+      
+    // If no roles assigned yet and this is the first user (or Emir), make them founder, otherwise member
     if (!roles || roles.length === 0) {
-      roles = (idx === 0 || accounts.length === 0) ? ['role-founder'] : ['role-member'];
+      const isFounderCandidate = cleanName.toLowerCase().includes('emir') || idx === 0 || accounts.length === 0;
+      roles = isFounderCandidate ? ['role-founder'] : ['role-member'];
     }
 
     const acc = {
       id: userData.id || existing?.id || ('user-' + cleanName.toLowerCase().replace(/[^a-z0-9_-]/g, '')),
       username: cleanName,
       avatar: userData.avatar || existing?.avatar || 'https://api.dicebear.com/7.x/bottts/svg?seed=' + encodeURIComponent(cleanName),
-      avatarDecoration: userData.avatarDecoration || existing?.avatarDecoration || 'none',
+      avatarDecoration: userData.avatarDecoration !== undefined ? userData.avatarDecoration : (existing?.avatarDecoration || 'none'),
       banner: userData.banner !== undefined ? userData.banner : (existing?.banner || null),
       bio: userData.bio !== undefined ? userData.bio : (existing?.bio || ''),
       color: userData.color || existing?.color || '#5865F2',
-      nameEffect: userData.nameEffect || existing?.nameEffect || 'normal',
-      badges: Array.isArray(userData.badges) ? userData.badges : (existing?.badges || []),
+      nameEffect: userData.nameEffect !== undefined ? userData.nameEffect : (existing?.nameEffect || 'normal'),
+      badges: Array.isArray(userData.badges) && userData.badges.length > 0 ? userData.badges : (existing?.badges || []),
       customStatus: userData.customStatus !== undefined ? userData.customStatus : (existing?.customStatus || 'Synapse kullanıyor'),
       statusEmoji: userData.statusEmoji !== undefined ? userData.statusEmoji : (existing?.statusEmoji || ''),
       status: userData.status || existing?.status || 'online',
@@ -178,8 +207,10 @@ export function saveAccount(userData) {
       accounts.push(acc);
     }
     safeWriteJSON(ACCOUNTS_FILE, accounts);
+    return acc;
   } catch (e) {
     console.error('[Persistence] Failed saving account:', e.message);
+    return null;
   }
 }
 

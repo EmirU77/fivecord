@@ -18,7 +18,7 @@ export default function LoginModal({ isOpen, onLogin, onClose, currentUser = nul
   const [selectedColor, setSelectedColor] = useState(currentUser?.color || '#6366f1');
   const [avatarSeed, setAvatarSeed] = useState(() => lastUsername || 'gamer-' + Math.floor(Math.random() * 9000));
   const [avatarType, setAvatarType] = useState('bottts');
-  const [rememberMe, setRememberMe] = useState(() => localStorage.getItem('fivecord_remember_me') === 'true');
+  const [rememberMe, setRememberMe] = useState(() => localStorage.getItem('fivecord_remember_me') !== 'false');
   const [showNewAccountForm, setShowNewAccountForm] = useState(!lastUsername);
 
   if (!isOpen) return null;
@@ -35,13 +35,15 @@ export default function LoginModal({ isOpen, onLogin, onClose, currentUser = nul
 
   const doLogin = (cleanName, avatarUrl, color) => {
     localStorage.setItem('fivecord_remember_me', rememberMe ? 'true' : 'false');
+    const isSameAsLast = lastUsername && cleanName.toLowerCase() === lastUsername.toLowerCase();
     const user = {
-      id: 'user-' + cleanName.toLowerCase().replace(/[^a-z0-9_-]/g, ''),
+      ...(isSameAsLast && currentUser ? currentUser : {}),
+      id: (isSameAsLast && currentUser?.id) || ('user-' + cleanName.toLowerCase().replace(/[^a-z0-9_-]/g, '')),
       username: cleanName,
-      avatar: avatarUrl || currentAvatarUrl,
-      color: color || selectedColor,
-      customStatus: 'Synapse kullanıyor',
-      entranceSound: 'mvp'
+      avatar: avatarUrl || (isSameAsLast && currentUser?.avatar) || currentAvatarUrl,
+      color: color || (isSameAsLast && currentUser?.color) || selectedColor,
+      customStatus: (isSameAsLast && currentUser?.customStatus) || 'Synapse kullanıyor',
+      entranceSound: (isSameAsLast && currentUser?.entranceSound) || 'mvp'
     };
     onLogin(user);
   };
@@ -54,8 +56,9 @@ export default function LoginModal({ isOpen, onLogin, onClose, currentUser = nul
   };
 
   const handleQuickContinue = () => {
-    if (!lastUsername) return;
-    doLogin(lastUsername, currentUser?.avatar || currentAvatarUrl, currentUser?.color || selectedColor);
+    if (!lastUsername || !currentUser) return;
+    localStorage.setItem('fivecord_remember_me', 'true');
+    onLogin(currentUser);
   };
 
   const handleGuestLogin = () => {

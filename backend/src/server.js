@@ -693,19 +693,33 @@ io.on('connection', (socket) => {
       }
     }
 
+    // 1. Fetch or initialize persistent account data
+    const savedAccount = persistence.saveAccount({
+      ...userData,
+      id: userData.id || ('user-' + cleanUsername.toLowerCase().replace(/[^a-z0-9_-]/g, '')),
+      username: cleanUsername
+    });
+
     const user = {
       socketId: socket.id,
-      id: userData.id || ('user-' + cleanUsername.toLowerCase().replace(/[^a-z0-9_-]/g, '')),
+      id: savedAccount?.id || userData.id || ('user-' + cleanUsername.toLowerCase().replace(/[^a-z0-9_-]/g, '')),
       username: cleanUsername,
-      avatar: userData.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanUsername}`,
-      color: userData.color || '#5865F2',
-      status: userData.status || 'online',
-      customStatus: userData.customStatus || 'Synapse kullanıyor',
+      avatar: savedAccount?.avatar || userData.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(cleanUsername)}`,
+      avatarDecoration: savedAccount?.avatarDecoration || userData.avatarDecoration || 'none',
+      banner: savedAccount?.banner || userData.banner || null,
+      bio: savedAccount?.bio || userData.bio || '',
+      color: savedAccount?.color || userData.color || '#5865F2',
+      nameEffect: savedAccount?.nameEffect || userData.nameEffect || 'normal',
+      badges: Array.isArray(savedAccount?.badges) ? savedAccount.badges : (userData.badges || []),
+      status: userData.status || savedAccount?.status || 'online',
+      customStatus: userData.customStatus || savedAccount?.customStatus || 'Synapse kullanıyor',
+      statusEmoji: userData.statusEmoji || savedAccount?.statusEmoji || '',
       activity: userData.activity || '',
       activityIcon: userData.activityIcon || '🎮',
       activityDetail: userData.activityDetail || '',
       activityStartTime: userData.activityStartTime || (userData.activity ? Date.now() : null),
-      entranceSound: userData.entranceSound || 'mvp',
+      entranceSound: userData.entranceSound || savedAccount?.entranceSound || 'mvp',
+      roles: Array.isArray(savedAccount?.roles) && savedAccount.roles.length > 0 ? savedAccount.roles : ['role-member'],
       voiceState: {
         channelId: null,
         isMuted: false,
@@ -717,9 +731,27 @@ io.on('connection', (socket) => {
     };
 
     users.set(socket.id, user);
-    saveAccount(user);
+
+    // Calculate highest role
+    const allRoles = persistence.loadRoles();
+    const highestRole = allRoles
+      .filter(r => (user.roles || []).includes(r.id))
+      .sort((a, b) => a.position - b.position)[0] || null;
+
+    // Send complete synchronized profile & roles back to the connecting client
+    socket.emit('profile-synced', {
+      ...user,
+      highestRole
+    });
+    socket.emit('user-roles-updated', {
+      userId: user.id,
+      roles: user.roles,
+      highestRole,
+      color: user.color
+    });
+
     io.emit('members-updated', getAllMembers());
-    console.log(`[User Joined] ${user.username} (${socket.id}) - Toplam Aktif Üye: ${users.size}`);
+    console.log(`[User Joined] ${user.username} (${socket.id}) - Roller: ${user.roles.join(',')} - Toplam Aktif Üye: ${users.size}`);
   });
 
   // --- MULTI-SERVER MANAGEMENT (Birden Çok Sunucu Sistemi) ---
@@ -778,7 +810,7 @@ io.on('connection', (socket) => {
     if (!name || !name.trim()) return;
     const cleanName = name.trim().toLowerCase().replace(/\s+/g, '-');
     const newCh = {
-      id: `${type}-${Date.now().toString(36)}`,
+      id: `${type}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
       name: type === 'voice' ? `🔊 ${cleanName}` : cleanName,
       type,
       topic: type === 'text' ? 'Özel sohbet kanalı' : 'Özel ses odası',
@@ -787,22 +819,33 @@ io.on('connection', (socket) => {
     };
 
     if (serverId === 'server-main') {
-      channels.push(newCh);
-      persistence.saveChannels(channels);
+      if (!channels.some(c => c.id === newCh.id)) {
+        channels.push(newCh);
+        persistence.saveChannels(channels);
+      }
     }
 
     const srvList = persistence.loadServers();
     const targetSrv = srvList.find(s => s.id === serverId);
     if (targetSrv) {
       if (!Array.isArray(targetSrv.channels)) targetSrv.channels = [];
-      targetSrv.channels.push(newCh);
+      if (!targetSrv.channels.some(c => c.id === newCh.id)) {
+        targetSrv.channels.push(newCh);
+      }
       persistence.saveServers(srvList);
       io.emit('servers-updated', srvList);
     }
 
-    if (newCh.type === 'text') textMessages.set(newCh.id, []);
-    if (newCh.type === 'voice') voiceChannels.set(newCh.id, new Set());
+    if (newCh.type === 'text') {
+      textMessages.set(newCh.id, []);
+      persistence.scheduleSaveMessages(textMessages);
+    }
+    if (newCh.type === 'voice') {
+      voiceChannels.set(newCh.id, new Set());
+    }
+
     io.emit('channels-updated', channels);
+    io.emit('channel-created', { channel: newCh, serverId });
     console.log(`[Channel Created] ${newCh.name} (${newCh.type}) in ${serverId}`);
   });
 
@@ -814,44 +857,54 @@ io.on('connection', (socket) => {
       socket.emit('channel-error', { message: 'Ana genel sohbet kanalı silinemez.' });
       return;
     }
+
+    // 1. Remove from in-memory server-main channels array
     const idx = channels.findIndex(c => c.id === channelId);
     if (idx !== -1) {
-      const [removed] = channels.splice(idx, 1);
-      if (removed.type === 'text') {
-        textMessages.delete(removed.id);
-      }
-      if (removed.type === 'voice') {
-        voiceChannels.delete(removed.id);
-        channelMusic.delete(removed.id);
-        for (const user of users.values()) {
-          if (user.voiceState?.channelId === removed.id) {
-            user.voiceState.channelId = null;
-            user.voiceState.isSpeaking = false;
-            user.voiceState.isScreenSharing = false;
-            user.voiceState.isCameraOn = false;
-          }
-        }
-        if (DJ_BOT_USER.voiceState.channelId === removed.id) {
-          DJ_BOT_USER.voiceState.channelId = null;
-          DJ_BOT_USER.voiceState.isSpeaking = false;
-        }
-        io.emit('members-updated', getAllMembers());
-      }
+      channels.splice(idx, 1);
       persistence.saveChannels(channels);
     }
 
-    // Also remove from server object if custom server
+    // 2. Remove from ALL servers in servers.json
     const srvList = persistence.loadServers();
-    const targetSrv = srvList.find(s => s.id === serverId || (s.channels && s.channels.some(c => c.id === channelId)));
-    if (targetSrv && Array.isArray(targetSrv.channels)) {
-      targetSrv.channels = targetSrv.channels.filter(c => c.id !== channelId);
+    let srvModified = false;
+    for (const s of srvList) {
+      if (Array.isArray(s.channels) && s.channels.some(c => c.id === channelId)) {
+        s.channels = s.channels.filter(c => c.id !== channelId);
+        srvModified = true;
+      }
+    }
+    if (srvModified) {
       persistence.saveServers(srvList);
       io.emit('servers-updated', srvList);
     }
 
+    // 3. Clean up messages and voice state
+    if (textMessages.has(channelId)) {
+      textMessages.delete(channelId);
+      persistence.scheduleSaveMessages(textMessages);
+    }
+    if (voiceChannels.has(channelId)) {
+      voiceChannels.delete(channelId);
+      channelMusic.delete(channelId);
+      for (const user of users.values()) {
+        if (user.voiceState?.channelId === channelId) {
+          user.voiceState.channelId = null;
+          user.voiceState.isSpeaking = false;
+          user.voiceState.isScreenSharing = false;
+          user.voiceState.isCameraOn = false;
+        }
+      }
+      if (DJ_BOT_USER.voiceState.channelId === channelId) {
+        DJ_BOT_USER.voiceState.channelId = null;
+        DJ_BOT_USER.voiceState.isSpeaking = false;
+      }
+      io.emit('members-updated', getAllMembers());
+    }
+
     io.emit('channels-updated', channels);
     io.emit('channel-deleted', channelId);
-    console.log(`[Channel Deleted] ${channelId}`);
+    console.log(`[Channel Deleted] ${channelId} from server ${serverId}`);
   });
 
   socket.on('rename-channel', ({ channelId, newName, serverId = 'server-main' }) => {
@@ -1880,7 +1933,21 @@ if (fs.existsSync(frontendDist)) {
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`===========================================`);
-  console.log(`  🚀 FIVECORD RUNNING ON PORT ${PORT} `);
+  console.log(`  🚀 SYNAPSE RUNNING ON PORT ${PORT} `);
   console.log(`  http://localhost:${PORT}`);
   console.log(`===========================================`);
 });
+
+function flushAllOnShutdown() {
+  console.log('[Shutdown] Flushing all persistence data to disk...');
+  try {
+    persistence.saveMessagesNow(textMessages);
+    persistence.saveChannels(channels);
+    persistence.saveServers(persistence.loadServers());
+  } catch (e) {
+    console.error('[Shutdown Error]', e);
+  }
+}
+process.on('SIGINT', () => { flushAllOnShutdown(); process.exit(0); });
+process.on('SIGTERM', () => { flushAllOnShutdown(); process.exit(0); });
+process.on('beforeExit', () => { flushAllOnShutdown(); });

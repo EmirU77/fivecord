@@ -77,8 +77,8 @@ export default function App() {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(() => {
     const remember = localStorage.getItem('fivecord_remember_me');
     const saved = localStorage.getItem('fivecord_user');
-    // If user has not explicitly checked "remember me", show login modal on start!
-    return !(remember === 'true' && saved);
+    // If user has saved profile and hasn't explicitly disabled remember me, keep logged in
+    return !(saved && remember !== 'false');
   });
 
   // Views: 'server' (Fivecord VIP) | 'dm' (Direct Messages / Özel Mesajlar)
@@ -122,6 +122,23 @@ export default function App() {
   const [currentVoiceChannel, setCurrentVoiceChannel] = useState(null);
   const [members, setMembers] = useState([]);
   const [messages, setMessages] = useState([]);
+
+  // Local message cache helpers for instant load and offline resilience
+  const loadCachedMessages = (channelId) => {
+    try {
+      const c = localStorage.getItem('synapse_msg_cache_' + channelId);
+      return c ? JSON.parse(c) : [];
+    } catch (e) {
+      return [];
+    }
+  };
+
+  const saveCachedMessages = (channelId, msgs) => {
+    try {
+      if (!channelId || !Array.isArray(msgs)) return;
+      localStorage.setItem('synapse_msg_cache_' + channelId, JSON.stringify(msgs.slice(-80)));
+    } catch (e) {}
+  };
 
   useEffect(() => {
     currentChannelRef.current = currentChannel;
@@ -245,8 +262,31 @@ export default function App() {
       }
     });
 
+    socket.on('profile-synced', (syncedProfile) => {
+      console.log('[Profile Synced from Server]', syncedProfile);
+      setCurrentUser(prev => {
+        const merged = { ...(prev || {}), ...syncedProfile };
+        try { localStorage.setItem('fivecord_user', JSON.stringify(merged)); } catch (e) {}
+        return merged;
+      });
+    });
+
     socket.on('servers-updated', (updatedServers) => {
       setServers(updatedServers);
+      // Ensure active channel exists in current server
+      const curSrv = updatedServers.find(s => s.id === currentServerId) || updatedServers[0];
+      if (curSrv && Array.isArray(curSrv.channels) && curSrv.channels.length > 0) {
+        if (currentChannelRef.current && !curSrv.channels.some(c => c.id === currentChannelRef.current.id)) {
+          const fallback = curSrv.channels.find(c => c.type === 'text') || curSrv.channels[0];
+          if (fallback) {
+            setCurrentChannel(fallback);
+            currentChannelRef.current = fallback;
+            const cached = loadCachedMessages(fallback.id);
+            if (cached && cached.length > 0) setMessages(cached);
+            socket.emit('fetch-messages', fallback.id);
+          }
+        }
+      }
     });
 
     socket.on('server-created', (newServer) => {
@@ -296,17 +336,46 @@ export default function App() {
       setChannels(updatedChannels);
     });
 
-    socket.on('channel-deleted', (deletedChannelId) => {
+    socket.on('channel-created', ({ channel: newCh, serverId: chServerId }) => {
       setChannels(prev => {
-        const updated = prev.filter(c => c.id !== deletedChannelId);
-        if (currentChannel?.id === deletedChannelId) {
-          const fallback = updated.find(c => c.type === 'text') || updated[0];
-          if (fallback) {
-            setCurrentChannel(fallback);
-            socket.emit('fetch-messages', fallback.id);
+        if (prev.some(c => c.id === newCh.id)) return prev;
+        return [...prev, newCh];
+      });
+      setServers(prev => prev.map(srv => {
+        if (srv.id === chServerId) {
+          const existingChs = Array.isArray(srv.channels) ? srv.channels : [];
+          if (!existingChs.some(c => c.id === newCh.id)) {
+            return { ...srv, channels: [...existingChs, newCh] };
           }
         }
-        return updated;
+        return srv;
+      }));
+    });
+
+    socket.on('channel-deleted', (deletedChannelId) => {
+      // 1. Remove from channels array
+      setChannels(prev => prev.filter(c => c.id !== deletedChannelId));
+      // 2. Remove from all servers in servers array
+      setServers(prev => prev.map(srv => ({
+        ...srv,
+        channels: Array.isArray(srv.channels) ? srv.channels.filter(c => c.id !== deletedChannelId) : []
+      })));
+      // 3. Clean up cache
+      try { localStorage.removeItem('synapse_msg_cache_' + deletedChannelId); } catch (e) {}
+      // 4. Switch away if currently active
+      setCurrentChannel(prev => {
+        if (prev?.id === deletedChannelId) {
+          const remaining = channels.filter(c => c.id !== deletedChannelId);
+          const fallback = remaining.find(c => c.type === 'text') || remaining[0] || null;
+          if (fallback) {
+            currentChannelRef.current = fallback;
+            const cached = loadCachedMessages(fallback.id);
+            if (cached && cached.length > 0) setMessages(cached);
+            socket.emit('fetch-messages', fallback.id);
+          }
+          return fallback;
+        }
+        return prev;
       });
     });
 
@@ -346,16 +415,18 @@ export default function App() {
 
     socket.on('members-updated', (updatedMembers) => {
       setMembers(updatedMembers);
-      if (currentUser) {
+
+      if (currentUser?.username) {
         const me = updatedMembers.find(m => 
-          (m.id && currentUser.id && m.id === currentUser.id) || 
-          (m.username && currentUser.username && m.username.toLowerCase() === currentUser.username.toLowerCase())
+          m.id === currentUser.id || 
+          (m.username && m.username.toLowerCase() === currentUser.username.toLowerCase())
         );
-        if (me) {
-          const rolesChanged = JSON.stringify(me.roles) !== JSON.stringify(currentUser.roles);
-          const highestRoleChanged = me.highestRole?.id !== currentUser.highestRole?.id;
-          const colorChanged = Boolean(me.color && me.color !== currentUser.color);
-          if (rolesChanged || highestRoleChanged || colorChanged) {
+        if (me && Array.isArray(me.roles)) {
+          const hasRolesChanged = JSON.stringify(me.roles) !== JSON.stringify(currentUser.roles);
+          const hasColorChanged = me.color !== currentUser.color;
+          const hasHighestChanged = me.highestRole?.id !== currentUser.highestRole?.id;
+
+          if (hasRolesChanged || hasColorChanged || hasHighestChanged) {
             setCurrentUser(prev => {
               if (!prev) return prev;
               const updated = { 
@@ -372,28 +443,38 @@ export default function App() {
       }
     });
 
-    socket.on('messages-history', ({ channelId, messages }) => {
+    socket.on('messages-history', ({ channelId, messages: serverMsgs }) => {
+      saveCachedMessages(channelId, serverMsgs);
       if (currentChannelRef.current?.id === channelId) {
-        setMessages(messages);
+        setMessages(serverMsgs);
       }
     });
 
     socket.on('new-message', (msg) => {
       const isViewingThisChannel = currentChannelRef.current?.id === msg.channelId;
       if (isViewingThisChannel) {
-        setMessages(prev => [...prev, msg]);
-      } else if (msg.channelId && msg.channelId.startsWith('dm-')) {
-        // Incoming DM for a chat that is not currently open
-        setUnreadDms(prev => new Set(prev).add(msg.sender.id));
-        setClosedDms(prev => {
-          if (prev.has(msg.sender.id)) {
-            const next = new Set(prev);
-            next.delete(msg.sender.id);
-            try { localStorage.setItem('synapse_closed_dms', JSON.stringify(Array.from(next))); } catch (e) {}
-            return next;
-          }
-          return prev;
+        setMessages(prev => {
+          const updated = [...prev, msg];
+          saveCachedMessages(msg.channelId, updated);
+          return updated;
         });
+      } else {
+        const cached = loadCachedMessages(msg.channelId);
+        cached.push(msg);
+        saveCachedMessages(msg.channelId, cached);
+        if (msg.channelId && msg.channelId.startsWith('dm-')) {
+          // Incoming DM for a chat that is not currently open
+          setUnreadDms(prev => new Set(prev).add(msg.sender.id));
+          setClosedDms(prev => {
+            if (prev.has(msg.sender.id)) {
+              const next = new Set(prev);
+              next.delete(msg.sender.id);
+              try { localStorage.setItem('synapse_closed_dms', JSON.stringify(Array.from(next))); } catch (e) {}
+              return next;
+            }
+            return prev;
+          });
+        }
       }
 
       if (msg.sender.id !== currentUser?.id) {
@@ -826,6 +907,10 @@ export default function App() {
       localStorage.setItem('fivecord_last_channel_id', channel.id);
     } catch (e) {}
     if (channel.type === 'text') {
+      const cached = loadCachedMessages(channel.id);
+      if (cached && cached.length > 0) {
+        setMessages(cached);
+      }
       socket.emit('fetch-messages', channel.id);
     }
   };
@@ -836,6 +921,7 @@ export default function App() {
   };
 
   const handleDeleteChannel = (channelId) => {
+    try { localStorage.removeItem('synapse_msg_cache_' + channelId); } catch (e) {}
     socket.emit('delete-channel', { channelId, serverId: currentServerId });
     soundEffects.playLeave();
   };
