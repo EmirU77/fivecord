@@ -7,6 +7,8 @@ import {
 import UserControlBar from './UserControlBar';
 
 export default function Sidebar({
+  serverName,
+  server,
   channels,
   currentChannel,
   onSelectChannel,
@@ -103,15 +105,15 @@ export default function Sidebar({
         <div 
           onClick={() => setIsServerMenuOpen(prev => !prev)}
           className="h-12 border-b border-[#1f2023] px-4 flex items-center justify-between shadow-xs hover:bg-[#35373c]/60 cursor-pointer transition-colors group"
-          title="Synapse Sunucu Menüsü"
+          title={`${serverName || server?.name || 'Synapse'} Sunucu Menüsü`}
         >
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-sm text-white tracking-wide flex items-center gap-1.5">
-              Synapse
-              <BadgeCheck className="w-4 h-4 text-[#5865f2] inline fill-[#5865f2]/20" />
+          <div className="flex items-center gap-2 overflow-hidden">
+            <span className="font-bold text-sm text-white tracking-wide truncate flex items-center gap-1.5">
+              {serverName || server?.name || 'Synapse'}
+              <BadgeCheck className="w-4 h-4 text-[#5865f2] shrink-0 fill-[#5865f2]/20" />
             </span>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 shrink-0">
             <ChevronDown className={`w-4 h-4 text-[#949ba4] group-hover:text-white transition-transform ${isServerMenuOpen ? 'rotate-180 text-white' : 'group-hover:translate-y-0.5'}`} />
           </div>
         </div>

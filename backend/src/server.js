@@ -585,16 +585,27 @@ app.get('/api/music/search', async (req, res) => {
 });
 
 const channels = persistence.loadChannels();
+let servers = persistence.loadServers();
 
 channels.forEach(ch => {
   if (ch.type === 'text' && !textMessages.has(ch.id)) textMessages.set(ch.id, []);
   if (ch.type === 'voice' && !voiceChannels.has(ch.id)) voiceChannels.set(ch.id, new Set());
 });
 
+servers.forEach(srv => {
+  if (Array.isArray(srv.channels)) {
+    srv.channels.forEach(ch => {
+      if (ch.type === 'text' && !textMessages.has(ch.id)) textMessages.set(ch.id, []);
+      if (ch.type === 'voice' && !voiceChannels.has(ch.id)) voiceChannels.set(ch.id, new Set());
+    });
+  }
+});
+
 io.on('connection', (socket) => {
   console.log(`[Socket Connected] ID: ${socket.id}`);
 
   socket.emit('initial-data', {
+    servers: persistence.loadServers(),
     channels,
     stations: MUSIC_STATIONS,
     watchTogether: Object.fromEntries(watchTogetherRooms),
@@ -674,7 +685,59 @@ io.on('connection', (socket) => {
     console.log(`[User Joined] ${user.username} (${socket.id}) - Toplam Aktif Üye: ${users.size}`);
   });
 
-  socket.on('create-channel', ({ name, type }) => {
+  // --- MULTI-SERVER MANAGEMENT (Birden Çok Sunucu Sistemi) ---
+  socket.on('create-server', ({ name, icon, description, isPublic }) => {
+    const user = users.get(socket.id);
+    const newServer = persistence.createServer({
+      name,
+      icon,
+      ownerId: user ? user.id : null,
+      description,
+      isPublic
+    });
+
+    // Register channels for new server
+    newServer.channels.forEach(ch => {
+      if (ch.type === 'text' && !textMessages.has(ch.id)) textMessages.set(ch.id, []);
+      if (ch.type === 'voice' && !voiceChannels.has(ch.id)) voiceChannels.set(ch.id, new Set());
+    });
+
+    const updatedServers = persistence.loadServers();
+    io.emit('servers-updated', updatedServers);
+    socket.emit('server-created', newServer);
+    console.log(`[Server Created] ${newServer.name} (${newServer.id}) by ${user?.username}`);
+  });
+
+  socket.on('delete-server', ({ serverId }) => {
+    const user = users.get(socket.id);
+    const success = persistence.deleteServer(serverId, user?.id);
+    if (success) {
+      const updatedServers = persistence.loadServers();
+      io.emit('servers-updated', updatedServers);
+      io.emit('server-deleted', { serverId });
+      console.log(`[Server Deleted] ${serverId} by ${user?.username}`);
+    } else {
+      socket.emit('server-error', { message: 'Bu sunucuyu silme yetkiniz yok veya ana sunucu silinemez.' });
+    }
+  });
+
+  socket.on('join-server', ({ serverId }) => {
+    const user = users.get(socket.id);
+    const serversList = persistence.loadServers();
+    const srv = serversList.find(s => s.id === serverId);
+    if (srv && user) {
+      if (!Array.isArray(srv.members)) srv.members = [];
+      if (!srv.members.includes(user.id)) {
+        srv.members.push(user.id);
+        persistence.saveServers(serversList);
+        io.emit('servers-updated', serversList);
+      }
+      socket.emit('server-joined', srv);
+      console.log(`[Server Joined] ${user.username} joined ${srv.name}`);
+    }
+  });
+
+  socket.on('create-channel', ({ name, type, serverId = 'server-main' }) => {
     if (!name || !name.trim()) return;
     const cleanName = name.trim().toLowerCase().replace(/\s+/g, '-');
     const newCh = {
@@ -682,17 +745,34 @@ io.on('connection', (socket) => {
       name: type === 'voice' ? `🔊 ${cleanName}` : cleanName,
       type,
       topic: type === 'text' ? 'Özel sohbet kanalı' : 'Özel ses odası',
-      bitrate: type === 'voice' ? '128kbps' : undefined
+      bitrate: type === 'voice' ? '128kbps' : undefined,
+      serverId
     };
-    channels.push(newCh);
+
+    if (serverId === 'server-main') {
+      channels.push(newCh);
+      persistence.saveChannels(channels);
+    }
+
+    const srvList = persistence.loadServers();
+    const targetSrv = srvList.find(s => s.id === serverId);
+    if (targetSrv) {
+      if (!Array.isArray(targetSrv.channels)) targetSrv.channels = [];
+      targetSrv.channels.push(newCh);
+      persistence.saveServers(srvList);
+      io.emit('servers-updated', srvList);
+    }
+
     if (newCh.type === 'text') textMessages.set(newCh.id, []);
     if (newCh.type === 'voice') voiceChannels.set(newCh.id, new Set());
-    persistence.saveChannels(channels);
     io.emit('channels-updated', channels);
-    console.log(`[Channel Created] ${newCh.name} (${newCh.type})`);
+    console.log(`[Channel Created] ${newCh.name} (${newCh.type}) in ${serverId}`);
   });
 
-  socket.on('delete-channel', (channelId) => {
+  socket.on('delete-channel', (payload, maybeServerId) => {
+    const channelId = (typeof payload === 'object' && payload !== null) ? payload.channelId : payload;
+    const serverId = (typeof payload === 'object' && payload !== null) ? (payload.serverId || 'server-main') : (maybeServerId || 'server-main');
+
     if (channelId === 'text-genel') {
       socket.emit('channel-error', { message: 'Ana genel sohbet kanalı silinemez.' });
       return;
@@ -706,7 +786,6 @@ io.on('connection', (socket) => {
       if (removed.type === 'voice') {
         voiceChannels.delete(removed.id);
         channelMusic.delete(removed.id);
-        // Kick any members in this voice channel
         for (const user of users.values()) {
           if (user.voiceState?.channelId === removed.id) {
             user.voiceState.channelId = null;
@@ -722,24 +801,48 @@ io.on('connection', (socket) => {
         io.emit('members-updated', getAllMembers());
       }
       persistence.saveChannels(channels);
-      io.emit('channels-updated', channels);
-      io.emit('channel-deleted', channelId);
-      console.log(`[Channel Deleted] ${removed.name} (${channelId})`);
     }
+
+    // Also remove from server object if custom server
+    const srvList = persistence.loadServers();
+    const targetSrv = srvList.find(s => s.id === serverId || (s.channels && s.channels.some(c => c.id === channelId)));
+    if (targetSrv && Array.isArray(targetSrv.channels)) {
+      targetSrv.channels = targetSrv.channels.filter(c => c.id !== channelId);
+      persistence.saveServers(srvList);
+      io.emit('servers-updated', srvList);
+    }
+
+    io.emit('channels-updated', channels);
+    io.emit('channel-deleted', channelId);
+    console.log(`[Channel Deleted] ${channelId}`);
   });
 
-  socket.on('rename-channel', ({ channelId, newName }) => {
+  socket.on('rename-channel', ({ channelId, newName, serverId = 'server-main' }) => {
     if (!newName || !newName.trim()) return;
+    const clean = newName.trim();
     const ch = channels.find(c => c.id === channelId);
     if (ch) {
-      const clean = newName.trim();
       ch.name = (ch.type === 'voice' && !clean.startsWith('🔊') && !clean.startsWith('🎮') && !clean.startsWith('🍿'))
         ? `🔊 ${clean}`
         : clean;
       persistence.saveChannels(channels);
-      io.emit('channels-updated', channels);
-      console.log(`[Channel Renamed] ${ch.id} -> ${ch.name}`);
     }
+
+    const srvList = persistence.loadServers();
+    const targetSrv = srvList.find(s => s.id === serverId || (s.channels && s.channels.some(c => c.id === channelId)));
+    if (targetSrv && Array.isArray(targetSrv.channels)) {
+      const srvCh = targetSrv.channels.find(c => c.id === channelId);
+      if (srvCh) {
+        srvCh.name = (srvCh.type === 'voice' && !clean.startsWith('🔊') && !clean.startsWith('🎮') && !clean.startsWith('🍿'))
+          ? `🔊 ${clean}`
+          : clean;
+        persistence.saveServers(srvList);
+        io.emit('servers-updated', srvList);
+      }
+    }
+
+    io.emit('channels-updated', channels);
+    console.log(`[Channel Renamed] ${channelId} -> ${clean}`);
   });
 
   // --- WATCH TOGETHER (Birlikte YouTube İzle - 0 Delay Senkronizasyon) ---

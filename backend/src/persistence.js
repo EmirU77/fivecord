@@ -16,6 +16,7 @@ export const ACCOUNTS_FILE = path.join(DATA_DIR, 'accounts.json');
 export const ROOM_STATES_FILE = path.join(DATA_DIR, 'room_states.json');
 export const ROLES_FILE = path.join(DATA_DIR, 'roles.json');
 export const BANS_FILE = path.join(DATA_DIR, 'bans.json');
+export const SERVERS_FILE = path.join(DATA_DIR, 'servers.json');
 
 export const DEFAULT_ROLES = [
   {
@@ -248,4 +249,105 @@ export function saveRoomStates(musicMap, watchTogetherMap) {
   } catch (e) {
     console.error('[Persistence] Failed saving room states:', e.message);
   }
+}
+
+export const DEFAULT_SERVERS = [
+  {
+    id: 'server-main',
+    name: 'Synapse Topluluğu',
+    icon: 'S',
+    avatar: null,
+    ownerId: 'user-emir',
+    description: 'Resmi Synapse Ana Topluluk Sunucusu',
+    isPublic: true,
+    channels: DEFAULT_CHANNELS,
+    roles: DEFAULT_ROLES,
+    members: [],
+    createdAt: 1700000000000
+  }
+];
+
+export function loadServers() {
+  try {
+    if (fs.existsSync(SERVERS_FILE)) {
+      const parsed = JSON.parse(fs.readFileSync(SERVERS_FILE, 'utf8'));
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // Ensure server-main has latest channels from channels.json
+        const currentChannels = loadChannels();
+        const mainIdx = parsed.findIndex(s => s.id === 'server-main');
+        if (mainIdx !== -1) {
+          parsed[mainIdx].channels = currentChannels;
+        } else {
+          parsed.unshift({
+            ...DEFAULT_SERVERS[0],
+            channels: currentChannels,
+            roles: loadRoles()
+          });
+        }
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.warn('[Persistence] Could not read servers.json:', e.message);
+  }
+  const initial = [
+    {
+      ...DEFAULT_SERVERS[0],
+      channels: loadChannels(),
+      roles: loadRoles()
+    }
+  ];
+  safeWriteJSON(SERVERS_FILE, initial);
+  return initial;
+}
+
+export function saveServers(servers) {
+  safeWriteJSON(SERVERS_FILE, servers);
+}
+
+export function createServer({ name, icon, ownerId, description, isPublic = true }) {
+  const servers = loadServers();
+  const cleanName = (name || 'Yeni Sunucu').trim();
+  const serverId = 'server-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
+  
+  const defaultServerChannels = [
+    { id: `text-genel-${serverId}`, name: 'genel-sohbet', type: 'text', topic: 'Sunucu ana sohbet alanı' },
+    { id: `text-medya-${serverId}`, name: 'medya-paylasim', type: 'text', topic: 'Fotoğraf, video ve klipler' },
+    { id: `voice-genel-${serverId}`, name: '🔊 Ses Odası', type: 'voice', bitrate: '128kbps' },
+    { id: `voice-oyun-${serverId}`, name: '🎮 Oyun & Pro', type: 'voice', bitrate: '256kbps' }
+  ];
+
+  const newServer = {
+    id: serverId,
+    name: cleanName,
+    icon: (icon && icon.trim()) ? icon.trim() : cleanName.slice(0, 2).toUpperCase(),
+    avatar: null,
+    ownerId: ownerId || null,
+    description: description || `${cleanName} resmi sunucusu`,
+    isPublic: isPublic !== false,
+    channels: defaultServerChannels,
+    roles: DEFAULT_ROLES,
+    members: ownerId ? [ownerId] : [],
+    createdAt: Date.now()
+  };
+
+  servers.push(newServer);
+  saveServers(servers);
+  return newServer;
+}
+
+export function deleteServer(serverId, requesterId) {
+  if (serverId === 'server-main') return false; // Cannot delete primary server
+  let servers = loadServers();
+  const target = servers.find(s => s.id === serverId);
+  if (!target) return false;
+
+  // Only owner or admin can delete
+  if (target.ownerId && requesterId && target.ownerId !== requesterId && requesterId !== 'user-emir') {
+    return false;
+  }
+
+  servers = servers.filter(s => s.id !== serverId);
+  saveServers(servers);
+  return true;
 }

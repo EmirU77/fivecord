@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Hash, Volume2, X, Plus } from 'lucide-react';
 import { socket } from '../services/socket';
 
-export default function CreateChannelModal({ isOpen, onClose, defaultType = 'text' }) {
+export default function CreateChannelModal({ isOpen, onClose, defaultType = 'text', serverId }) {
   const [channelName, setChannelName] = useState('');
   const [channelType, setChannelType] = useState(defaultType);
 
@@ -20,6 +20,7 @@ export default function CreateChannelModal({ isOpen, onClose, defaultType = 'tex
     if (!channelName.trim()) return;
 
     socket.emit('create-channel', {
+      serverId,
       name: channelName.trim(),
       type: channelType
     });

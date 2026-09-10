@@ -10,6 +10,7 @@ import CreateChannelModal from './components/CreateChannelModal';
 import DeleteChannelModal from './components/DeleteChannelModal';
 import RenameChannelModal from './components/RenameChannelModal';
 import ServerInfoModal from './components/ServerInfoModal';
+import CreateServerModal from './components/CreateServerModal';
 import DownloadModal from './components/DownloadModal';
 import MusicPlayerModal from './components/MusicPlayerModal';
 import BackgroundMusicPlayer, { loadYouTubeApi } from './components/BackgroundMusicPlayer';
@@ -48,6 +49,20 @@ export default function App() {
   // Views: 'server' (Fivecord VIP) | 'dm' (Direct Messages / Özel Mesajlar)
   const [activeView, setActiveView] = useState('server');
   const [activeDmUser, setActiveDmUser] = useState(null);
+
+  // Multi-Server Architecture
+  const [servers, setServers] = useState([]);
+  const [currentServerId, setCurrentServerId] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const srv = params.get('server') || params.get('invite');
+        if (srv) return srv;
+      } catch (e) {}
+    }
+    return localStorage.getItem('synapse_current_server_id') || 'server-main';
+  });
+  const [isCreateServerOpen, setIsCreateServerOpen] = useState(false);
 
   const [channels, setChannels] = useState([]);
   const [currentChannel, setCurrentChannel] = useState(null);
@@ -157,7 +172,10 @@ export default function App() {
       alert(message || 'Hesabınıza başka bir sekmeden veya cihazdan giriş yapıldı.');
     });
 
-    socket.on('initial-data', ({ channels, stations, watchTogether, music, roles }) => {
+    socket.on('initial-data', ({ servers: initServers, channels, stations, watchTogether, music, roles }) => {
+      if (initServers && initServers.length > 0) {
+        setServers(initServers);
+      }
       setChannels(channels);
       if (stations) setMusicStations(stations);
       if (roles) setRoles(roles);
@@ -174,6 +192,39 @@ export default function App() {
         currentChannelRef.current = targetChannel;
         socket.emit('fetch-messages', targetChannel.id);
       }
+    });
+
+    socket.on('servers-updated', (updatedServers) => {
+      setServers(updatedServers);
+    });
+
+    socket.on('server-created', (newServer) => {
+      setServers(prev => {
+        if (prev.some(s => s.id === newServer.id)) return prev;
+        return [...prev, newServer];
+      });
+      if (newServer.ownerId === currentUser?.id) {
+        setCurrentServerId(newServer.id);
+        try { localStorage.setItem('synapse_current_server_id', newServer.id); } catch (e) {}
+        setActiveView('server');
+        if (newServer.channels && newServer.channels[0]) {
+          setCurrentChannel(newServer.channels[0]);
+          currentChannelRef.current = newServer.channels[0];
+          socket.emit('fetch-messages', newServer.channels[0].id);
+        }
+      }
+    });
+
+    socket.on('server-deleted', (deletedServerId) => {
+      setServers(prev => prev.filter(s => s.id !== deletedServerId));
+      if (currentServerId === deletedServerId) {
+        setCurrentServerId('server-main');
+        try { localStorage.setItem('synapse_current_server_id', 'server-main'); } catch (e) {}
+      }
+    });
+
+    socket.on('server-error', ({ message }) => {
+      alert(message || 'Sunucu işleminde hata oluştu.');
     });
 
     socket.on('roles-updated', (updatedRoles) => {
@@ -515,6 +566,10 @@ export default function App() {
     return () => {
       socket.off('connect');
       socket.off('initial-data');
+      socket.off('servers-updated');
+      socket.off('server-created');
+      socket.off('server-deleted');
+      socket.off('server-error');
       socket.off('channels-updated');
       socket.off('channel-deleted');
       socket.off('members-updated');
@@ -583,6 +638,79 @@ export default function App() {
     }
   };
 
+  // --- MULTI-SERVER & CHANNELS CALCULATION ---
+  const currentServer = servers.find(s => s.id === currentServerId) || servers.find(s => s.id === 'server-main') || servers[0] || {
+    id: 'server-main',
+    name: 'Synapse Topluluğu',
+    icon: 'S',
+    channels: channels
+  };
+
+  const activeChannels = (currentServer && Array.isArray(currentServer.channels) && currentServer.channels.length > 0)
+    ? currentServer.channels
+    : channels;
+
+  const handleSelectServer = (serverId) => {
+    setCurrentServerId(serverId);
+    try { localStorage.setItem('synapse_current_server_id', serverId); } catch (e) {}
+    setActiveView('server');
+
+    const targetSrv = servers.find(s => s.id === serverId);
+    const targetChannels = (targetSrv && Array.isArray(targetSrv.channels) && targetSrv.channels.length > 0)
+      ? targetSrv.channels
+      : (serverId === 'server-main' ? channels : []);
+
+    const firstText = targetChannels.find(c => c.type === 'text') || targetChannels[0];
+    if (firstText) {
+      handleSelectChannel(firstText);
+    }
+  };
+
+  const handleCreateServer = (serverData) => {
+    socket.emit('create-server', {
+      name: serverData.name,
+      icon: serverData.icon,
+      description: serverData.description,
+      isPublic: serverData.isPublic,
+      userId: currentUser?.id,
+      userName: currentUser?.username
+    });
+  };
+
+  const handleJoinServer = (targetServerId) => {
+    socket.emit('join-server', {
+      serverId: targetServerId,
+      userId: currentUser?.id,
+      userName: currentUser?.username
+    });
+    setCurrentServerId(targetServerId);
+    try { localStorage.setItem('synapse_current_server_id', targetServerId); } catch (e) {}
+    setActiveView('server');
+    const srv = servers.find(s => s.id === targetServerId);
+    if (srv && Array.isArray(srv.channels) && srv.channels[0]) {
+      handleSelectChannel(srv.channels[0]);
+    }
+  };
+
+  const handleDeleteServer = (targetServerId) => {
+    socket.emit('delete-server', {
+      serverId: targetServerId,
+      userId: currentUser?.id
+    });
+  };
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const srv = params.get('server') || params.get('invite');
+        if (srv && srv !== currentServerId) {
+          handleJoinServer(srv);
+        }
+      } catch (e) {}
+    }
+  }, [currentUser]);
+
   // --- CHANNEL & DM ACTIONS ---
   const handleSelectChannel = (channel) => {
     setCurrentChannel(channel);
@@ -601,12 +729,12 @@ export default function App() {
   };
 
   const handleDeleteChannel = (channelId) => {
-    socket.emit('delete-channel', channelId);
+    socket.emit('delete-channel', { channelId, serverId: currentServerId });
     soundEffects.playLeave();
   };
 
   const handleRenameChannel = (channelId, newName) => {
-    socket.emit('rename-channel', { channelId, newName });
+    socket.emit('rename-channel', { channelId, newName, serverId: currentServerId });
   };
 
   // Switch to a 1-on-1 private DM with a friend
@@ -890,14 +1018,10 @@ export default function App() {
       {/* DISCORD SERVER RAIL (72px) */}
       <ServerRail 
         activeView={activeView}
-        onSelectServer={() => {
-          setActiveView('server');
-          const defaultText = channels.find(c => c.type === 'text');
-          if (defaultText) {
-            setCurrentChannel(defaultText);
-            socket.emit('fetch-messages', defaultText.id);
-          }
-        }}
+        servers={servers}
+        currentServerId={currentServerId}
+        onSelectServer={handleSelectServer}
+        onOpenCreateServer={() => setIsCreateServerOpen(true)}
         onSelectDM={() => {
           setActiveView('dm');
           if (activeDmUser) {
@@ -939,7 +1063,9 @@ export default function App() {
         />
       ) : (
         <Sidebar
-          channels={channels}
+          serverName={currentServer?.name}
+          server={currentServer}
+          channels={activeChannels}
           currentChannel={currentChannel}
           onSelectChannel={handleSelectChannel}
           currentVoiceChannel={currentVoiceChannel}
@@ -1026,7 +1152,7 @@ export default function App() {
           onOpenDownload={() => setIsDownloadModalOpen(true)}
           onOpenMusicModal={() => setIsMusicModalOpen(true)}
           onJoinVoice={handleJoinVoice}
-          voiceChannels={channels.filter(c => c.type === 'voice')}
+          voiceChannels={activeChannels.filter(c => c.type === 'voice')}
           members={members}
           isAppInstalled={isAppInstalled}
           onOpenWheel={() => setIsWheelOpen(true)}
@@ -1060,6 +1186,7 @@ export default function App() {
         isOpen={isCreateChannelOpen}
         onClose={() => setIsCreateChannelOpen(false)}
         defaultType={createChannelType}
+        serverId={currentServerId}
       />
 
       <DeleteChannelModal
@@ -1079,6 +1206,18 @@ export default function App() {
       <ServerInfoModal
         isOpen={isInfoModalOpen}
         onClose={() => setIsInfoModalOpen(false)}
+        currentServer={currentServer}
+        currentUser={currentUser}
+        onDeleteServer={handleDeleteServer}
+      />
+
+      <CreateServerModal
+        isOpen={isCreateServerOpen}
+        onClose={() => setIsCreateServerOpen(false)}
+        onCreateServer={handleCreateServer}
+        onJoinServer={handleJoinServer}
+        servers={servers}
+        currentServerId={currentServerId}
       />
 
       <DownloadModal
