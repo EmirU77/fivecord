@@ -604,8 +604,9 @@ setInterval(() => {
 }, 1000);
 
 
+// Privacy & security: Do not expose all registered user accounts publicly to clients
 app.get('/api/accounts', (req, res) => {
-  res.json({ accounts: loadAccounts() });
+  res.json({ accounts: [] });
 });
 
 app.get('/api/music/search', async (req, res) => {
