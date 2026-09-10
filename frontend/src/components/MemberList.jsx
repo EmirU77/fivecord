@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { AvatarDecorationRenderer, StatusDotRenderer, getNameEffectStyle } from './UserControlBar';
 import { voiceRelay } from '../services/voiceRelay';
+import { DEFAULT_ROLES } from '../App';
 
 export default function MemberList({ 
   members = [], 
@@ -16,6 +17,8 @@ export default function MemberList({
 }) {
   const [selectedMemberId, setSelectedMemberId] = useState(null);
   const [userVolumes, setUserVolumes] = useState({});
+
+  const activeRoles = Array.isArray(roles) && roles.length > 0 ? roles : DEFAULT_ROLES;
 
   const myMemberObj = members?.find(m => 
     (currentUser?.id && m.id === currentUser.id) || 
@@ -31,7 +34,7 @@ export default function MemberList({
     currentUserRoles.includes('role-founder') ||
     myMemberObj?.highestRole?.id === 'role-founder';
 
-  const canManageRoles = isFounder || roles.some(r => 
+  const canManageRoles = isFounder || activeRoles.some(r => 
     currentUserRoles.includes(r.id) && (r.permissions?.includes('admin') || r.permissions?.includes('manage_roles'))
   );
 
@@ -46,7 +49,7 @@ export default function MemberList({
   const botMembers = members.filter(m => m.isBot);
 
   // Build role groups from sorted roles
-  const sortedRoles = [...roles].sort((a, b) => a.position - b.position);
+  const sortedRoles = [...activeRoles].sort((a, b) => a.position - b.position);
   const hoistedRoles = sortedRoles.filter(r => r.hoist);
 
   const groups = [];

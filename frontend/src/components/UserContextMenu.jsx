@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { socket } from '../services/socket';
 import { voiceRelay } from '../services/voiceRelay';
+import { DEFAULT_ROLES } from '../App';
 
 export default function UserContextMenu({
   x,
@@ -32,6 +33,8 @@ export default function UserContextMenu({
       return 100;
     }
   });
+
+  const activeRoles = Array.isArray(roles) && roles.length > 0 ? roles : DEFAULT_ROLES;
 
   const liveTarget = members?.find(m => 
     (targetMember?.id && m.id === targetMember.id) ||
@@ -68,8 +71,13 @@ export default function UserContextMenu({
     currentUserRoles.includes('role-founder') ||
     myMemberObj?.highestRole?.id === 'role-founder';
 
-  const hasAdminPerm = isFounder || roles.some(r => 
-    currentUserRoles.includes(r.id) && (r.permissions?.includes('admin') || r.permissions?.includes('kick') || r.permissions?.includes('ban') || r.permissions?.includes('manage_roles'))
+  const hasAdminPerm = isFounder || activeRoles.some(r => 
+    currentUserRoles.includes(r.id) && (
+      r.permissions?.includes('admin') || 
+      r.permissions?.includes('kick') || 
+      r.permissions?.includes('ban') || 
+      r.permissions?.includes('manage_roles')
+    )
   );
 
   useEffect(() => {
@@ -132,8 +140,8 @@ export default function UserContextMenu({
     setCurrentRoles(nextRoles);
 
     socket.emit('assign-role', {
-      targetUserId: targetMember.id,
-      targetUsername: targetMember.username,
+      targetUserId: liveTarget?.id || targetMember?.id,
+      targetUsername: liveTarget?.username || targetMember?.username,
       roleId,
       action: hasRole ? 'remove' : 'add'
     });
@@ -348,7 +356,7 @@ export default function UserContextMenu({
 
               {showRoleSubmenu && (
                 <div className="mt-1 p-1 bg-[#1e1f22] rounded-lg border border-[#383a40] space-y-1">
-                  {roles.map(r => {
+                  {activeRoles.map(r => {
                     const hasRole = currentRoles.includes(r.id);
                     return (
                       <div

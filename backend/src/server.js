@@ -258,6 +258,42 @@ function getAllMembers() {
     });
   }
 
+  // Ensure all live users from users map are included even if not yet saved in accounts
+  for (const u of users.values()) {
+    if (u.id === DJ_BOT_USER.id) continue;
+    const already = memberList.some(m => 
+      (m.id && u.id && m.id === u.id) || 
+      (m.username && u.username && m.username.toLowerCase() === u.username.toLowerCase())
+    );
+    if (!already) {
+      const userRoles = Array.isArray(u.roles) && u.roles.length > 0 ? u.roles : ['role-member'];
+      const highestRole = roles
+        .filter(r => userRoles.includes(r.id))
+        .sort((a, b) => a.position - b.position)[0] || null;
+      memberList.push({
+        id: u.id,
+        username: u.username,
+        avatar: u.avatar,
+        avatarDecoration: u.avatarDecoration || 'none',
+        banner: u.banner || null,
+        bio: u.bio || '',
+        color: highestRole?.color || u.color || '#5865F2',
+        nameEffect: u.nameEffect || 'normal',
+        badges: u.badges || [],
+        customStatus: u.customStatus || '',
+        statusEmoji: u.statusEmoji || '',
+        status: u.status || 'online',
+        isOnline: true,
+        socketId: u.socketId,
+        voiceState: u.voiceState || null,
+        gameActivity: u.gameActivity || null,
+        roles: userRoles,
+        highestRole,
+        lastSeen: Date.now()
+      });
+    }
+  }
+
   return memberList;
 }
 
@@ -1612,8 +1648,8 @@ io.on('connection', (socket) => {
 
     persistence.safeWriteJSON(persistence.ACCOUNTS_FILE, accounts);
 
-    // Update in-memory active users
-    for (const u of users.values()) {
+    // Update in-memory active users & emit direct update to the target user's socket
+    for (const [sockId, u] of users.entries()) {
       if (
         (target.id && u.id === target.id) ||
         (target.username && u.username && u.username.toLowerCase() === target.username.toLowerCase())
@@ -1623,11 +1659,29 @@ io.on('connection', (socket) => {
         if (highestRole?.color) {
           u.color = highestRole.color;
         }
+
+        const targetSock = io.sockets.sockets.get(sockId);
+        if (targetSock) {
+          targetSock.emit('user-roles-updated', {
+            userId: target.id,
+            roles: target.roles,
+            highestRole,
+            color: target.color
+          });
+        }
       }
     }
 
+    socket.emit('role-assigned-success', {
+      targetUserId: target.id,
+      targetUsername: target.username,
+      roles: target.roles,
+      highestRole
+    });
+
     const updatedMembers = getAllMembers();
     io.emit('members-updated', updatedMembers);
+    io.emit('roles-updated', allRoles);
     console.log(`[Role Updated] ${target.username} (${action} ${roleId}) -> Current roles:`, target.roles);
   });
 

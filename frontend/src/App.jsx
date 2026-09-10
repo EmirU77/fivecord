@@ -34,6 +34,41 @@ const DEFAULT_USER = {
   customStatus: 'Synapse kullanıyor'
 };
 
+export const DEFAULT_ROLES = [
+  {
+    id: 'role-founder',
+    name: '👑 Kurucu',
+    color: '#f1c40f',
+    position: 1,
+    hoist: true,
+    permissions: ['admin', 'kick', 'ban', 'manage_roles', 'manage_channels', 'mute_members']
+  },
+  {
+    id: 'role-mod',
+    name: '🛡️ Moderatör',
+    color: '#3498db',
+    position: 2,
+    hoist: true,
+    permissions: ['kick', 'ban', 'mute_members']
+  },
+  {
+    id: 'role-vip',
+    name: '⭐ VIP',
+    color: '#9b59b6',
+    position: 3,
+    hoist: true,
+    permissions: ['priority_speaker']
+  },
+  {
+    id: 'role-member',
+    name: 'Üye',
+    color: '#99aab5',
+    position: 4,
+    hoist: false,
+    permissions: []
+  }
+];
+
 export default function App() {
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = localStorage.getItem('fivecord_user');
@@ -125,7 +160,7 @@ export default function App() {
   // Remote WebRTC streams
   const [remoteStreams, setRemoteStreams] = useState(new Map());
   const [remoteScreenStreams, setRemoteScreenStreams] = useState(new Map());
-  const [roles, setRoles] = useState([]);
+  const [roles, setRoles] = useState(DEFAULT_ROLES);
   const [showRoleManager, setShowRoleManager] = useState(false);
   const [contextMenu, setContextMenu] = useState(null); // { x, y, targetMember }
 
@@ -275,19 +310,64 @@ export default function App() {
       });
     });
 
+    socket.on('user-roles-updated', ({ userId, roles: newRoles, highestRole, color }) => {
+      console.log('[Role Updated Directly]', newRoles, highestRole);
+      setCurrentUser(prev => {
+        if (!prev) return prev;
+        const updated = { 
+          ...prev, 
+          roles: newRoles, 
+          highestRole, 
+          color: color || highestRole?.color || prev.color 
+        };
+        try { localStorage.setItem('fivecord_user', JSON.stringify(updated)); } catch (e) {}
+        return updated;
+      });
+    });
+
+    socket.on('role-assigned-success', ({ targetUserId, targetUsername, roles: newRoles, highestRole }) => {
+      setContextMenu(prev => {
+        if (prev && prev.targetMember && (
+          prev.targetMember.id === targetUserId ||
+          (prev.targetMember.username && targetUsername && prev.targetMember.username.toLowerCase() === targetUsername.toLowerCase())
+        )) {
+          return {
+            ...prev,
+            targetMember: {
+              ...prev.targetMember,
+              roles: newRoles,
+              highestRole
+            }
+          };
+        }
+        return prev;
+      });
+    });
+
     socket.on('members-updated', (updatedMembers) => {
       setMembers(updatedMembers);
       if (currentUser) {
         const me = updatedMembers.find(m => 
-          m.id === currentUser.id || 
+          (m.id && currentUser.id && m.id === currentUser.id) || 
           (m.username && currentUser.username && m.username.toLowerCase() === currentUser.username.toLowerCase())
         );
-        if (me && JSON.stringify(me.roles) !== JSON.stringify(currentUser.roles)) {
-          setCurrentUser(prev => {
-            const updated = { ...prev, roles: me.roles, highestRole: me.highestRole };
-            try { localStorage.setItem('fivecord_user', JSON.stringify(updated)); } catch (e) {}
-            return updated;
-          });
+        if (me) {
+          const rolesChanged = JSON.stringify(me.roles) !== JSON.stringify(currentUser.roles);
+          const highestRoleChanged = me.highestRole?.id !== currentUser.highestRole?.id;
+          const colorChanged = Boolean(me.color && me.color !== currentUser.color);
+          if (rolesChanged || highestRoleChanged || colorChanged) {
+            setCurrentUser(prev => {
+              if (!prev) return prev;
+              const updated = { 
+                ...prev, 
+                roles: me.roles, 
+                highestRole: me.highestRole, 
+                color: me.color || me.highestRole?.color || prev.color 
+              };
+              try { localStorage.setItem('fivecord_user', JSON.stringify(updated)); } catch (e) {}
+              return updated;
+            });
+          }
         }
       }
     });
@@ -598,6 +678,8 @@ export default function App() {
       socket.off('channels-updated');
       socket.off('channel-deleted');
       socket.off('members-updated');
+      socket.off('user-roles-updated');
+      socket.off('role-assigned-success');
       socket.off('messages-history');
       socket.off('new-message');
       socket.off('message-reaction-updated');
