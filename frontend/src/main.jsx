@@ -33,10 +33,10 @@ class ErrorBoundary extends Component {
     if (this.state.hasError) {
       return (
         <div className="flex flex-col items-center justify-center min-h-screen bg-[#1e1f22] text-[#dbdee1] p-6 select-none font-sans">
-          <div className="w-16 h-16 rounded-2xl bg-[#5865f2] flex items-center justify-center text-white text-2xl font-bold shadow-xl shadow-[#5865f2]/30 mb-6 animate-pulse">
-            5
+          <div className="w-16 h-16 rounded-2xl bg-[#5865f2] flex items-center justify-center text-white text-2xl font-black shadow-xl shadow-[#5865f2]/30 mb-6 animate-pulse">
+            S
           </div>
-          <h1 className="text-2xl font-bold text-white mb-2">Fivecord Bir Sorunla Karşılaştı</h1>
+          <h1 className="text-2xl font-bold text-white mb-2">Synapse Bir Sorunla Karşılaştı</h1>
           <p className="text-sm text-[#949ba4] max-w-md text-center mb-6">
             Arayüz yüklenirken beklenmedik bir hata oluştu. Yeniden yükleyerek devam edebilirsiniz.
           </p>

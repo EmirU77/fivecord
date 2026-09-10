@@ -66,6 +66,7 @@ export default function App() {
 
   const [channels, setChannels] = useState([]);
   const [currentChannel, setCurrentChannel] = useState(null);
+  const currentChannelRef = useRef(null);
   const [unreadDms, setUnreadDms] = useState(new Set());
   const [closedDms, setClosedDms] = useState(() => {
     try {
